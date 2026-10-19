@@ -13,6 +13,7 @@ One Next.js (App Router) app on Vercel that serves three things:
 | Route | What it is | Who can reach it |
 |---|---|---|
 | `/[slug]` | An artist's welcome page (header, intro, extra info, sections of resource cards) | Signed-in Supabase users whose verified email is on that artist's list, plus internal viewers |
+| `/` | Instructions only: "open the link your Vydia rep sent you" (no artist list) | Everyone |
 | `/login`, `/auth/*` | Supabase Auth: email/password (with email confirmation) and Google | Everyone |
 | `/studio` | Embedded Sanity Studio, where L&A edits content | The two shared Sanity seats |
 
@@ -37,15 +38,16 @@ The security rule that drives most of the design: an unknown slug and a known sl
 | D9 | **Sanity fetches tagged by document type, revalidated by webhook** | Editing a global resource updates every artist page right away ("publish webhook required"). |
 | D10 | **Use `redirect()` (307), not `permanentRedirect()` (308), for old slugs** | Browsers cache 308s hard. A temporary redirect lets us fix an editor's mistake later. |
 | D11 | **Long-lived sessions**: Supabase refresh tokens with no time-box or inactivity timeout, `@supabase/ssr` cookies (≈400-day max-age), refreshed by the proxy on every request | "Returning clients should not face aggressive session expirations." |
+| D12 | **No Tailwind. Styling is CSS Modules**: each component has a co-located `Component.module.css`, and one global stylesheet holds only design tokens (CSS custom properties) and a base reset | Plan-review decision. Scoped class names with no build plugin, and plain CSS that anyone can read. Tokens keep colors, radii, and spacing consistent across modules. |
+| D13 | **`/` is an instructions-only page, not an artist index.** It's public, reads nothing from Sanity, and tells the visitor to open the link their Vydia rep sent | Plan-review decision. Assume the visitor is an artist looking for their page. Internal viewers reach artist pages by direct URL or with Studio's "Open site" action. |
+| D14 | **Videos are uploaded to Sanity** (no YouTube/Vimeo/Mux link option for the `video` type) | Plan-review decision, matches the research ("Sanity will store all … videos"). Storage and bandwidth still get measured (§15). |
 
 ---
 
 ## 2. Tech Stack and Packages
-3. 
-<!-- no tailwind, use css components -->
 
 ```bash
-npx create-next-app@latest welcome-to-vydia --ts --tailwind --eslint --app --src-dir=false --import-alias "@/*"
+npx create-next-app@latest welcome-to-vydia --ts --no-tailwind --eslint --app --src-dir=false --import-alias "@/*"
 
 # Sanity
 npm i sanity next-sanity @sanity/image-url @sanity/icons @sanity/ui @sanity/vision styled-components @portabletext/react
@@ -58,7 +60,7 @@ npm i -D vitest @vitejs/plugin-react @playwright/test
 ```
 
 - **Next.js 16** (App Router). Next 16 renamed `middleware.ts` to `proxy.ts` and changed the `revalidateTag` signature. If the project ends up on Next 15, rename the file back to `middleware.ts` and export `middleware` instead of `proxy`. Check both points against the installed version when scaffolding.
-- **Tailwind CSS v4**, **Source Sans 3** via `next/font` (closest match to the reference screenshot).
+- **CSS Modules** for all site styling (D12). No Tailwind, CSS-in-JS, or UI kit. Design tokens live in `app/(site)/globals.css` as CSS custom properties. **Source Sans 3** via `next/font` (closest match to the reference screenshot). Studio keeps Sanity's own `@sanity/ui` styling, which is separate from the site.
 - **Sanity Studio v4+** embedded via `next-sanity/studio`.
 - **Supabase**: Auth only. No tables are needed for the prototype. Supabase Storage is an optional backup for resource files (research, Tech Stack).
 
@@ -71,14 +73,16 @@ welcome-to-vydia/
 ├─ app/
 │  ├─ (site)/                         # public site, own root layout
 │  │  ├─ layout.tsx
-│  │  ├─ globals.css
-│  │  ├─ page.tsx                     # "/" (generic landing; internal index optional)
+│  │  ├─ globals.css                  # design tokens + base reset ONLY (D12)
+│  │  ├─ page.tsx                     # "/" instructions only, public (D13)
 │  │  ├─ [slug]/
 │  │  │  ├─ page.tsx                  # artist page
+│  │  │  ├─ page.module.css
 │  │  │  └─ not-found.tsx             # identical page for unknown + denied
 │  │  ├─ login/
 │  │  │  ├─ page.tsx
 │  │  │  ├─ LoginForm.tsx             # client component
+│  │  │  ├─ LoginForm.module.css
 │  │  │  └─ actions.ts                # server actions (sign in / sign up / reset)
 │  │  ├─ account/update-password/page.tsx
 │  │  └─ auth/
@@ -89,22 +93,27 @@ welcome-to-vydia/
 │  │  ├─ layout.tsx                   # studio root layout (no site CSS)
 │  │  └─ page.tsx
 │  └─ api/revalidate/route.ts         # Sanity webhook
-├─ components/
-│  ├─ Header.tsx
+├─ components/                        # every component has a co-located .module.css
+│  ├─ PageShell.tsx / .module.css     # <main> width + spacing + Header
+│  ├─ Header.tsx / .module.css
+│  ├─ Notice.tsx / .module.css        # centered message card (no-access page, "/")
+│  ├─ NoAccess.tsx
 │  ├─ Intro.tsx
-│  ├─ RichText.tsx
-│  ├─ ResourceSection.tsx
-│  ├─ ResourceCard.tsx
-│  ├─ CardCover.tsx
-│  ├─ FileTypeBadge.tsx
-│  ├─ VideoCard.tsx                   # client: opens <dialog> player
-│  └─ NoAccess.tsx
+│  ├─ RichText.tsx / .module.css
+│  ├─ ResourceSection.tsx / .module.css
+│  ├─ ResourceCard.tsx / .module.css
+│  ├─ CardBody.tsx                    # cover + badge + title + date (shared by both card kinds)
+│  ├─ CardCover.tsx / .module.css
+│  ├─ FileTypeBadge.tsx / .module.css
+│  ├─ VideoCard.tsx / .module.css     # client: opens <dialog> player
+│  └─ ui/controls.module.css          # shared button / input / message classes
 ├─ lib/
 │  ├─ env.ts
 │  ├─ access.ts                       # pure decision + server resolver
 │  ├─ slug.ts                         # slugify + reserved list (shared w/ Studio)
 │  ├─ safe-redirect.ts
 │  ├─ format.ts                       # "Added on … at …"
+│  ├─ cx.ts                           # join class names
 │  ├─ sanity/
 │  │  ├─ client.ts
 │  │  ├─ fetch.ts
@@ -328,7 +337,7 @@ export const resource = defineType({
     defineField({
       name: 'file',
       type: 'file',
-      description: 'Upload the PDF, video, or slide deck.',
+      description: 'Upload the PDF, video, or slide deck. Videos: MP4 (H.264), 1080p max, to keep storage and bandwidth down.',
       hidden: ({document}) => document?.type === 'link',
       validation: (r) =>
         r.custom(async (file, ctx) => {
@@ -347,8 +356,9 @@ export const resource = defineType({
       name: 'url',
       title: 'Link URL',
       type: 'url',
-      description: 'For links and pitch forms. Slide decks and videos can use a link (Google Slides, YouTube, Vimeo) instead of an upload.',
-      hidden: ({document}) => document?.type === 'pdf',
+      description: 'For links and pitch forms. Slide decks can use a link (e.g. Google Slides) instead of an upload.',
+      // PDFs and videos are always uploaded to Sanity (D14)
+      hidden: ({document}) => document?.type === 'pdf' || document?.type === 'video',
       validation: (r) => r.uri({scheme: ['https', 'http']}),
     }),
     defineField({
@@ -384,10 +394,10 @@ export const resource = defineType({
       const hasFile = Boolean(d.file?.asset)
       const hasUrl = Boolean(d.url)
       if (d.type === 'pdf' && !hasFile) return 'Upload a PDF.'
+      if (d.type === 'video' && !hasFile) return 'Upload the video file.'
       if (d.type === 'link' && !hasUrl) return 'Add a link URL.'
-      if ((d.type === 'video' || d.type === 'slides') && !hasFile && !hasUrl)
-        return 'Upload a file or add a link.'
-      if (hasFile && hasUrl && d.type !== 'link') return 'Use either an upload or a link, not both.'
+      if (d.type === 'slides' && !hasFile && !hasUrl) return 'Upload the deck or add a link.'
+      if (d.type === 'slides' && hasFile && hasUrl) return 'Use either an upload or a link, not both.'
       return true
     }),
   orderings: [
@@ -1184,6 +1194,7 @@ export const createClient = () =>
 import {createServerClient} from '@supabase/ssr'
 import {NextResponse, type NextRequest} from 'next/server'
 
+const PUBLIC_EXACT = ['/'] // instructions page, no data (D13)
 const PUBLIC_PREFIXES = ['/login', '/auth']
 
 export async function updateSession(request: NextRequest) {
@@ -1209,10 +1220,11 @@ export async function updateSession(request: NextRequest) {
   const signedIn = Boolean(data?.claims)
 
   const path = request.nextUrl.pathname
-  const isPublic = PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))
+  const isPublic =
+    PUBLIC_EXACT.includes(path) || PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))
 
   if (!signedIn && !isPublic) {
-    // Same redirect for EVERY path: existing artist, missing artist, "/", anything.
+    // Same redirect for EVERY gated path: existing artist, missing artist, anything.
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.search = ''
@@ -1312,11 +1324,17 @@ export async function requestPasswordReset(_: AuthState, form: FormData): Promis
 'use client'
 import {useActionState, useState} from 'react'
 import {createClient} from '@/lib/supabase/client'
+import {cx} from '@/lib/cx'
+import ui from '@/components/ui/controls.module.css'
+import styles from './LoginForm.module.css'
 import {requestPasswordReset, signIn, signUp, type AuthState} from './actions'
 
 type Mode = 'signin' | 'signup' | 'reset'
 
-export function LoginForm({next}: {next: string}) {
+const TITLES: Record<Mode, string> = {signin: 'Sign in', signup: 'Create your login', reset: 'Reset password'}
+const SUBMIT: Record<Mode, string> = {signin: 'Sign in', signup: 'Sign up', reset: 'Send reset link'}
+
+export function LoginForm({next, linkError}: {next: string; linkError?: boolean}) {
   const [mode, setMode] = useState<Mode>('signin')
   const action = mode === 'signin' ? signIn : mode === 'signup' ? signUp : requestPasswordReset
   const [state, formAction, pending] = useActionState<AuthState, FormData>(action, {})
@@ -1329,45 +1347,58 @@ export function LoginForm({next}: {next: string}) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-sm rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-      <h1 className="mb-4 text-xl font-semibold">
-        {mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create your login' : 'Reset password'}
-      </h1>
+    <div className={styles.card}>
+      <h1 className={styles.title}>{TITLES[mode]}</h1>
+
+      {linkError && !state.error && !state.message && (
+        <p role="alert" className={cx(ui.error, styles.feedback)}>That link is invalid or expired. Please try again.</p>
+      )}
 
       {mode !== 'reset' && (
         <>
-          <button onClick={google} className="w-full rounded-md border px-4 py-2 font-medium hover:bg-neutral-50">
+          <button type="button" onClick={google} className={ui.button}>
             Continue with Google
           </button>
-          <div className="my-4 text-center text-sm text-neutral-500">or</div>
+          <div className={styles.divider}>or</div>
         </>
       )}
 
-      <form action={formAction} className="space-y-3" key={mode}>
+      <form action={formAction} className={styles.form} key={mode}>
         <input type="hidden" name="next" value={next} />
-        <input name="email" type="email" required autoComplete="email" placeholder="Email"
-               className="w-full rounded-md border px-3 py-2" />
+        <label className={styles.field}>
+          <span className="visually-hidden">Email</span>
+          <input name="email" type="email" required autoComplete="email" placeholder="Email" className={ui.input} />
+        </label>
         {mode !== 'reset' && (
-          <input name="password" type="password" required minLength={8}
-                 autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                 placeholder="Password" className="w-full rounded-md border px-3 py-2" />
+          <label className={styles.field}>
+            <span className="visually-hidden">Password</span>
+            <input
+              name="password"
+              type="password"
+              required
+              minLength={8}
+              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+              placeholder="Password"
+              className={ui.input}
+            />
+          </label>
         )}
-        <button disabled={pending} className="w-full rounded-md bg-neutral-900 px-4 py-2 font-medium text-white disabled:opacity-50">
-          {mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Sign up' : 'Send reset link'}
+        <button disabled={pending} className={cx(ui.button, ui.primary)}>
+          {SUBMIT[mode]}
         </button>
       </form>
 
-      {state.error && <p role="alert" className="mt-3 text-sm text-red-600">{state.error}</p>}
-      {state.message && <p role="status" className="mt-3 text-sm text-green-700">{state.message}</p>}
+      {state.error && <p role="alert" className={cx(ui.error, styles.feedback)}>{state.error}</p>}
+      {state.message && <p role="status" className={cx(ui.success, styles.feedback)}>{state.message}</p>}
 
-      <div className="mt-4 flex justify-between text-sm text-neutral-600">
+      <div className={styles.footer}>
         {mode === 'signin' ? (
           <>
-            <button onClick={() => setMode('signup')}>First time? Sign up</button>
-            <button onClick={() => setMode('reset')}>Forgot password?</button>
+            <button type="button" className={ui.textButton} onClick={() => setMode('signup')}>First time? Sign up</button>
+            <button type="button" className={ui.textButton} onClick={() => setMode('reset')}>Forgot password?</button>
           </>
         ) : (
-          <button onClick={() => setMode('signin')}>Back to sign in</button>
+          <button type="button" className={ui.textButton} onClick={() => setMode('signin')}>Back to sign in</button>
         )}
       </div>
     </div>
@@ -1375,20 +1406,66 @@ export function LoginForm({next}: {next: string}) {
 }
 ```
 
+```css
+/* app/(site)/login/LoginForm.module.css */
+.card {
+  width: 100%;
+  max-width: 384px;
+  margin: 0 auto;
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.title {
+  margin-bottom: var(--space-4);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.divider {
+  margin: var(--space-4) 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.field {
+  display: block;
+}
+
+.feedback {
+  margin-top: var(--space-3);
+}
+
+.footer {
+  margin-top: var(--space-4);
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+```
+
 ```tsx
 // app/(site)/login/page.tsx
-import {Header} from '@/components/Header'
+import {PageShell} from '@/components/PageShell'
 import {safeNext} from '@/lib/safe-redirect'
 import {LoginForm} from './LoginForm'
 
 export default async function LoginPage({searchParams}: {searchParams: Promise<{next?: string; error?: string}>}) {
   const {next, error} = await searchParams
   return (
-    <main className="mx-auto max-w-6xl space-y-10 px-4 py-6">
-      <Header />
-      {error && <p role="alert" className="text-center text-sm text-red-600">That link is invalid or expired. Please try again.</p>}
-      <LoginForm next={safeNext(next)} />
-    </main>
+    <PageShell>
+      <LoginForm next={safeNext(next)} linkError={Boolean(error)} />
+    </PageShell>
   )
 }
 ```
@@ -1527,10 +1604,11 @@ import {notFound, redirect} from 'next/navigation'
 import {createClient} from '@/lib/supabase/server'
 import {resolveArtistAccess} from '@/lib/access'
 import {getArtistPage} from '@/lib/sanity/page'
-import {Header} from '@/components/Header'
+import {PageShell} from '@/components/PageShell'
 import {Intro} from '@/components/Intro'
 import {RichText} from '@/components/RichText'
 import {ResourceSection} from '@/components/ResourceSection'
+import styles from './page.module.css'
 
 // Static title: we never put the artist's name in metadata (it would leak on denial paths).
 export const metadata: Metadata = {title: 'Welcome to Vydia', robots: {index: false, follow: false}}
@@ -1549,19 +1627,28 @@ export default async function ArtistPage({params}: {params: Promise<{slug: strin
   const page = await getArtistPage(access.artistId)
 
   return (
-    <main className="mx-auto max-w-6xl space-y-10 px-4 py-6 sm:px-6">
-      <Header />
+    <PageShell>
       <Intro value={page.intro} />
       {page.additionalInfo && (
-        <section aria-label="Additional information" className="rounded-lg border border-neutral-200 bg-white p-5">
+        <section aria-label="Additional information" className={styles.additionalInfo}>
           <RichText value={page.additionalInfo} />
         </section>
       )}
       {page.sections.map((s) => (
         <ResourceSection key={s._id} section={s} />
       ))}
-    </main>
+    </PageShell>
   )
+}
+```
+
+```css
+/* app/(site)/[slug]/page.module.css */
+.additionalInfo {
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 ```
 
@@ -1575,28 +1662,30 @@ export default function NotFound() {
 
 ```tsx
 // components/NoAccess.tsx   (ONE component for both cases. Never branch on the reason.)
-import {Header} from './Header'
+import {PageShell} from './PageShell'
+import {Notice} from './Notice'
+import ui from './ui/controls.module.css'
 
 export function NoAccess() {
   return (
-    <main className="mx-auto max-w-6xl space-y-10 px-4 py-6">
-      <Header />
-      <div className="mx-auto max-w-md rounded-xl border border-neutral-200 bg-white p-6 text-center">
-        <h1 className="text-lg font-semibold">This page isn’t available</h1>
-        <p className="mt-2 text-neutral-600">
-          This page doesn’t exist or your email doesn’t have access to it. If you think this is a mistake,
-          contact your Vydia representative, or sign in with a different email.
-        </p>
-        <form action="/auth/signout" method="post" className="mt-4">
-          <button className="rounded-md border px-4 py-2 font-medium hover:bg-neutral-50">
-            Sign in with a different email
-          </button>
-        </form>
-      </div>
-    </main>
+    <PageShell>
+      <Notice
+        title="This page isn’t available"
+        action={
+          <form action="/auth/signout" method="post">
+            <button className={ui.button}>Sign in with a different email</button>
+          </form>
+        }
+      >
+        This page doesn’t exist or your email doesn’t have access to it. If you think this is a mistake,
+        contact your Vydia representative, or sign in with a different email.
+      </Notice>
+    </PageShell>
   )
 }
 ```
+
+`PageShell` and `Notice` are defined in §11.
 
 ### 9.3 Why unknown and denied are indistinguishable
 
@@ -1611,52 +1700,29 @@ export function NoAccess() {
 
 Optional hardening: wrap the denied path in a constant minimum duration (for example `await Promise.all([work, sleep(150)])`) if timing measurements ever show a difference. With identical queries and a shared cache, that shouldn't be necessary.
 
-### 9.4 Root `/`
+### 9.4 Root `/`: instructions only (D13)
+
+`/` is **not** an artist index. Assume whoever lands here is an artist who lost or mistyped their link. The page is fully static: it reads no session and makes no Sanity query, so it can't reveal anything about the roster. It's public (`PUBLIC_EXACT` in §8.2), so a signed-out visitor sees the instructions straight away instead of being bounced to a login form with nothing behind it.
 
 ```tsx
 // app/(site)/page.tsx
-import Link from 'next/link'
-import {createClient} from '@/lib/supabase/server'
-import {isInternalViewer, verifiedEmail} from '@/lib/access'
-import {sanityFetch} from '@/lib/sanity/fetch'
-import {Header} from '@/components/Header'
+import {PageShell} from '@/components/PageShell'
+import {Notice} from '@/components/Notice'
 
-export default async function Home() {
-  const supabase = await createClient()
-  const {data: {user}} = await supabase.auth.getUser()
-  const email = verifiedEmail(user)
-
-  const {internalViewers, artists} = await sanityFetch<{
-    internalViewers: string[] | null
-    artists: {name: string; slug: string}[]
-  }>(
-    `{"internalViewers": *[_id == "website"][0].internalViewerEmails,
-      "artists": *[_type == "artist" && defined(slug.current)] | order(name asc){name, "slug": slug.current}}`,
-    {},
-    ['artist', 'website'],
-  )
-  const internal = email ? isInternalViewer(email, internalViewers) : false
-
+export default function Home() {
   return (
-    <main className="mx-auto max-w-6xl space-y-10 px-4 py-6">
-      <Header />
-      {internal ? (
-        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {artists.map((a) => (
-            <li key={a.slug}>
-              <Link className="block rounded-md border bg-white p-3 hover:bg-neutral-50" href={`/${a.slug}`}>{a.name}</Link>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-center text-neutral-600">Open the link your Vydia representative sent you to see your resources.</p>
-      )}
-    </main>
+    <PageShell>
+      <Notice title="Looking for your Vydia resources?">
+        Open the personal link your Vydia representative sent you. It looks like{' '}
+        <strong>welcometovydia.com/your-artist-name</strong>. You’ll be asked to sign in with the email
+        address Vydia has on file for you. Can’t find your link? Reach out to your Vydia representative.
+      </Notice>
+    </PageShell>
   )
 }
 ```
 
-The roster is only rendered for internal viewers (the research says they can view every site). Clients only ever see the generic message.
+Internal viewers don't need an index. They open an artist's page with the **Open site** action in Studio (§6.2) or by typing the URL. `isInternalViewer()` still grants them access to every `/[slug]`.
 
 ---
 
@@ -1715,11 +1781,26 @@ Visual spec taken from the screenshot:
 | Header | Full-width rounded (≈12px) near-black banner with subtle grain texture, white logo centered, ≈140px tall on desktop |
 | Intro | Regular body text, bullets with **bold** section names followed by " - description" |
 | Section title | Medium-weight, ≈18px, dark gray, no subtitle in reference (optional subtitle below in muted text) |
-| Grid | **Grid, not horizontal scroll** (research): 1 / 2 / 3 / 4 columns at sm / md / lg |
+| Grid | **Grid, not horizontal scroll** (research): auto-fill columns, min 240px wide, which gives 1 column on phones and up to 4 at full width |
 | Card | White, 1px `#E5E7EB` border, ≈8px radius, cover area on top (≈16:9), file-type badge overlapping the bottom-left of the cover, title (≈17px, medium), "Added on MMM D, YYYY at h:mm AM" pinned to the bottom in muted text |
 | Badges | PDF: red `#E5322D` (Acrobat glyph). Video: plum `#8E1B5A` (play). Link: orange `#F5A524` (link). Slides: yellow `#F4B400` (slides glyph) |
 
-### 11.1 Layout and fonts
+### 11.0 Styling conventions (D12)
+
+- **One `.module.css` per component**, in the same folder and with the same name (`ResourceCard.tsx` + `ResourceCard.module.css`). Next.js supports CSS Modules natively, so there's no extra config or PostCSS plugin.
+- **`app/(site)/globals.css` holds only** design tokens (CSS custom properties), a small reset, and one utility (`.visually-hidden`). No component styles go there.
+- **Modules use tokens, never raw values**, for color, radius, shadow, and spacing. One-off sizes (like `17px` titles) are fine inline.
+- **Class names are camelCase** (`styles.coverImage`) so they work as JS properties.
+- **Shared control styles** (buttons, inputs, form messages) live in `components/ui/controls.module.css` and are imported wherever they're needed. Modules can be imported by more than one component.
+- **Breakpoints are plain media queries** at `640px` / `1024px`. Custom properties can't be used inside `@media`, so these two numbers are the convention. The card grid avoids breakpoints altogether with `auto-fill`.
+- **Conditional classes** use a tiny helper instead of a dependency:
+
+```ts
+// lib/cx.ts
+export const cx = (...classes: (string | false | null | undefined)[]) => classes.filter(Boolean).join(' ')
+```
+
+### 11.1 Layout, fonts, tokens
 
 ```tsx
 // app/(site)/layout.tsx
@@ -1727,81 +1808,321 @@ import type {Metadata} from 'next'
 import {Source_Sans_3} from 'next/font/google'
 import './globals.css'
 
-const sans = Source_Sans_3({subsets: ['latin'], variable: '--font-sans'})
+const sans = Source_Sans_3({subsets: ['latin'], variable: '--font-source-sans'})
 
 export const metadata: Metadata = {title: 'Welcome to Vydia', robots: {index: false, follow: false}}
 
 export default function SiteLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="en" className={sans.variable}>
-      <body className="min-h-screen bg-[#F3F4F6] font-sans text-neutral-800 antialiased">{children}</body>
+      <body>{children}</body>
     </html>
   )
 }
 ```
 
 ```css
-/* app/(site)/globals.css */
-@import 'tailwindcss';
-
-@theme {
-  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+/* app/(site)/globals.css: tokens + reset ONLY. Component styles live in *.module.css. */
+:root {
+  /* color */
+  --color-page: #f3f4f6;
+  --color-surface: #ffffff;
+  --color-border: #e5e7eb;
+  --color-text: #262626;
+  --color-heading: #404040;
+  --color-text-muted: #6b7280;
+  --color-ink: #121212;
+  --color-danger: #dc2626;
+  --color-success: #15803d;
   --color-badge-pdf: #e5322d;
   --color-badge-video: #8e1b5a;
   --color-badge-link: #f5a524;
   --color-badge-slides: #f4b400;
-}
 
-/* Subtle film-grain used by the header and placeholder tiles */
-.grain {
-  background-color: #121212;
-  background-image:
+  /* shape */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-md: 0 6px 16px rgb(0 0 0 / 0.08);
+
+  /* spacing (4px scale) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-10: 40px;
+  --space-16: 64px;
+
+  /* layout */
+  --content-width: 1150px;
+
+  /* type */
+  --font-sans: var(--font-source-sans), ui-sans-serif, system-ui, sans-serif;
+
+  /* film grain used by the header and placeholder tiles */
+  --grain:
     radial-gradient(ellipse at 30% 20%, rgb(255 255 255 / 0.06), transparent 60%),
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='.18'/></svg>");
 }
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--color-page);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, p, ul, ol {
+  margin: 0;
+}
+
+img, video {
+  display: block;
+  max-width: 100%;
+}
+
+button, input {
+  font: inherit;
+  color: inherit;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 ```
 
-### 11.2 Header
+### 11.2 Page shell, header, notice, shared controls
+
+```tsx
+// components/PageShell.tsx
+import {Header} from './Header'
+import styles from './PageShell.module.css'
+
+export function PageShell({children}: {children: React.ReactNode}) {
+  return (
+    <main className={styles.shell}>
+      <Header />
+      {children}
+    </main>
+  )
+}
+```
+
+```css
+/* components/PageShell.module.css */
+.shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-16);
+}
+
+@media (min-width: 640px) {
+  .shell {
+    padding-inline: var(--space-6);
+  }
+}
+```
 
 ```tsx
 // components/Header.tsx
 import Image from 'next/image'
+import styles from './Header.module.css'
 
 export function Header() {
   return (
-    <header className="grain flex h-24 items-center justify-center rounded-xl px-6 shadow-sm sm:h-36">
+    <header className={styles.header}>
       <Image
         src="/vydia-logo.svg"
         alt="Vydia, a gamma company"
         width={1233}
         height={139}
         priority
-        className="h-7 w-auto sm:h-10"
+        className={styles.logo}
       />
     </header>
   )
 }
 ```
 
+```css
+/* components/Header.module.css */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 96px;
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-ink);
+  background-image: var(--grain);
+  box-shadow: var(--shadow-sm);
+}
+
+.logo {
+  height: 28px;
+  width: auto;
+}
+
+@media (min-width: 640px) {
+  .header {
+    height: 144px;
+  }
+  .logo {
+    height: 40px;
+  }
+}
+```
+
+```tsx
+// components/Notice.tsx   (centered message card used by NoAccess and "/")
+import styles from './Notice.module.css'
+
+export function Notice({title, children, action}: {title: string; children: React.ReactNode; action?: React.ReactNode}) {
+  return (
+    <div className={styles.notice}>
+      <h1 className={styles.title}>{title}</h1>
+      <p className={styles.body}>{children}</p>
+      {action && <div className={styles.action}>{action}</div>}
+    </div>
+  )
+}
+```
+
+```css
+/* components/Notice.module.css */
+.notice {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: var(--space-6);
+  text-align: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.body {
+  margin-top: var(--space-2);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.action {
+  margin-top: var(--space-4);
+}
+```
+
+```css
+/* components/ui/controls.module.css: shared by LoginForm, NoAccess, update-password */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: var(--color-page);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.primary {
+  background: var(--color-ink);
+  border-color: var(--color-ink);
+  color: #fff;
+}
+
+.primary:hover {
+  background: #000;
+}
+
+.input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.button:focus-visible,
+.input:focus-visible,
+.textButton:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.textButton {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--color-text-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.error {
+  font-size: 14px;
+  color: var(--color-danger);
+}
+
+.success {
+  font-size: 14px;
+  color: var(--color-success);
+}
+```
+
 ### 11.3 Intro and rich text
+
+Element styles are scoped under one local class (`.richText p`, `.richText ul`), so the Portable Text serializers stay minimal and only links need a custom component.
 
 ```tsx
 // components/RichText.tsx
 import {PortableText, type PortableTextComponents, type PortableTextBlock} from '@portabletext/react'
+import styles from './RichText.module.css'
 
 const components: PortableTextComponents = {
-  block: {
-    normal: ({children}) => <p className="leading-relaxed">{children}</p>,
-    h3: ({children}) => <h3 className="mt-4 text-lg font-semibold">{children}</h3>,
-  },
-  list: {
-    bullet: ({children}) => <ul className="ml-6 list-disc space-y-1">{children}</ul>,
-    number: ({children}) => <ol className="ml-6 list-decimal space-y-1">{children}</ol>,
-  },
   marks: {
-    strong: ({children}) => <strong className="font-semibold">{children}</strong>,
     link: ({value, children}) => (
-      <a href={value?.href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
+      <a href={value?.href} target="_blank" rel="noopener noreferrer">
         {children}
       </a>
     ),
@@ -1810,10 +2131,45 @@ const components: PortableTextComponents = {
 
 export function RichText({value}: {value: PortableTextBlock[]}) {
   return (
-    <div className="space-y-2 text-[17px]">
+    <div className={styles.richText}>
       <PortableText value={value} components={components} />
     </div>
   )
+}
+```
+
+```css
+/* components/RichText.module.css */
+.richText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.richText h3 {
+  margin-top: var(--space-4);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.richText ul,
+.richText ol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-left: var(--space-6);
+}
+
+.richText strong {
+  font-weight: 600;
+}
+
+.richText a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 ```
 
@@ -1852,19 +2208,20 @@ export function formatAddedOn(iso: string) {
 // components/ResourceSection.tsx
 import type {SectionData, ResourceCardData} from '@/lib/sanity/types'
 import {ResourceCard} from './ResourceCard'
+import styles from './ResourceSection.module.css'
 
 export function ResourceSection({section}: {section: Omit<SectionData, 'resources'> & {resources: ResourceCardData[]}}) {
   if (!section.resources.length) return null
   const headingId = `section-${section._id}`
   return (
-    <section aria-labelledby={headingId} className="space-y-4">
+    <section aria-labelledby={headingId} className={styles.section}>
       <div>
-        <h2 id={headingId} className="text-lg font-medium text-neutral-700">{section.title}</h2>
-        {section.subtitle && <p className="mt-1 text-neutral-500">{section.subtitle}</p>}
+        <h2 id={headingId} className={styles.title}>{section.title}</h2>
+        {section.subtitle && <p className={styles.subtitle}>{section.subtitle}</p>}
       </div>
-      <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <ul className={styles.grid}>
         {section.resources.map((r) => (
-          <li key={r._id} className="flex">
+          <li key={r._id} className={styles.item}>
             <ResourceCard resource={r} />
           </li>
         ))}
@@ -1874,27 +2231,87 @@ export function ResourceSection({section}: {section: Omit<SectionData, 'resource
 }
 ```
 
+```css
+/* components/ResourceSection.module.css */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--color-heading);
+}
+
+.subtitle {
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+}
+
+/* Grid, not horizontal scroll. auto-fill gives 1 to 4 columns with no breakpoints. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex; /* lets cards in a row stretch to equal height */
+}
+```
+
 ```tsx
 // components/FileTypeBadge.tsx
 import {FileText, Link2, Play, Presentation} from 'lucide-react'
 import type {ResourceType} from '@/sanity/schemaTypes/resource'
+import {cx} from '@/lib/cx'
+import styles from './FileTypeBadge.module.css'
 
-const STYLES: Record<ResourceType, {bg: string; Icon: typeof FileText; label: string}> = {
-  pdf: {bg: 'bg-badge-pdf', Icon: FileText, label: 'PDF'},
-  video: {bg: 'bg-badge-video', Icon: Play, label: 'Video'},
-  link: {bg: 'bg-badge-link', Icon: Link2, label: 'Link'},
-  slides: {bg: 'bg-badge-slides', Icon: Presentation, label: 'Slide deck'},
+const BADGES: Record<ResourceType, {Icon: typeof FileText; label: string}> = {
+  pdf: {Icon: FileText, label: 'PDF'},
+  video: {Icon: Play, label: 'Video'},
+  link: {Icon: Link2, label: 'Link'},
+  slides: {Icon: Presentation, label: 'Slide deck'},
 }
 
-export function FileTypeBadge({type, className = ''}: {type: ResourceType; className?: string}) {
-  const {bg, Icon, label} = STYLES[type]
+export function FileTypeBadge({type, className}: {type: ResourceType; className?: string}) {
+  const {Icon, label} = BADGES[type]
   return (
-    <span className={`inline-flex size-8 items-center justify-center rounded-md text-white ring-2 ring-white ${bg} ${className}`}>
-      <Icon aria-hidden className="size-4" strokeWidth={2.5} />
-      <span className="sr-only">{label}</span>
+    <span className={cx(styles.badge, styles[type], className)}>
+      <Icon aria-hidden className={styles.icon} strokeWidth={2.5} />
+      <span className="visually-hidden">{label}</span>
     </span>
   )
 }
+```
+
+```css
+/* components/FileTypeBadge.module.css */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  box-shadow: 0 0 0 2px var(--color-surface); /* white ring where it overlaps the cover */
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+}
+
+.pdf    { background: var(--color-badge-pdf); }
+.video  { background: var(--color-badge-video); }
+.link   { background: var(--color-badge-link); }
+.slides { background: var(--color-badge-slides); }
 ```
 
 ```tsx
@@ -1902,6 +2319,7 @@ export function FileTypeBadge({type, className = ''}: {type: ResourceType; class
 import Image from 'next/image'
 import {urlFor} from '@/lib/sanity/image'
 import type {ResourceCardData} from '@/lib/sanity/types'
+import styles from './CardCover.module.css'
 
 /** cover photo → PDF preview (both arrive as `cover`) → branded placeholder */
 export function CardCover({resource}: {resource: ResourceCardData}) {
@@ -1912,8 +2330,8 @@ export function CardCover({resource}: {resource: ResourceCardData}) {
         src={urlFor(cover).width(800).height(450).fit('max').url()}
         alt={cover.alt ?? ''}
         fill
-        sizes="(min-width:1280px) 25vw, (min-width:1024px) 33vw, (min-width:640px) 50vw, 100vw"
-        className="object-contain"
+        sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+        className={styles.image}
         placeholder={cover.asset.metadata?.lqip ? 'blur' : 'empty'}
         blurDataURL={cover.asset.metadata?.lqip}
       />
@@ -1921,10 +2339,76 @@ export function CardCover({resource}: {resource: ResourceCardData}) {
   }
   // Mirrors the existing Seismic thumbnails: dark grain tile, uppercase title, small logo.
   return (
-    <div className="grain absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
-      <span className="line-clamp-3 text-lg font-bold uppercase leading-tight tracking-wide text-white">{title}</span>
-      <img src="/vydia-logo.svg" alt="" className="h-2.5 w-auto opacity-80" />
+    <div className={styles.placeholder}>
+      <span className={styles.placeholderTitle}>{title}</span>
+      <img src="/vydia-logo.svg" alt="" className={styles.placeholderLogo} />
     </div>
+  )
+}
+```
+
+```css
+/* components/CardCover.module.css */
+.image {
+  object-fit: contain;
+}
+
+.placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  text-align: center;
+  background-color: var(--color-ink);
+  background-image: var(--grain);
+}
+
+.placeholderTitle {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.placeholderLogo {
+  height: 10px;
+  width: auto;
+  opacity: 0.8;
+}
+```
+
+`CardBody` gets its own file with no `'use client'`, so the server-rendered link card and the client-side video card share it without ambiguity:
+
+```tsx
+// components/CardBody.tsx
+import type {ResourceCardData} from '@/lib/sanity/types'
+import {formatAddedOn} from '@/lib/format'
+import {CardCover} from './CardCover'
+import {FileTypeBadge} from './FileTypeBadge'
+import styles from './ResourceCard.module.css'
+
+export function CardBody({resource}: {resource: ResourceCardData}) {
+  return (
+    <>
+      <div className={styles.cover}>
+        <CardCover resource={resource} />
+      </div>
+      <div className={styles.body}>
+        <FileTypeBadge type={resource.type} className={styles.badge} />
+        <h3 className={styles.title}>{resource.title}</h3>
+        <p className={styles.date}>{formatAddedOn(resource.addedOn)}</p>
+      </div>
+    </>
   )
 }
 ```
@@ -1932,46 +2416,99 @@ export function CardCover({resource}: {resource: ResourceCardData}) {
 ```tsx
 // components/ResourceCard.tsx
 import type {ResourceCardData} from '@/lib/sanity/types'
-import {formatAddedOn} from '@/lib/format'
-import {CardCover} from './CardCover'
-import {FileTypeBadge} from './FileTypeBadge'
+import {CardBody} from './CardBody'
 import {VideoCard} from './VideoCard'
+import styles from './ResourceCard.module.css'
 
 export function resourceHref(r: ResourceCardData): string | null {
   return r.type === 'link' ? r.url ?? null : r.fileUrl ?? r.url ?? null
 }
 
-export function CardBody({resource}: {resource: ResourceCardData}) {
-  return (
-    <>
-      <div className="relative aspect-video overflow-hidden rounded-t-lg bg-white">
-        <CardCover resource={resource} />
-      </div>
-      <div className="relative flex flex-1 flex-col px-5 pb-4 pt-6">
-        <FileTypeBadge type={resource.type} className="absolute -top-4 left-5" />
-        <h3 className="text-[17px] font-medium leading-snug text-neutral-800">{resource.title}</h3>
-        <p className="mt-auto pt-6 text-sm text-neutral-500">{formatAddedOn(resource.addedOn)}</p>
-      </div>
-    </>
-  )
-}
-
-const CARD =
-  'flex w-full flex-col rounded-lg border border-neutral-200 bg-white text-left shadow-sm transition ' +
-  'hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900'
-
 export function ResourceCard({resource}: {resource: ResourceCardData}) {
-  // Uploaded videos play in a modal; linked videos (YouTube/Vimeo) just open the link.
-  if (resource.type === 'video' && resource.fileUrl) {
-    return <VideoCard resource={resource} className={CARD} />
+  // Videos are always Sanity uploads (D14) and play in a modal.
+  if (resource.type === 'video') {
+    return resource.fileUrl ? <VideoCard resource={resource} /> : null
   }
   const href = resourceHref(resource)
   if (!href) return null
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className={CARD}>
+    <a href={href} target="_blank" rel="noopener noreferrer" className={styles.card}>
       <CardBody resource={resource} />
     </a>
   )
+}
+```
+
+```css
+/* components/ResourceCard.module.css: used by ResourceCard, CardBody, and VideoCard */
+.card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.cover {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: var(--color-surface);
+}
+
+.body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: var(--space-6) var(--space-5) var(--space-4);
+}
+
+.badge {
+  position: absolute;
+  top: calc(-1 * var(--space-4));
+  left: var(--space-5);
+}
+
+.title {
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.date {
+  margin-top: auto;
+  padding-top: var(--space-6);
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+  .card:hover {
+    transform: none;
+  }
 }
 ```
 
@@ -1981,33 +2518,64 @@ export function ResourceCard({resource}: {resource: ResourceCardData}) {
 import {useRef} from 'react'
 import {X} from 'lucide-react'
 import type {ResourceCardData} from '@/lib/sanity/types'
-import {CardBody} from './ResourceCard'
+import {CardBody} from './CardBody'
+import cardStyles from './ResourceCard.module.css'
+import styles from './VideoCard.module.css'
 
-export function VideoCard({resource, className}: {resource: ResourceCardData; className: string}) {
+export function VideoCard({resource}: {resource: ResourceCardData}) {
   const dialog = useRef<HTMLDialogElement>(null)
   const video = useRef<HTMLVideoElement>(null)
   return (
     <>
-      <button type="button" className={className} onClick={() => dialog.current?.showModal()}>
+      <button type="button" className={cardStyles.card} onClick={() => dialog.current?.showModal()}>
         <CardBody resource={resource} />
       </button>
-      <dialog
-        ref={dialog}
-        onClose={() => video.current?.pause()}
-        className="m-auto w-[min(960px,92vw)] rounded-xl bg-black p-0 backdrop:bg-black/70"
-        aria-label={resource.title}
-      >
-        <button onClick={() => dialog.current?.close()} className="absolute right-3 top-3 z-10 text-white" aria-label="Close">
-          <X />
+      <dialog ref={dialog} onClose={() => video.current?.pause()} className={styles.dialog} aria-label={resource.title}>
+        <button type="button" onClick={() => dialog.current?.close()} className={styles.close} aria-label="Close">
+          <X aria-hidden />
         </button>
-        <video ref={video} src={resource.fileUrl!} controls preload="metadata" className="aspect-video w-full" />
+        <video ref={video} src={resource.fileUrl!} controls preload="metadata" className={styles.video} />
       </dialog>
     </>
   )
 }
 ```
 
-> `CardBody` is shared by a Server Component (`ResourceCard`) and a Client Component (`VideoCard`). Both use only serializable props and no server-only imports, so this works. If the bundler complains, move `CardBody` into its own file without `'use client'`.
+```css
+/* components/VideoCard.module.css */
+.dialog {
+  width: min(960px, 92vw);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
+  border: 0;
+  border-radius: var(--radius-lg);
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 0.7);
+}
+
+.close {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: 1;
+  padding: var(--space-1);
+  background: none;
+  border: 0;
+  color: #fff;
+  cursor: pointer;
+}
+
+.video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+```
+
+> Video files stream straight from `cdn.sanity.io`, which supports HTTP range requests, so seeking works and `preload="metadata"` keeps a grid of video cards from downloading whole files on page load.
 
 ---
 
@@ -2154,6 +2722,14 @@ test('signed-out users are sent to login for real AND fake slugs', async ({page}
   }
 })
 
+test('"/" is public, shows instructions, and lists no artists', async ({page}) => {
+  const res = await page.goto('/')
+  expect(res?.status()).toBe(200)
+  await expect(page).toHaveURL('/') // no login redirect
+  await expect(page.getByRole('heading', {name: 'Looking for your Vydia resources?'})).toBeVisible()
+  await expect(page.locator('main a')).toHaveCount(0) // no artist links
+})
+
 test.describe('signed in as an unapproved user', () => {
   test.use({storageState: 'tests/e2e/.auth/outsider.json'})
 
@@ -2195,66 +2771,324 @@ test.describe('signed in as an approved user', () => {
 - [ ] Renaming an artist doesn't change the URL. "Change URL…" keeps the old URL redirecting.
 - [ ] Reserved slug (`studio`) and duplicate/previous slugs are rejected in Studio.
 - [ ] Studio: can't create a second Website or delete it. Can't delete a resource still used in a section.
+- [ ] Uploaded videos play in the dialog, seeking works, and nothing downloads until play (`preload="metadata"`).
+- [ ] `/` shows only the instructions, signed in or out, as an internal viewer or a client. No artist names anywhere.
 - [ ] Keyboard: every card is focusable and opens with Enter, and the video dialog closes with Esc.
 - [ ] Mobile layout (single column), and the header logo scales down.
+- [ ] No Tailwind or global component classes: every component's styles live in its own `.module.css`, and `globals.css` contains only tokens, reset, and `.visually-hidden`.
 
 ---
 
-## 14. Implementation Phases
+## 14. Implementation To-Do List
 
-Each phase ends in something demoable.
+The full build broken into phases and tasks. Each task points to the section of this plan that specifies it. Every phase ends with a **Done when** checkpoint; don't start a phase until the checkpoints it depends on pass.
 
-**Phase 0: Accounts and plumbing**
-- [ ] Sanity project + private dataset, Viewer token, CORS, two Editor seats
-- [ ] Supabase project: email confirm ON, Google provider, session settings, custom SMTP, email templates
-- [ ] Vercel project linked to repo, env vars for Preview and Production
-- [ ] Ask the product team for DNS for `welcometovydia.com` (Vercel domain)
+**How to use this list**
+- Task IDs (`3.4`) are stable, so reference them in commits and PRs (`feat(studio): change-URL action [3.4]`).
+- 🧑‍🤝‍🧑 marks tasks that need someone else (product team, L&A, Google Workspace admin). Start those early because they block later phases.
+- Phases 0, 2–3, and 6 can overlap. The critical path is **0 → 1 → 2 → 5 → 6 → 7 → 8 → 9 → 11 → 12 → 13**.
 
-**Phase 1: Scaffold**
-- [ ] `create-next-app`, Tailwind v4, Source Sans 3, route groups `(site)` + `studio`
-- [ ] Copy `docs/logo/gamma-vydia-white.svg` → `public/vydia-logo.svg`
-- [ ] `lib/env.ts`, `sanity/env.ts`, ESLint/Prettier, Vitest config
+```
+0 Accounts ─┬─► 1 Scaffold ─► 2 Schema ─┬─► 3 Studio UX ─► 4 Seed ──────────────┐
+            │                           └─► 5 Data layer ─► 6 UI ─┐             │
+            │                                                     ▼             ▼
+            └──────────────────────────────► 7 Auth ─► 8 Access ─► 9 Cache ─► 10 Tests ─► 11 Deploy ─► 12 Migrate ─► 13 Handoff ─► 14 Post-prototype
+```
 
-**Phase 2: Sanity schema and Studio**
-- [ ] `blockContent`, `resource`, `section`, `website`, `artist` (§5)
-- [ ] Desk structure with singleton + "Not in any section" (§6.1)
-- [ ] Document actions: lock slug, change URL, open site (§6.2)
-- [ ] `PdfPreviewInput` (§6.3)
-- [ ] Run `scripts/seed.ts`, create one test artist + a few test resources
-- [ ] `sanity typegen generate`
+---
 
-**Phase 3: Page rendering (no auth yet; temporarily bypass the proxy locally)**
-- [ ] Queries + `getArtistPage` override logic (§7)
-- [ ] Header, Intro, RichText, ResourceSection, ResourceCard, CardCover, FileTypeBadge, VideoCard (§11)
-- [ ] Pixel-compare against `docs/screenshots/sample website.png`
+### Phase 0: Accounts, access, and prerequisites
 
-**Phase 4: Authentication**
-- [ ] Supabase clients, `proxy.ts` (§8.1–8.2)
-- [ ] Login page (password, sign-up, reset, Google), `/auth/callback`, `/auth/confirm`, `/auth/signout`, `/account/update-password`
+**Sanity** (§4.2)
+- [x] **0.1** Create the Sanity project "Welcome to Vydia" and the `production` dataset.
+- [x] **0.2** Set dataset visibility to **Private** (D2).
+- [x] **0.3** Create a *Viewer* API token named `vercel-read` and store it in the password manager.
+- [x] **0.4** Add CORS origins `http://localhost:3000` (allow credentials). The production origin is added in 11.6.
+- [x] **0.5** 🧑‍🤝‍🧑 Invite `labelrelationships@vydia.com` and `creativeservices@vydia.com` with the **Editor** role. Confirm both can log in.
+- [ ] **0.6** Check the current plan's asset storage, bandwidth, and API request quotas on sanity.io/pricing and write the numbers down (needed for 12.2).
 
-**Phase 5: Access control**
-- [ ] `lib/access.ts` + unit tests (§9.1, §13.1)
-- [ ] `[slug]/page.tsx` + shared `not-found.tsx` / `NoAccess` (§9.2)
-- [ ] Old-slug redirect after access check
-- [ ] Root `/` with internal-only index (§9.4)
+**Supabase** (§4.3)
+- [x] **0.7** Create the Supabase project (region close to Vercel's default, e.g. `us-east-1`).
+- [x] **0.8** Auth → Providers → Email: enabled, **Confirm email ON**, minimum password length 8.
+- [x] **0.9** Auth → Sessions: time-box **never**, inactivity timeout **never** (D11).
+- [ ] **0.10** Auth → URL Configuration: Site URL `http://localhost:3000` for now. Redirect URLs `http://localhost:3000/**` and the Vercel preview pattern.
+- [ ] **0.11** 🧑‍🤝‍🧑 Google Cloud: create an OAuth consent screen + OAuth client (web). Redirect URI `https://<project>.supabase.co/auth/v1/callback`. Paste the client ID/secret into Auth → Providers → Google.
+- [ ] **0.12** 🧑‍🤝‍🧑 Choose an SMTP provider (Resend, SendGrid, or Vydia's existing one), verify the sending domain (SPF/DKIM), and enter the credentials in Auth → SMTP. Sender: `no-reply@welcometovydia.com` or similar.
+- [ ] **0.13** Edit the **Confirm signup** and **Reset password** email templates to use the `token_hash` links from §4.3, with Vydia wording.
 
-**Phase 6: Caching and webhook**
-- [ ] `sanityFetch` with tags, `/api/revalidate`, Sanity webhook (§10)
-- [ ] Verify end to end on a Vercel preview
+**Vercel and domain**
+- [ ] **0.14** Create the Vercel project, link it to the GitHub repo, and set the framework preset to Next.js.
+- [ ] **0.15** 🧑‍🤝‍🧑 Ask the product team for DNS control of (or records for) `welcometovydia.com`. The actual cutover happens in 11.4.
 
-**Phase 7: Hardening and QA**
-- [ ] Playwright suite (§13.2), manual checklist (§13.3)
-- [ ] Security headers in `next.config.ts` (`X-Frame-Options: DENY` on site routes, `Referrer-Policy: same-origin`)
-- [ ] Lighthouse/a11y pass
+**Repo**
+- [x] **0.16** Protect `main` (PRs required) and work on feature branches per phase.
 
-**Phase 8: Launch**
-- [ ] Production domain, Supabase Site URL + redirect URLs updated, webhook URL pointing to production
-- [ ] Migrate Seismic assets (§12.1), set original "Added on" dates
-- [ ] Measure Sanity asset storage/bandwidth after the videos are uploaded (see risks)
+**Done when:** all three dashboards are reachable, both shared Sanity logins work, a test confirmation email from Supabase arrives through the custom SMTP, and the Google provider is enabled.
 
-**Phase 9: Handoff**
-- [ ] Loom walkthrough (outline in §16)
-- [ ] Present the prototype and work through the open questions (§17)
+**Current Status**
+- Sanity: Viewer API token is created and saved, private dataset is set up, `labelrelationships@vydia.com` and `creativeservices@vydia.com` have not accepted their seats, I am the lone seat and admin at my personal account. I cannot find the asset storage, bandwidth, or API request quotas yet.
+- Supabase: email is set, auth sessions are set, localhost configuration is set, vercel preview we are waiting on, waiting on premium vercel account.. No SMTP provider yet, we will use Resend jsut waiting on approval, use default supabase email for now.
+- Google: Set up oauth client, added the information to Supabase to enable sign in with google.
+- Vercel: waiting on Vercel premium account access, will recieve soon. DNS records will come much later as well.
+- Repo: all good.
+
+---
+
+### Phase 1: Scaffold and conventions
+
+- [x] **1.1** `npx create-next-app@latest . --ts --no-tailwind --eslint --app --src-dir=false --import-alias "@/*"` (§2). Confirm which Next version was installed (16 vs 15) and note it in the README; it decides `proxy.ts` vs `middleware.ts` and the `revalidateTag` signature.
+- [ ] **1.2** Install dependencies from §2 (Sanity, Supabase, `@portabletext/react`, `lucide-react`, `server-only`, `pdfjs-dist`, Vitest, Playwright).
+- [ ] **1.3** Delete the starter page, starter CSS, and starter assets.
+- [ ] **1.4** Create the route groups: `app/(site)/layout.tsx` and `app/studio/[[...tool]]/layout.tsx`, each with its own `<html>` root (§3, §6.4).
+- [ ] **1.5** Write `app/(site)/globals.css`: tokens, reset, `.visually-hidden` (§11.1).
+- [ ] **1.6** Load Source Sans 3 with `next/font` as `--font-source-sans` in the site layout (§11.1).
+- [ ] **1.7** Add `lib/cx.ts` (§11.0) and `components/ui/controls.module.css` (§11.2).
+- [ ] **1.8** Copy `docs/logo/gamma-vydia-white.svg` → `public/vydia-logo.svg`.
+- [ ] **1.9** Add `lib/env.ts` and `sanity/env.ts` (§4.1). Create `.env.local` and `.env.example` (no secrets in git).
+- [ ] **1.10** Add the shared slug helpers `lib/slug.ts` (§5.1).
+- [ ] **1.11** Configure Vitest (`vitest.config.ts` with the `@/` alias) and add `npm run test`.
+- [ ] **1.12** Add Prettier + `npm run lint` / `npm run typecheck` scripts.
+- [ ] **1.13** Add a GitHub Actions workflow that runs lint, typecheck, and unit tests on every PR.
+- [ ] **1.14** Write `tests/slug.test.ts` (§13.1) and make it pass.
+- [ ] **1.15** Push and confirm Vercel builds a preview deployment.
+
+**Done when:** `npm run dev` serves an empty page with the right font and background, CI is green, and Vercel produces a preview URL.
+
+---
+
+### Phase 2: Sanity content model
+
+- [ ] **2.1** `sanity.cli.ts` with project/dataset and typegen config (§6.4).
+- [ ] **2.2** Minimal `sanity.config.ts` (schema + `structureTool` only) and the embedded Studio route `app/studio/[[...tool]]/page.tsx` (§6.4). Confirm `/studio` loads and the shared login works locally.
+- [ ] **2.3** `blockContent` type (§5.2).
+- [ ] **2.4** `resource` type: title, type radio, file, url, cover image + alt, `pdfPreview` (plain image for now; custom input in 3.6), `addedOn` with `initialValue` now (§5.3).
+- [ ] **2.5** `resource` conditional visibility: file hidden for links, url hidden for PDFs and videos (D14).
+- [ ] **2.6** `resource` validation: mime type matches type, document-level file/url rules, title max length (§5.3).
+- [ ] **2.7** `resource` preview (type label + date + thumbnail) and orderings (newest first, title).
+- [ ] **2.8** `section` type: title, subtitle, ordered unique resource references, preview with count (§5.4).
+- [ ] **2.9** `website` type: intro (required), sections (required, unique), `internalViewerEmails` with @vydia.com validation (§5.5).
+- [ ] **2.10** `artist` type: field groups, name, slug with custom `slugify`, `isSlugAvailable` (current + previous slugs), reserved-word and pattern validation (§5.6).
+- [ ] **2.11** `artist` hidden `slugLocked`, read-only `previousSlugs`, slug `readOnly` when locked.
+- [ ] **2.12** `artist` `allowedEmails` with per-item email validation and the case-insensitive duplicate check.
+- [ ] **2.13** `artist` `introOverride`, `additionalInfo`, `sectionOverride` (with the "replaces, doesn't add" description), hidden `customization` placeholder.
+- [ ] **2.14** `artist` preview (`/slug · N allowed emails`).
+- [ ] **2.15** Register everything in `schemaTypes/index.ts`.
+- [ ] **2.16** Manually test every validation rule in Studio: wrong mime type, missing file, missing link, both file and link on a deck, invalid email, duplicate email in different case, reserved slug, duplicate slug.
+
+**Done when:** every document type can be created, validated, and published in the local Studio, and each validation rule in 2.16 blocks publishing with a readable message.
+
+---
+
+### Phase 3: Studio editor experience
+
+- [ ] **3.1** Desk structure: Website singleton pinned at top, Artists, Sections, Resources → All / Not in any section (§6.1).
+- [ ] **3.2** Singleton guards: filter the `website` template from "new document", limit its actions to publish / discard / restore (§6.4).
+- [ ] **3.3** `lockSlugOnPublish` wrapper around the publish action (§6.2). Test: publish a new artist → slug becomes read-only.
+- [ ] **3.4** `changeUrlAction` (§6.2). Test: Change URL → old slug appears in Previous URLs → edit slug → publish → re-locks.
+- [ ] **3.5** `openSiteAction` (§6.2). Test it opens `NEXT_PUBLIC_SITE_URL/<slug>` in a new tab.
+- [ ] **3.6** `PdfPreviewInput` (§6.3): render page 1 with pdf.js, upload as an image asset, set the field.
+- [ ] **3.7** `PdfPreviewInput` behaviour: auto-generate when a PDF has no preview, regenerate when the PDF is replaced, manual button, error message on failure.
+- [ ] **3.8** Test the PDF preview with a portrait one-pager, a landscape deck exported to PDF, a large (>20 MB) PDF, and a password-protected PDF (should fail gracefully).
+- [ ] **3.9** Decide where the pdf.js worker loads from (unpkg vs copied to `public/`) and finalise it (§6.3 note).
+- [ ] **3.10** Vision tool loaded in development only.
+- [ ] **3.11** Read every field title and description aloud as a non-developer would, and rewrite anything unclear.
+- [ ] **3.12** Confirm strong references block deleting a resource that's still in a section, and a section that's still on the website or an artist.
+
+**Done when:** you can run Flow 1 (create a microsite) and Flow 2 (edit resources → sections → website) from the research end to end in Studio without touching code, and the slug lock / Change URL / PDF preview all behave as specified.
+
+---
+
+### Phase 4: Seed and test content
+
+- [ ] **4.1** Write `scripts/seed.ts` (§12) and run `npx sanity exec scripts/seed.ts --with-user-token`.
+- [ ] **4.2** Confirm in Studio: the Website singleton has the intro text from the reference, plus the three sections in order.
+- [ ] **4.3** Create test resources covering every case: PDF with cover, PDF without cover (auto preview), uploaded video, link (pitch form), slide deck as upload, slide deck as link, resource with a long title.
+- [ ] **4.4** Add the test resources to the three sections.
+- [ ] **4.5** Create test artists:
+  - `test-artist`: default layout, your personal email allowed.
+  - `test-override`: intro override, additional info, section override with one artist-specific section.
+  - `test-renamed`: published, then renamed via Change URL (so it has a previous slug).
+- [ ] **4.6** Create one resource that's in no section, and confirm it appears under "Not in any section".
+- [ ] **4.7** Run `npx sanity typegen generate` and commit `lib/sanity/types.generated.ts`.
+
+**Done when:** the dataset contains every content shape the site has to render, and the generated types compile.
+
+---
+
+### Phase 5: Server data layer
+
+- [ ] **5.1** `lib/sanity/client.ts`: private client with token, `useCdn: false`, `perspective: 'published'` (§7.1).
+- [ ] **5.2** `lib/sanity/fetch.ts`: `sanityFetch` with `force-cache` + type tags (§7.1).
+- [ ] **5.3** `lib/sanity/queries.ts`: `ACCESS_QUERY`, resource and section projections, `ARTIST_PAGE_QUERY` (§7.2).
+- [ ] **5.4** Swap the hand-written types (§7.3) for the generated ones where they match. Keep `ResourceCardData` and `SectionData` as named exports either way.
+- [ ] **5.5** `lib/sanity/page.ts`: `getArtistPage` with the override rules (intro override, sections REPLACE) and dangling-reference filtering (§7.4).
+- [ ] **5.6** `lib/sanity/image.ts` + `images.remotePatterns` for `cdn.sanity.io` in `next.config.ts` (§7.5). Confirm the `@sanity/image-url` export name for the installed version.
+- [ ] **5.7** `lib/format.ts`: `formatAddedOn` in America/New_York (§11.4). Unit test: `2025-05-16T16:08:00Z` → `Added on May 16, 2025 at 12:08 PM`.
+- [ ] **5.8** Unit-test `getArtistPage`'s override logic with a mocked `sanityFetch`: no override, intro override only, section override only, empty arrays treated as "no override", null references dropped.
+
+**Done when:** a temporary server component can print the resolved data for `test-artist` and `test-override`, and the override unit tests pass.
+
+---
+
+### Phase 6: UI components (rendering, no auth yet)
+
+Temporarily render `/[slug]` without the auth check (hard-code the artist ID lookup) so the UI can be built against real data. **This bypass is removed in 8.3.**
+
+- [ ] **6.1** `PageShell` + `.module.css` (§11.2).
+- [ ] **6.2** `Header` + `.module.css`: grain banner, centered logo, responsive height (§11.2).
+- [ ] **6.3** `Notice` + `.module.css` (§11.2).
+- [ ] **6.4** `RichText` + `.module.css`, and `Intro` (§11.3).
+- [ ] **6.5** `ResourceSection` + `.module.css`: heading, optional subtitle, auto-fill grid (§11.4).
+- [ ] **6.6** `FileTypeBadge` + `.module.css`: four colors, icons, screen-reader label (§11.4).
+- [ ] **6.7** `CardCover` + `.module.css`: Sanity image with LQIP blur, branded placeholder tile (§11.4).
+- [ ] **6.8** `CardBody` (shared) and `ResourceCard` + `.module.css`: link cards open in a new tab, card hover/focus states, reduced-motion handling (§11.4).
+- [ ] **6.9** `VideoCard` + `.module.css`: `<dialog>` player, pause on close, Esc closes, focus returns to the card (§11.4).
+- [ ] **6.10** Additional-info block styling (`[slug]/page.module.css`, §9.2).
+- [ ] **6.11** Visual comparison with `docs/screenshots/sample website.png` side by side at 1440px: header proportions, intro typography, section titles, card border/radius/shadow, badge position, date line. Adjust tokens until it matches.
+- [ ] **6.12** Responsive check at 375px, 768px, 1024px, 1440px: columns step 1 → 2 → 3 → 4 and the header logo scales.
+- [ ] **6.13** Check all card states with the test content: with cover, auto PDF preview, placeholder, long title (wraps, date stays pinned), video, link, slides.
+- [ ] **6.14** Grep for stray inline styles or global classes. Everything is in modules except tokens, reset, and `.visually-hidden` (D12).
+
+**Done when:** `/test-artist` and `/test-override` render correctly against real Sanity data and match the reference at desktop and mobile sizes.
+
+---
+
+### Phase 7: Authentication
+
+- [ ] **7.1** `lib/supabase/server.ts` and `lib/supabase/client.ts` (§8.1).
+- [ ] **7.2** `lib/supabase/proxy.ts` + root `proxy.ts` (or `middleware.ts` on Next 15) with `PUBLIC_EXACT = ['/']`, the `/login` and `/auth` prefixes, and the matcher that excludes `/studio`, `/api/revalidate`, and static files (§8.2).
+- [ ] **7.3** `lib/safe-redirect.ts` (§8.3) + unit tests: relative path OK, same-origin absolute OK, other origin → `/`, `//evil.com` → `/`, garbage → `/`.
+- [ ] **7.4** Login server actions: `signIn`, `signUp` (same message whether the account exists or not), `requestPasswordReset` (§8.4).
+- [ ] **7.5** `LoginForm` + `LoginForm.module.css`: sign-in / sign-up / reset modes, Google button, labelled inputs, error + success messages, invalid-link message (§8.4).
+- [ ] **7.6** `login/page.tsx` using `PageShell` (§8.4).
+- [ ] **7.7** `/auth/callback` route for Google (§8.5).
+- [ ] **7.8** `/auth/confirm` route for email confirmation + recovery (§8.5).
+- [ ] **7.9** `/auth/signout` route (POST, 303 to `/login`) (§8.5).
+- [ ] **7.10** `/account/update-password` page: client form calling `updateUser({password})`, styled with `controls.module.css`.
+- [ ] **7.11** Manually test every flow locally:
+  - Sign up with email → confirmation email arrives → link lands on the original page, signed in.
+  - Sign in before confirming → generic error.
+  - Google sign-in → returns to `next`.
+  - Forgot password → email → set a new password → signed in.
+  - Sign out → back to `/login`.
+- [ ] **7.12** Confirm the session cookie's max-age is long-lived (≈400 days) and that a session survives a browser restart.
+
+**Done when:** every flow in 7.11 works on localhost, and every non-public route redirects to `/login?next=…` when signed out.
+
+---
+
+### Phase 8: Access control
+
+- [ ] **8.1** `lib/access.ts`: `normalizeEmail`, `PERMANENT_VIEWERS` from env, `isInternalViewer`, `decideAccess`, `verifiedEmail`, `resolveArtistAccess` (§9.1).
+- [ ] **8.2** `tests/access.test.ts` (§13.1): unknown, unapproved = unknown, case-insensitive + trim, permanent emails, internal viewers from the website, old-slug redirect only when allowed, no verified email.
+- [ ] **8.3** Replace the Phase 6 bypass with the real `[slug]/page.tsx`: `getUser` → `resolveArtistAccess` → `notFound()` / `redirect()` / render (§9.2). **Remove the temporary bypass code.**
+- [ ] **8.4** `[slug]/not-found.tsx` + `NoAccess` using `Notice`, with a "sign in with a different email" form (§9.2).
+- [ ] **8.5** Static `metadata` with no artist name, and `noindex` on the site layout and artist page.
+- [ ] **8.6** Root `/` instructions page: static, public, no session read, no Sanity query (§9.4, D13).
+- [ ] **8.7** Manual matrix test, signed in as each persona against each slug:
+
+  | Persona ↓ / Slug → | `test-artist` | old `test-renamed` slug | `does-not-exist` |
+  |---|---|---|---|
+  | Approved client | ✅ page | ↪ redirect to new slug | 404 NoAccess |
+  | Unapproved client | 404 NoAccess | 404 NoAccess (no redirect) | 404 NoAccess |
+  | `labelrelationships@` | ✅ page | ↪ redirect | 404 NoAccess |
+  | Internal viewer from Website list | ✅ page | ↪ redirect | 404 NoAccess |
+  | Signed out | → `/login` | → `/login` | → `/login` |
+
+- [ ] **8.8** Diff the HTML of "unapproved on a real artist" against "anyone on a missing artist". It must be byte-identical apart from Next's per-request IDs.
+- [ ] **8.9** Remove an email from `test-artist` in Studio and confirm that user loses access on the next load (it works once Phase 9 is done; until then, restart dev).
+- [ ] **8.10** Mixed-case test: add `Jane.Doe@Example.com` in Studio, sign in as `jane.doe@example.com` → allowed.
+
+**Done when:** every cell in the 8.7 matrix behaves as shown, 8.8 shows no difference, and the access unit tests pass.
+
+---
+
+### Phase 9: Caching and publish webhook
+
+- [ ] **9.1** `/api/revalidate` route with `parseBody` signature check and type-tag revalidation (§10). Use the `revalidateTag` signature for the installed Next version.
+- [ ] **9.2** Generate `SANITY_REVALIDATE_SECRET` and add it to `.env.local` and Vercel (Preview + Production).
+- [ ] **9.3** Create the Sanity webhook pointed at the **preview** deployment first, with filter, projection `{_type}`, and the secret (§10).
+- [ ] **9.4** Test on the preview deployment: edit a resource title → publish → reload `/test-artist` → new title shows within seconds.
+- [ ] **9.5** Test each type: website intro, section order, artist allowed emails (revocation), resource delete.
+- [ ] **9.6** Test a bad signature → 401, and an unknown `_type` → 400.
+- [ ] **9.7** Check the webhook attempt log in sanity.io/manage shows 200s.
+
+**Done when:** every edit type in 9.5 appears on the deployed preview without a redeploy.
+
+---
+
+### Phase 10: Testing and hardening
+
+- [ ] **10.1** Create Supabase test users for e2e (`approved`, `outsider`) and a Playwright global setup that signs in and saves `storageState` files (gitignored).
+- [ ] **10.2** Write `tests/e2e/access.spec.ts` (§13.2): signed-out redirects, `/` is public with no links, unknown vs forbidden identical, approved user sees content.
+- [ ] **10.3** Add e2e tests: old slug redirects for an approved user, the video dialog opens and closes, link cards have `target="_blank"` and `rel="noopener noreferrer"`.
+- [ ] **10.4** Run Playwright against the Vercel preview in CI (on PRs to `main`).
+- [ ] **10.5** Security headers in `next.config.ts` for site routes: `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`, `X-Content-Type-Options: nosniff`, `Permissions-Policy` minimal. Exclude `/studio` if they break it.
+- [ ] **10.6** Confirm no server-only module ends up in a client bundle (`server-only` import errors would show at build). Grep the client build output for `SANITY_API_READ_TOKEN`.
+- [ ] **10.7** Confirm the Sanity dataset rejects unauthenticated queries (`curl` the public API without a token → no documents).
+- [ ] **10.8** Accessibility: keyboard-only walk-through (cards, video dialog, login form), axe/Lighthouse a11y ≥ 95, color contrast of the muted date text, alt text on cover images.
+- [ ] **10.9** Performance: Lighthouse on `/test-artist` (mobile). LCP image is the header logo (`priority`), covers are lazy, no layout shift from cards.
+- [ ] **10.10** Run the full manual QA checklist (§13.3) and record the results in the PR.
+
+**Done when:** CI runs unit + e2e green against preview, every §13.3 item passes, and Lighthouse a11y ≥ 95.
+
+---
+
+### Phase 11: Production deploy and domain
+
+- [ ] **11.1** Add all env vars to Vercel **Production** with production values (`NEXT_PUBLIC_SITE_URL=https://welcometovydia.com`).
+- [ ] **11.2** Supabase: Site URL → `https://welcometovydia.com`, and add `https://welcometovydia.com/**` to the redirect URLs.
+- [ ] **11.3** Google OAuth consent screen: add the production domain, and publish the app (out of "testing" mode) so any Google account can sign in.
+- [ ] **11.4** 🧑‍🤝‍🧑 Add `welcometovydia.com` (and `www` → apex redirect) in Vercel. The product team creates the DNS records. Wait for SSL.
+- [ ] **11.5** Point the Sanity webhook at `https://welcometovydia.com/api/revalidate` (or add a second production webhook and keep preview).
+- [ ] **11.6** Add `https://welcometovydia.com` to Sanity CORS origins with credentials.
+- [ ] **11.7** Smoke test production: `/` instructions, `/studio` login with both shared accounts, sign-up email arrives from the custom SMTP sender, Google login, `/test-artist` renders, publish → refresh works.
+- [ ] **11.8** Delete or unpublish the test artists in production (or keep `test-artist` for monitoring, allowed only to your email).
+
+**Done when:** the smoke test in 11.7 passes on the real domain.
+
+---
+
+### Phase 12: Seismic content migration
+
+- [ ] **12.1** 🧑‍🤝‍🧑 Get the full Seismic asset list from L&A (the screenshot rows scroll, so there are more than shown in §12.1). Record title, type, section, original "Added on" date, and whether it has a custom thumbnail.
+- [ ] **12.2** Add up the size of all the videos. Compare against the quotas from 0.6. If they don't fit, raise the Sanity plan upgrade **before** uploading (D14).
+- [ ] **12.3** Re-encode any oversized videos to MP4/H.264 at 1080p max.
+- [ ] **12.4** For each asset: create the Resource → upload the file or paste the link → set **Added on** to the Seismic date → add the cover photo if Seismic had one → check the auto PDF preview → publish.
+- [ ] **12.5** Add each resource to its section in the Seismic order, and publish the sections.
+- [ ] **12.6** Check "Not in any section" is empty (or only holds intentional leftovers).
+- [ ] **12.7** Side-by-side check of a production artist page against the Seismic page: every resource is present, in order, with matching dates.
+- [ ] **12.8** Spot-check every file opens (PDFs open in a new tab, videos play, links go to the right forms).
+- [ ] **12.9** Check asset usage in sanity.io/manage after the upload and set a monthly reminder to re-check (§15).
+- [ ] **12.10** 🧑‍🤝‍🧑 Create artist records for any current clients being moved off Seismic, with their allowed emails (or leave that to L&A as their first real task after the Loom).
+
+**Done when:** the production site shows the full Seismic library and L&A agrees it matches.
+
+---
+
+### Phase 13: Handoff
+
+- [ ] **13.1** Write `README.md`: what the app is, local setup, env vars, the deploy flow, where each dashboard lives, how to rotate the Sanity token and webhook secret.
+- [ ] **13.2** Write a short `docs/editor-guide.md` (a text version of the Loom for quick reference).
+- [ ] **13.3** Record the Loom walkthrough following the §16 outline (all 9 steps), using the production Studio.
+- [ ] **13.4** 🧑‍🤝‍🧑 Present the prototype to L&A and Creative Services: live demo of Flow 1 and Flow 2, then the client view.
+- [ ] **13.5** 🧑‍🤝‍🧑 Go through the open questions (§17) in that meeting and record the answers in this plan.
+- [ ] **13.6** 🧑‍🤝‍🧑 Hand over credentials: confirm L&A and Creative Services know the shared Sanity logins, and who owns the Vercel/Supabase/Sanity accounts and billing going forward.
+- [ ] **13.7** Sunset plan for the Seismic link: agree a date with L&A, and how existing clients get their new link.
+
+**Done when:** L&A has created at least one real artist microsite on their own, without developer help.
+
+---
+
+### Phase 14: Post-prototype (after the review in 13.4)
+
+Scope depends on the answers to §17. Placeholders:
+
+- [ ] **14.1** Implement the agreed customization fields in `artist.customization` (e.g. profile picture, background image) and unhide the group.
+- [ ] **14.2** Render the customization on the artist page (new components, each with its `.module.css`).
+- [ ] **14.3** If per-person audit trails are required: request more Sanity seats or document the shared-login trade-off.
+- [ ] **14.4** If sensitive files are ever uploaded: build the authenticated `/api/files/[id]` proxy (§15).
+- [ ] **14.5** Re-check Sanity usage after one month of real traffic and adjust the plan if needed.
 
 ---
 
@@ -2266,9 +3100,9 @@ Each phase ends in something demoable.
 | **"Added on" dates** reflect edits | Explicit `addedOn` field, initialised on create and editable for migration. GROQ falls back to `_createdAt`, never `_updatedAt`. |
 | **Missing cover photos** | Three-step fallback: cover → auto PDF preview → branded grain tile that matches the existing thumbnail style. The card layout is identical in every case (fixed 16:9 cover box). |
 | **Global edits look like failed publishes** | Type-tagged cache + signed webhook with immediate expiry (§10). Pages refresh within seconds. |
-| **Sanity storage/bandwidth for videos** | Unverified. Check the current plan quotas on sanity.io/pricing before migrating. The `resource` schema already accepts a **link** for videos (unlisted YouTube/Vimeo) as a zero-code fallback. Next options: Mux via `sanity-plugin-mux-input`, or Supabase Storage as the research suggested. |
+| **Sanity storage/bandwidth for videos** | **Decision: videos stay in Sanity** (D14). Still unverified whether the quotas are enough. Before migrating, check the current plan's asset storage and bandwidth on sanity.io/pricing against the total size of the Seismic videos. Keep files small: MP4/H.264 at 1080p max (guidance is in the field description). Cards use `preload="metadata"`, so bandwidth is only spent when someone presses play. Watch usage in sanity.io/manage after launch. If the numbers don't fit, the answer is a higher Sanity plan, not a different host. |
 | **Public asset URLs** in a private dataset | Acceptable for client-facing collateral. If needed later: `/api/files/[id]` route that checks the session + an allowed artist before streaming from Sanity, with cards linking there instead of `cdn.sanity.io`. |
-| **Roster enumeration** | Proxy gates every path before any Sanity lookup. Denied = unknown (§9.3). Static metadata. `noindex`. Private dataset. |
+| **Roster enumeration** | Proxy gates every artist path before any Sanity lookup. Denied = unknown (§9.3). Static metadata. `noindex`. Private dataset. `/` is a static instructions page with no artist list for anyone (D13). |
 | **Email confirmations not arriving** | Custom SMTP is required for production (Supabase default sender is rate-limited). |
 | **Shared Sanity login: no per-person audit trail** | Open question for L&A (§17). Studio history still shows *what* changed and when. |
 | **Editors can't see that a resource is orphaned** | "Not in any section" list in Studio (§6.1). |
@@ -2284,7 +3118,8 @@ Each phase ends in something demoable.
 5. **Global layout**: Website → intro text → section order → internal viewers.
 6. **Per-artist overrides**: section override *replaces* the global sections, and how to undo it (clear the field).
 7. **Things not to do**: why the URL locks, how "Change URL…" works, and that edits to a shared resource change every artist's page.
-8. **Troubleshooting**: "Client says they can't see the page" → check the email spelling on the artist and confirm they verified their email or used Google.
+8. **Troubleshooting**: "Client says they can't see the page" → check the email spelling on the artist and confirm they verified their email or used Google. "Client went to welcometovydia.com" → the home page only shows instructions, so resend their personal link.
+9. **Viewing any artist's page yourself**: use *Open site* on the artist in Studio. There's no list of artists on the website itself.
 
 ---
 
@@ -2295,11 +3130,14 @@ From research:
 - Customization: artist profile picture? Custom background images? Anything else? (The `artist.customization` object is already in the schema, hidden, ready for this.)
 
 Raised while planning:
-- Should the two permanent internal emails also be allowed to **see the artist index** at `/`? (Planned: yes.)
-- Do videos stay in Sanity, or move to Mux/YouTube once storage is measured?
 - Is it fine that Sanity file URLs are public-if-known, or do we need the authenticated file proxy?
 - Who owns the Supabase/Sanity/Vercel accounts long term (billing, seat changes)?
 - Should the date line show for link-type resources (pitch forms)? The reference shows it, so the plan keeps it.
+
+Resolved in plan review:
+- ~~Should internal emails see an artist index at `/`?~~ **No.** `/` is a static instructions page for everyone (D13, §9.4).
+- ~~Do videos stay in Sanity?~~ **Yes.** Upload only, no external video links (D14). Quotas still get checked before migration (§15).
+- ~~Tailwind?~~ **No.** CSS Modules with shared tokens (D12, §11.0).
 
 ---
 
@@ -2319,7 +3157,9 @@ Raised while planning:
 | Grid, not horizontal scroll; keep file-type icons | §11.4 |
 | URL `welcometovydia.com/[artist-name]`, stable | §5.1, §5.6, §6.2 |
 | Two shared @vydia.com emails always have access | `PERMANENT_VIEWER_EMAILS`, §9.1 |
-| Designated internal emails see every site | `website.internalViewerEmails`, §9.1, §9.4 |
+| Designated internal emails see every site | `website.internalViewerEmails`, §9.1. Reached via Studio "Open site" (§6.2), not an index |
+| `/` gives instructions, no roster | §9.4 (D13) |
+| Videos hosted in Sanity | `resource` video = upload only, §5.3 (D14) |
 | Sign in before "doesn't exist" | Proxy §8.2 |
 | Unknown vs. unapproved indistinguishable | §9.2–9.3, e2e §13.2 |
 | Non-aggressive sessions | §4.3, §8.2 (D11) |
