@@ -17,7 +17,7 @@ One Next.js (App Router) app on Vercel that serves three things:
 | `/login`, `/auth/*` | Supabase Auth: email/password (with email confirmation) and Google | Everyone |
 | `/studio` | Embedded Sanity Studio, where L&A edits content | The two shared Sanity seats |
 
-Content lives in a **private** Sanity dataset with four document types: `artist`, `resource`, `section`, and `website` (a singleton). On each request the page reconciles the two systems: **Supabase answers "who is this?"** and **Sanity answers "is this email allowed here?"** Sanity content is cached in Next's data cache and invalidated by a Sanity publish webhook.
+Content lives in a **private** Sanity dataset with four document types: `artist`, `resource`, `section`, and `website` (a singleton). On each request the page reconciles the two systems: **Supabase answers "who is this?"** and **Sanity answers "is this email allowed here?"** Sanity content is cached with Next 16's `'use cache'` and invalidated by a Sanity publish webhook.
 
 The security rule that drives most of the design: an unknown slug and a known slug the user can't access must produce **exactly the same response**, and **only after sign-in**.
 
@@ -41,6 +41,7 @@ The security rule that drives most of the design: an unknown slug and a known sl
 | D12 | **No Tailwind. Styling is CSS Modules**: each component has a co-located `Component.module.css`, and one global stylesheet holds only design tokens (CSS custom properties) and a base reset | Plan-review decision. Scoped class names with no build plugin, and plain CSS that anyone can read. Tokens keep colors, radii, and spacing consistent across modules. |
 | D13 | **`/` is an instructions-only page, not an artist index.** It's public, reads nothing from Sanity, and tells the visitor to open the link their Vydia rep sent | Plan-review decision. Assume the visitor is an artist looking for their page. Internal viewers reach artist pages by direct URL or with Studio's "Open site" action. |
 | D14 | **Videos are uploaded to Sanity** (no YouTube/Vimeo/Mux link option for the `video` type) | Plan-review decision, matches the research ("Sanity will store all … videos"). Storage and bandwidth still get measured (§15). |
+| D15 | **Keep Next 16's `cacheComponents`.** Sanity data is cached with `'use cache'` + `cacheLife('max')` + `cacheTag` (§7.1) and expired by the webhook (§10). Pages that read the request (`/[slug]`, `/login`) set `export const instant = false` | Decided in task 2.0. It's the Next 16 default. Opting the gated page out of streaming means the access check finishes on the server before any HTML is sent, so `notFound()` returns a real 404 and old-slug redirects a real 307, identical for unknown and denied (§9.3). With streaming, both would come back as `200` after the shell had already gone out. |
 
 ---
 
@@ -89,9 +90,9 @@ welcome-to-vydia/
 │  │     ├─ callback/route.ts         # Google OAuth code exchange
 │  │     ├─ confirm/route.ts          # email confirmation + password recovery
 │  │     └─ signout/route.ts
-│  ├─ studio/[[...tool]]/
-│  │  ├─ layout.tsx                   # studio root layout (no site CSS)
-│  │  └─ page.tsx
+│  ├─ studio/
+│  │  ├─ layout.tsx                   # studio root layout (no site CSS), above the dynamic segment
+│  │  └─ [[...tool]]/page.tsx
 │  └─ api/revalidate/route.ts         # Sanity webhook
 ├─ components/                        # every component has a co-located .module.css
 │  ├─ PageShell.tsx / .module.css     # <main> width + spacing + Header
@@ -293,7 +294,7 @@ export const blockContent = defineType({
 ```ts
 // sanity/schemaTypes/resource.ts
 import {defineField, defineType} from 'sanity'
-import {DocumentIcon} from '@sanity/icons'
+import {DocumentIcon} from '@sanity/icons/Document'
 import {apiVersion} from '../env'
 import {PdfPreviewInput} from '../components/PdfPreviewInput'
 
@@ -422,7 +423,7 @@ export const resource = defineType({
 ```ts
 // sanity/schemaTypes/section.ts
 import {defineArrayMember, defineField, defineType} from 'sanity'
-import {ThListIcon} from '@sanity/icons'
+import {ThListIcon} from '@sanity/icons/ThList'
 
 export const section = defineType({
   name: 'section',
@@ -455,7 +456,7 @@ export const section = defineType({
 ```ts
 // sanity/schemaTypes/website.ts
 import {defineArrayMember, defineField, defineType} from 'sanity'
-import {HomeIcon} from '@sanity/icons'
+import {HomeIcon} from '@sanity/icons/Home'
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -508,7 +509,7 @@ export const website = defineType({
 ```ts
 // sanity/schemaTypes/artist.ts
 import {defineArrayMember, defineField, defineType, type SlugValidationContext} from 'sanity'
-import {UserIcon} from '@sanity/icons'
+import {UserIcon} from '@sanity/icons/User'
 import {apiVersion} from '../env'
 import {RESERVED_SLUGS, SLUG_PATTERN, slugify} from '../../lib/slug'
 
@@ -668,44 +669,26 @@ The whole design goal here is that L&A can run it without a developer: a clear s
 
 ```ts
 // sanity/structure.ts
+import {HomeIcon} from '@sanity/icons/Home'
 import type {StructureResolver} from 'sanity/structure'
-import {DocumentsIcon, HomeIcon, WarningOutlineIcon} from '@sanity/icons'
 
 export const structure: StructureResolver = (S) =>
   S.list()
     .title('Welcome to Vydia')
     .items([
-      S.listItem()
-        .title('Website (global layout)')
-        .id('website')
-        .icon(HomeIcon)
-        .child(S.document().schemaType('website').documentId('website').title('Website (global layout)')),
-      S.divider(),
       S.documentTypeListItem('artist').title('Artists'),
+      S.divider(),
+      S.documentTypeListItem('resource').title('Resources'),
       S.documentTypeListItem('section').title('Sections'),
       S.listItem()
-        .title('Resources')
-        .icon(DocumentsIcon)
-        .child(
-          S.list()
-            .title('Resources')
-            .items([
-              S.listItem().title('All resources').child(S.documentTypeList('resource').title('All resources')),
-              S.listItem()
-                .title('Not in any section')
-                .icon(WarningOutlineIcon)
-                .child(
-                  S.documentList()
-                    .title('Not in any section (not visible on any page)')
-                    .schemaType('resource')
-                    .filter('_type == "resource" && count(*[_type == "section" && references(^._id)]) == 0'),
-                ),
-            ]),
-        ),
+        .title('Website')
+        .id('website')
+        .icon(HomeIcon)
+        .child(S.document().schemaType('website').documentId('website').title('Website')),
     ])
 ```
 
-The "Not in any section" list makes the research's three-layer rule visible: *a resource not assigned to a section will not be visible on any page*.
+Resources is a single flat list (plan-review decision): no separate "Not in any section" view. The research's three-layer rule (*a resource not assigned to a section will not be visible on any page*) is covered in the Loom (§16) instead, and checked by a developer query during migration (12.6).
 
 ### 6.2 Document actions
 
@@ -777,7 +760,7 @@ export const changeUrlAction: DocumentActionComponent = (props) => {
 ```ts
 // sanity/actions/openSite.ts
 import type {DocumentActionComponent} from 'sanity'
-import {LaunchIcon} from '@sanity/icons'
+import {LaunchIcon} from '@sanity/icons/Launch'
 
 export const openSiteAction: DocumentActionComponent = (props) => {
   const slug = (props.published as {slug?: {current?: string}} | null)?.slug?.current
@@ -936,7 +919,6 @@ export default defineCliConfig({
 import {NextStudio} from 'next-sanity/studio'
 import config from '../../../sanity.config'
 
-export const dynamic = 'force-static'
 export {metadata, viewport} from 'next-sanity/studio'
 
 export default function StudioPage() {
@@ -945,7 +927,7 @@ export default function StudioPage() {
 ```
 
 ```tsx
-// app/studio/[[...tool]]/layout.tsx   (separate root layout: no site CSS or fonts)
+// app/studio/layout.tsx   (separate root layout: no site CSS or fonts; must sit above [[...tool]], or Next treats `tool` as a root param)
 export default function StudioLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="en">
@@ -973,7 +955,7 @@ export const sanity = createClient({
   projectId,
   dataset,
   apiVersion,
-  useCdn: false,               // Next's data cache is our cache; avoid CDN lag after publish
+  useCdn: false,               // 'use cache' is our cache; avoid CDN lag after publish
   perspective: 'published',    // never serve drafts
   token: process.env.SANITY_API_READ_TOKEN, // private dataset
 })
@@ -982,15 +964,21 @@ export const sanity = createClient({
 ```ts
 // lib/sanity/fetch.ts
 import 'server-only'
+import {cacheLife, cacheTag} from 'next/cache'
 import type {QueryParams} from 'next-sanity'
 import {sanity} from './client'
 
 export type SanityTag = 'artist' | 'resource' | 'section' | 'website'
 
-export function sanityFetch<T>(query: string, params: QueryParams, tags: SanityTag[]) {
-  return sanity.fetch<T>(query, params, {cache: 'force-cache', next: {tags}})
+export async function sanityFetch<T>(query: string, params: QueryParams, tags: SanityTag[]): Promise<T> {
+  'use cache'
+  cacheLife('max')
+  cacheTag(...tags)
+  return sanity.fetch<T>(query, params)
 }
 ```
+
+With `cacheComponents` on (D15), this is Next 16's native data cache. `query`, `params`, and `tags` are the cache key. `cacheLife('max')` keeps entries until the webhook (§10) expires their tag, so pages never go stale on a timer and never refetch Sanity for nothing. Nothing request-specific (cookies, the user) is ever passed in, so a cached entry can't leak between users.
 
 ### 7.2 Queries
 
@@ -1460,6 +1448,8 @@ import {PageShell} from '@/components/PageShell'
 import {safeNext} from '@/lib/safe-redirect'
 import {LoginForm} from './LoginForm'
 
+export const instant = false
+
 export default async function LoginPage({searchParams}: {searchParams: Promise<{next?: string; error?: string}>}) {
   const {next, error} = await searchParams
   return (
@@ -1613,6 +1603,9 @@ import styles from './page.module.css'
 // Static title: we never put the artist's name in metadata (it would leak on denial paths).
 export const metadata: Metadata = {title: 'Welcome to Vydia', robots: {index: false, follow: false}}
 
+// Block until the access check finishes, so 404 / 307 are real status codes sent before any HTML (D15).
+export const instant = false
+
 export default async function ArtistPage({params}: {params: Promise<{slug: string}>}) {
   const {slug} = await params
 
@@ -1746,9 +1739,7 @@ export async function POST(req: NextRequest) {
   if (!isValidSignature) return new NextResponse('Invalid signature', {status: 401})
   if (!body?._type || !TAGS.has(body._type as SanityTag)) return new NextResponse('Ignored', {status: 400})
 
-  // Next 16: second arg is required. {expire: 0} = expire immediately, so the next
-  // visitor gets fresh content rather than stale-while-revalidate.
-  // (On Next 15 this is just `revalidateTag(body._type)`.)
+  // {expire: 0}: the next visitor gets fresh content, never a stale-while-revalidate copy.
   revalidateTag(body._type, {expire: 0})
   return NextResponse.json({revalidated: body._type, now: Date.now()})
 }
@@ -2881,7 +2872,7 @@ Also found: `.env.local` only has the two Supabase values. The rest of §4.1 (`N
 - [x] **1.1** `npx create-next-app@latest . --ts --no-tailwind --eslint --app --src-dir=false --import-alias "@/*"` (§2). Confirm which Next version was installed (16 vs 15) and note it in the README; it decides `proxy.ts` vs `middleware.ts` and the `revalidateTag` signature.
 - [x] **1.2** Install dependencies from §2 (Sanity, Supabase, `@portabletext/react`, `lucide-react`, `server-only`, `pdfjs-dist`, Vitest, Playwright).
 - [x] **1.3** Delete the starter page, starter CSS, and starter assets.
-- [x] **1.4** Create the route groups: `app/(site)/layout.tsx` and `app/studio/[[...tool]]/layout.tsx`, each with its own `<html>` root (§3, §6.4).
+- [x] **1.4** Create the route groups: `app/(site)/layout.tsx` and `app/studio/layout.tsx`, each with its own `<html>` root (§3, §6.4).
 - [x] **1.5** Write `app/(site)/globals.css`: tokens, reset, `.visually-hidden` (§11.1).
 - [x] **1.6** Load Source Sans 3 with `next/font` as `--font-public-sans` in the site layout (§11.1).
 - [x] **1.7** Add `lib/cx.ts` (§11.0) and `components/ui/controls.module.css` (§11.2).
@@ -2900,23 +2891,25 @@ Also found: `.env.local` only has the two Supabase values. The rest of §4.1 (`N
 
 ### Phase 2: Sanity content model
 
-- [ ] **2.0** Decide on `cacheComponents` (turned on by the Next 16.4 scaffold in `next.config.ts`). It changes three snippets in this plan: §6.4's `export const dynamic = 'force-static'` errors under it (just remove it), §7.1's `cache: 'force-cache'` + `next.tags` still works but the native pattern is `'use cache'` + `cacheTag`, and §9.2's cookie read (`supabase.auth.getUser()`) has to sit inside a `<Suspense>` boundary or the route has to opt out with `instant = false`. Either keep it and update those snippets, or turn it off so the plan works as written. See `node_modules/next/dist/docs/01-app/02-guides/migrating-to-cache-components.md`.
-- [ ] **2.1** `sanity.cli.ts` with project/dataset and typegen config (§6.4).
-- [ ] **2.2** Minimal `sanity.config.ts` (schema + `structureTool` only) and the embedded Studio route `app/studio/[[...tool]]/page.tsx` (§6.4). Confirm `/studio` loads and the shared login works locally.
-- [ ] **2.3** `blockContent` type (§5.2).
-- [ ] **2.4** `resource` type: title, type radio, file, url, cover image + alt, `pdfPreview` (plain image for now; custom input in 3.6), `addedOn` with `initialValue` now (§5.3).
-- [ ] **2.5** `resource` conditional visibility: file hidden for links, url hidden for PDFs and videos (D14).
-- [ ] **2.6** `resource` validation: mime type matches type, document-level file/url rules, title max length (§5.3).
-- [ ] **2.7** `resource` preview (type label + date + thumbnail) and orderings (newest first, title).
-- [ ] **2.8** `section` type: title, subtitle, ordered unique resource references, preview with count (§5.4).
-- [ ] **2.9** `website` type: intro (required), sections (required, unique), `internalViewerEmails` with @vydia.com validation (§5.5).
-- [ ] **2.10** `artist` type: field groups, name, slug with custom `slugify`, `isSlugAvailable` (current + previous slugs), reserved-word and pattern validation (§5.6).
-- [ ] **2.11** `artist` hidden `slugLocked`, read-only `previousSlugs`, slug `readOnly` when locked.
-- [ ] **2.12** `artist` `allowedEmails` with per-item email validation and the case-insensitive duplicate check.
-- [ ] **2.13** `artist` `introOverride`, `additionalInfo`, `sectionOverride` (with the "replaces, doesn't add" description), hidden `customization` placeholder.
-- [ ] **2.14** `artist` preview (`/slug · N allowed emails`).
-- [ ] **2.15** Register everything in `schemaTypes/index.ts`.
-- [ ] **2.16** Manually test every validation rule in Studio: wrong mime type, missing file, missing link, both file and link on a deck, invalid email, duplicate email in different case, reserved slug, duplicate slug.
+- [x] **2.0** Decide on `cacheComponents` (turned on by the Next 16.4 scaffold in `next.config.ts`). It changes three snippets in this plan: §6.4's `export const dynamic = 'force-static'` errors under it (just remove it), §7.1's `cache: 'force-cache'` + `next.tags` still works but the native pattern is `'use cache'` + `cacheTag`, and §9.2's cookie read (`supabase.auth.getUser()`) has to sit inside a `<Suspense>` boundary or the route has to opt out with `instant = false`. Either keep it and update those snippets, or turn it off so the plan works as written. See `node_modules/next/dist/docs/01-app/02-guides/migrating-to-cache-components.md`. **Decided: keep it (D15).** Snippets in §6.4, §7.1, §8.4, §9.2 and §10 are updated.
+- [x] **2.1** `sanity.cli.ts` with project/dataset and typegen config (§6.4).
+- [x] **2.2** Minimal `sanity.config.ts` (schema + `structureTool` only) and the embedded Studio route `app/studio/[[...tool]]/page.tsx` (§6.4). Confirm `/studio` loads and the shared login works locally. ✅ `/studio` boots with no console errors and shows Sanity's login. Signed in (admin account), the desk loads all four types. The **shared** logins still can't be tried because their invites are pending (0.5).
+- [x] **2.3** `blockContent` type (§5.2).
+- [x] **2.4** `resource` type: title, type radio, file, url, cover image + alt, `pdfPreview` (plain image for now; custom input in 3.6), `addedOn` with `initialValue` now (§5.3).
+- [x] **2.5** `resource` conditional visibility: file hidden for links, url hidden for PDFs and videos (D14).
+- [x] **2.6** `resource` validation: mime type matches type, document-level file/url rules, title max length (§5.3).
+- [x] **2.7** `resource` preview (type label + date + thumbnail) and orderings (newest first, title).
+- [x] **2.8** `section` type: title, subtitle, ordered unique resource references, preview with count (§5.4).
+- [x] **2.9** `website` type: intro (required), sections (required, unique), `internalViewerEmails` with @vydia.com validation (§5.5).
+- [x] **2.10** `artist` type: field groups, name, slug with custom `slugify`, `isSlugAvailable` (current + previous slugs), reserved-word and pattern validation (§5.6).
+- [x] **2.11** `artist` hidden `slugLocked`, read-only `previousSlugs`, slug `readOnly` when locked.
+- [x] **2.12** `artist` `allowedEmails` with per-item email validation and the case-insensitive duplicate check.
+- [x] **2.13** `artist` `introOverride`, `additionalInfo`, `sectionOverride` (with the "replaces, doesn't add" description), hidden `customization` placeholder.
+- [x] **2.14** `artist` preview (`/slug · N allowed emails`).
+- [x] **2.15** Register everything in `schemaTypes/index.ts`.
+- [x] **2.16** Manually test every validation rule in Studio: wrong mime type, missing file, missing link, both file and link on a deck, invalid email, duplicate email in different case, reserved slug, duplicate slug.
+  ✅ 18 cases (16 invalid + 2 valid controls) run through `@sanity/validation`'s `validateDocument` against the real schema and dataset: every rule fires with its readable message, controls pass clean. Also covered: missing video file, title over 120 characters, missing "Added on", previous-slug reuse, non-@vydia.com internal viewer, missing website intro/sections, bad slug pattern. Spot-checked in headless Studio (doc-level rule, async mime check, slug rule): message shown and **Publish disabled**. A valid resource, section, artist, and website were each published from Studio. All probe documents and assets were deleted afterwards; the dataset is empty.
+  ⚠️ Don't rely on `sanity documents validate` (CLI) for these checks: in Sanity 6 it silently skips the document-level rules, the async mime check, and the slug rules (it reported 9 of 16 failures). Use `validateDocument` from `@sanity/validation` with a client instead (Phase 10).
 
 **Done when:** every document type can be created, validated, and published in the local Studio, and each validation rule in 2.16 blocks publishing with a readable message.
 
@@ -2924,7 +2917,7 @@ Also found: `.env.local` only has the two Supabase values. The rest of §4.1 (`N
 
 ### Phase 3: Studio editor experience
 
-- [ ] **3.1** Desk structure: Website singleton pinned at top, Artists, Sections, Resources → All / Not in any section (§6.1).
+- [x] **3.1** Desk structure, in this order: **Artists**, divider, **Resources** (one flat list of all resources), **Sections**, **Website** (singleton editor) (§6.1).
 - [ ] **3.2** Singleton guards: filter the `website` template from "new document", limit its actions to publish / discard / restore (§6.4).
 - [ ] **3.3** `lockSlugOnPublish` wrapper around the publish action (§6.2). Test: publish a new artist → slug becomes read-only.
 - [ ] **3.4** `changeUrlAction` (§6.2). Test: Change URL → old slug appears in Previous URLs → edit slug → publish → re-locks.
@@ -2951,7 +2944,7 @@ Also found: `.env.local` only has the two Supabase values. The rest of §4.1 (`N
   - `test-artist`: default layout, your personal email allowed.
   - `test-override`: intro override, additional info, section override with one artist-specific section.
   - `test-renamed`: published, then renamed via Change URL (so it has a previous slug).
-- [ ] **4.6** Create one resource that's in no section, and confirm it appears under "Not in any section".
+- [ ] **4.6** Create one resource that's in no section, and confirm it shows up in Resources but on no artist page.
 - [ ] **4.7** Run `npx sanity typegen generate` and commit `lib/sanity/types.generated.ts`.
 
 **Done when:** the dataset contains every content shape the site has to render, and the generated types compile.
@@ -2961,7 +2954,7 @@ Also found: `.env.local` only has the two Supabase values. The rest of §4.1 (`N
 ### Phase 5: Server data layer
 
 - [ ] **5.1** `lib/sanity/client.ts`: private client with token, `useCdn: false`, `perspective: 'published'` (§7.1).
-- [ ] **5.2** `lib/sanity/fetch.ts`: `sanityFetch` with `force-cache` + type tags (§7.1).
+- [ ] **5.2** `lib/sanity/fetch.ts`: `sanityFetch` with `'use cache'`, `cacheLife('max')` and type tags via `cacheTag` (§7.1).
 - [ ] **5.3** `lib/sanity/queries.ts`: `ACCESS_QUERY`, resource and section projections, `ARTIST_PAGE_QUERY` (§7.2).
 - [ ] **5.4** Swap the hand-written types (§7.3) for the generated ones where they match. Keep `ResourceCardData` and `SectionData` as named exports either way.
 - [ ] **5.5** `lib/sanity/page.ts`: `getArtistPage` with the override rules (intro override, sections REPLACE) and dangling-reference filtering (§7.4).
@@ -3099,7 +3092,7 @@ Temporarily render `/[slug]` without the auth check (hard-code the artist ID loo
 - [ ] **12.3** Re-encode any oversized videos to MP4/H.264 at 1080p max.
 - [ ] **12.4** For each asset: create the Resource → upload the file or paste the link → set **Added on** to the Seismic date → add the cover photo if Seismic had one → check the auto PDF preview → publish.
 - [ ] **12.5** Add each resource to its section in the Seismic order, and publish the sections.
-- [ ] **12.6** Check "Not in any section" is empty (or only holds intentional leftovers).
+- [ ] **12.6** Check no resource is left out of every section: run `*[_type == "resource" && count(*[_type == "section" && references(^._id)]) == 0]{title}` in Vision (dev) and confirm it's empty, or only holds intentional leftovers.
 - [ ] **12.7** Side-by-side check of a production artist page against the Seismic page: every resource is present, in order, with matching dates.
 - [ ] **12.8** Spot-check every file opens (PDFs open in a new tab, videos play, links go to the right forms).
 - [ ] **12.9** Check asset usage in sanity.io/manage after the upload and set a monthly reminder to re-check (§15).
@@ -3149,16 +3142,16 @@ Scope depends on the answers to §17. Placeholders:
 | **Sanity trial ends and the dataset goes public** | The trial ends 2026-11-18. Upgrade to Growth before then (task 0.17). Without the upgrade, Sanity makes the private dataset public, which exposes the roster and allowed emails, and editors become viewers. |
 | **Email confirmations not arriving** | Custom SMTP is required for production (Supabase default sender is rate-limited). |
 | **Shared Sanity login: no per-person audit trail** | Open question for L&A (§17). Studio history still shows *what* changed and when. |
-| **Editors can't see that a resource is orphaned** | "Not in any section" list in Studio (§6.1). |
+| **Editors can't see that a resource is orphaned** | Accepted: Studio has no dedicated list for this (removed in review, §6.1). The Loom explains that a resource only appears once it's in a section, and the migration check (12.6) catches leftovers. |
 
 ---
 
 ## 16. Loom Walkthrough Outline (for L&A and Creative Services)
 
-1. **Tour** (1 min): sidebar = Website, Artists, Sections, Resources. "Resources go into Sections, Sections go into the Website."
+1. **Tour** (1 min): sidebar = Artists, then Resources, Sections, Website. "Resources go into Sections, Sections go into the Website."
 2. **Create a new microsite** (Flow 1): New Artist → name → Generate URL → allowed emails (internal emails are automatic) → optional intro override / additional info → Publish → *Open site*.
 3. **Add a resource** (Flow 2): New Resource → title → type → upload/link → (optional cover) → check the auto PDF preview → "Added on" (and when to change it) → Publish.
-4. **Put it on the page**: open a Section → add the resource → drag to reorder → Publish. Show the "Not in any section" list.
+4. **Put it on the page**: open a Section → add the resource → drag to reorder → Publish. Stress that a resource that isn't in any section won't appear on any page.
 5. **Global layout**: Website → intro text → section order → internal viewers.
 6. **Per-artist overrides**: section override *replaces* the global sections, and how to undo it (clear the field).
 7. **Things not to do**: why the URL locks, how "Change URL…" works, and that edits to a shared resource change every artist's page.
@@ -3211,4 +3204,4 @@ Resolved in plan review:
 | Case-insensitive email matching | `normalizeEmail`, Studio duplicate check |
 | Publish webhook refreshes pages | §10 |
 | L&A can manage without a developer | §6, §16 |
-| Resource not in a section is invisible | §7.4 + "Not in any section" §6.1 |
+| Resource not in a section is invisible | §7.4, Loom step 4 (§16), migration check 12.6 |

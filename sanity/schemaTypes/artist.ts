@@ -1,0 +1,125 @@
+import {UserIcon} from '@sanity/icons/User'
+import {defineArrayMember, defineField, defineType, type SlugIsUniqueValidator, type SlugValue} from 'sanity'
+import {RESERVED_SLUGS, SLUG_PATTERN, slugify} from '../../lib/slug'
+import {apiVersion} from '../env'
+import {EMAIL_PATTERN} from './shared'
+
+const isSlugAvailable: SlugIsUniqueValidator = async (slug, context) => {
+  const published = context.document?._id.replace(/^drafts\./, '') ?? ''
+  return context.getClient({apiVersion}).fetch<boolean>(
+    `!defined(*[
+      _type == "artist" &&
+      !(_id in [$draft, $published]) &&
+      (slug.current == $slug || $slug in previousSlugs)
+    ][0]._id)`,
+    {draft: `drafts.${published}`, published, slug},
+  )
+}
+
+export const artist = defineType({
+  name: 'artist',
+  title: 'Artist',
+  type: 'document',
+  icon: UserIcon,
+  groups: [
+    {name: 'basics', title: 'Basics', default: true},
+    {name: 'access', title: 'Access'},
+    {name: 'content', title: 'Page content'},
+    {name: 'advanced', title: 'Advanced'},
+  ],
+  fields: [
+    defineField({
+      name: 'name',
+      title: 'Artist name',
+      type: 'string',
+      group: 'basics',
+      validation: (rule) => rule.required(),
+    }),
+    defineField({
+      name: 'slug',
+      title: 'URL',
+      type: 'slug',
+      group: 'basics',
+      description:
+        'welcometovydia.com/<this>. Click "Generate" after typing the name. Locked after the first publish because clients bookmark this link. Use "Change URL…" in the publish menu if you really need to change it.',
+      options: {source: 'name', slugify, isUnique: isSlugAvailable},
+      readOnly: ({document}) => Boolean(document?.slugLocked),
+      validation: (rule) =>
+        rule.required().custom<SlugValue>((value) => {
+          const slug = value?.current
+          if (!slug) return true
+          if (!SLUG_PATTERN.test(slug)) return 'Only lowercase letters, numbers, and single dashes.'
+          if (RESERVED_SLUGS.has(slug)) return `"${slug}" is reserved. Pick another URL.`
+          return true
+        }),
+    }),
+    defineField({name: 'slugLocked', type: 'boolean', hidden: true, initialValue: false}),
+    defineField({
+      name: 'allowedEmails',
+      title: 'Allowed emails',
+      type: 'array',
+      group: 'access',
+      description:
+        'People who can view this page. Matching ignores upper/lower case. labelrelationships@vydia.com, creativeservices@vydia.com, and internal viewers (Website settings) always have access.',
+      of: [
+        defineArrayMember({
+          type: 'string',
+          validation: (rule) =>
+            rule.custom<string>((value) => (!value || EMAIL_PATTERN.test(value.trim()) ? true : 'Not a valid email')),
+        }),
+      ],
+      validation: (rule) =>
+        rule.custom<string[]>((list) => {
+          const lower = (list ?? []).map((email) => email.trim().toLowerCase())
+          return new Set(lower).size === lower.length ? true : 'Duplicate email (case-insensitive)'
+        }),
+    }),
+    defineField({
+      name: 'introOverride',
+      title: 'Intro override (optional)',
+      type: 'blockContent',
+      group: 'content',
+      description: 'Leave empty to use the global intro from Website settings.',
+    }),
+    defineField({
+      name: 'additionalInfo',
+      title: 'Additional info (optional)',
+      type: 'blockContent',
+      group: 'content',
+      description: 'Shown directly below the intro, only on this artist’s page.',
+    }),
+    defineField({
+      name: 'sectionOverride',
+      title: 'Section override (optional)',
+      type: 'array',
+      group: 'content',
+      description:
+        'If you add ANY sections here, they REPLACE the global sections on this artist’s page (not added to them). Leave empty to use the global sections.',
+      of: [defineArrayMember({type: 'reference', to: [{type: 'section'}]})],
+      validation: (rule) => rule.unique(),
+    }),
+    defineField({
+      name: 'customization',
+      type: 'object',
+      group: 'content',
+      hidden: true,
+      fields: [defineField({name: 'placeholder', type: 'string'})],
+    }),
+    defineField({
+      name: 'previousSlugs',
+      title: 'Previous URLs',
+      type: 'array',
+      group: 'advanced',
+      readOnly: true,
+      description: 'Old URLs that redirect to the current one. Managed by "Change URL…".',
+      of: [defineArrayMember({type: 'string'})],
+    }),
+  ],
+  preview: {
+    select: {title: 'name', slug: 'slug.current', emails: 'allowedEmails'},
+    prepare: ({title, slug, emails}: {title?: string; slug?: string; emails?: string[]}) => ({
+      title,
+      subtitle: `/${slug ?? '(no URL yet)'} · ${emails?.length ?? 0} allowed email(s)`,
+    }),
+  },
+})
