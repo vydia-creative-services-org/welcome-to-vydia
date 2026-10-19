@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Welcome to Vydia
 
-## Getting Started
+Branded, per-artist welcome microsites at `welcometovydia.com/[artist-name]`. Next.js on Vercel, content in Sanity, viewer sign-in with Supabase Auth.
 
-First, run the development server:
+- Requirements: [`docs/research.md`](docs/research.md)
+- Implementation plan and to-do list: [`docs/plan.md`](docs/plan.md)
+
+## Stack versions
+
+- **Next.js 16.4** (App Router). Request gating lives in `proxy.ts` (Next 16 renamed `middleware.ts`), and `revalidateTag` takes a second argument. `cacheComponents` is enabled in `next.config.ts`.
+- **React 19.3**, **Sanity 6** (Studio embedded at `/studio`), **Supabase** (`@supabase/ssr`).
+- Styling is **CSS Modules** with design tokens in `app/(site)/globals.css`. No Tailwind.
+
+## Local setup
 
 ```bash
+nvm use 22
+npm install
+cp .env.example .env.local   # fill in the values, see docs/plan.md §4.1
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Scripts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Script                 | What it does                        |
+| ---------------------- | ----------------------------------- |
+| `npm run dev`          | Dev server on http://localhost:3000 |
+| `npm run build`        | Production build                    |
+| `npm run lint`         | ESLint                              |
+| `npm run typecheck`    | Regenerates route types, then `tsc` |
+| `npm run test`         | Unit tests (Vitest)                 |
+| `npm run format`       | Prettier, write                     |
+| `npm run format:check` | Prettier, check only (used in CI)   |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests, and the format check on every pull request and on pushes to `main`.

@@ -1805,10 +1805,10 @@ export const cx = (...classes: (string | false | null | undefined)[]) => classes
 ```tsx
 // app/(site)/layout.tsx
 import type {Metadata} from 'next'
-import {Source_Sans_3} from 'next/font/google'
+import {Public_Sans} from 'next/font/google'
 import './globals.css'
 
-const sans = Source_Sans_3({subsets: ['latin'], variable: '--font-source-sans'})
+const sans = Public_Sans({subsets: ['latin'], variable: '--font-public-sans'})
 
 export const metadata: Metadata = {title: 'Welcome to Vydia', robots: {index: false, follow: false}}
 
@@ -1860,7 +1860,7 @@ export default function SiteLayout({children}: {children: React.ReactNode}) {
   --content-width: 1150px;
 
   /* type */
-  --font-sans: var(--font-source-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-public-sans), ui-sans-serif, system-ui, sans-serif;
 
   /* film grain used by the header and placeholder tiles */
   --grain:
@@ -2879,20 +2879,20 @@ Also found: `.env.local` only has the two Supabase values. The rest of §4.1 (`N
 ### Phase 1: Scaffold and conventions
 
 - [x] **1.1** `npx create-next-app@latest . --ts --no-tailwind --eslint --app --src-dir=false --import-alias "@/*"` (§2). Confirm which Next version was installed (16 vs 15) and note it in the README; it decides `proxy.ts` vs `middleware.ts` and the `revalidateTag` signature.
-- [ ] **1.2** Install dependencies from §2 (Sanity, Supabase, `@portabletext/react`, `lucide-react`, `server-only`, `pdfjs-dist`, Vitest, Playwright).
+- [x] **1.2** Install dependencies from §2 (Sanity, Supabase, `@portabletext/react`, `lucide-react`, `server-only`, `pdfjs-dist`, Vitest, Playwright).
 - [x] **1.3** Delete the starter page, starter CSS, and starter assets.
-- [ ] **1.4** Create the route groups: `app/(site)/layout.tsx` and `app/studio/[[...tool]]/layout.tsx`, each with its own `<html>` root (§3, §6.4).
-- [ ] **1.5** Write `app/(site)/globals.css`: tokens, reset, `.visually-hidden` (§11.1).
-- [ ] **1.6** Load Source Sans 3 with `next/font` as `--font-source-sans` in the site layout (§11.1).
-- [ ] **1.7** Add `lib/cx.ts` (§11.0) and `components/ui/controls.module.css` (§11.2).
-- [ ] **1.8** Copy `docs/logo/gamma-vydia-white.svg` → `public/vydia-logo.svg`.
-- [ ] **1.9** Add `lib/env.ts` and `sanity/env.ts` (§4.1). Create `.env.local` and `.env.example` (no secrets in git).
-- [ ] **1.10** Add the shared slug helpers `lib/slug.ts` (§5.1).
-- [ ] **1.11** Configure Vitest (`vitest.config.ts` with the `@/` alias) and add `npm run test`.
-- [ ] **1.12** Add Prettier + `npm run lint` / `npm run typecheck` scripts.
-- [ ] **1.13** Add a GitHub Actions workflow that runs lint, typecheck, and unit tests on every PR.
-- [ ] **1.14** Write `tests/slug.test.ts` (§13.1) and make it pass.
-- [ ] **1.15** Push and confirm Vercel builds a preview deployment.
+- [x] **1.4** Create the route groups: `app/(site)/layout.tsx` and `app/studio/[[...tool]]/layout.tsx`, each with its own `<html>` root (§3, §6.4).
+- [x] **1.5** Write `app/(site)/globals.css`: tokens, reset, `.visually-hidden` (§11.1).
+- [x] **1.6** Load Source Sans 3 with `next/font` as `--font-public-sans` in the site layout (§11.1).
+- [x] **1.7** Add `lib/cx.ts` (§11.0) and `components/ui/controls.module.css` (§11.2).
+- [x] **1.8** Copy `docs/logo/gamma-vydia-white.svg` → `public/vydia-logo.svg`.
+- [x] **1.9** Add `lib/env.ts` and `sanity/env.ts` (§4.1). Create `.env.local` and `.env.example` (no secrets in git).
+- [x] **1.10** Add the shared slug helpers `lib/slug.ts` (§5.1).
+- [x] **1.11** Configure Vitest (`vitest.config.ts` with the `@/` alias) and add `npm run test`.
+- [x] **1.12** Add Prettier + `npm run lint` / `npm run typecheck` scripts.
+- [x] **1.13** Add a GitHub Actions workflow that runs lint, typecheck, and unit tests on every PR.
+- [x] **1.14** Write `tests/slug.test.ts` (§13.1) and make it pass.
+- [ ] **1.15** Push and confirm Vercel builds a preview deployment. ⏳ Blocked on 0.14: no Vercel project is linked to the repo yet. Everything up to the push is ready, and CI runs on the first push or PR.
 
 **Done when:** `npm run dev` serves an empty page with the right font and background, CI is green, and Vercel produces a preview URL.
 
@@ -2900,6 +2900,7 @@ Also found: `.env.local` only has the two Supabase values. The rest of §4.1 (`N
 
 ### Phase 2: Sanity content model
 
+- [ ] **2.0** Decide on `cacheComponents` (turned on by the Next 16.4 scaffold in `next.config.ts`). It changes three snippets in this plan: §6.4's `export const dynamic = 'force-static'` errors under it (just remove it), §7.1's `cache: 'force-cache'` + `next.tags` still works but the native pattern is `'use cache'` + `cacheTag`, and §9.2's cookie read (`supabase.auth.getUser()`) has to sit inside a `<Suspense>` boundary or the route has to opt out with `instant = false`. Either keep it and update those snippets, or turn it off so the plan works as written. See `node_modules/next/dist/docs/01-app/02-guides/migrating-to-cache-components.md`.
 - [ ] **2.1** `sanity.cli.ts` with project/dataset and typegen config (§6.4).
 - [ ] **2.2** Minimal `sanity.config.ts` (schema + `structureTool` only) and the embedded Studio route `app/studio/[[...tool]]/page.tsx` (§6.4). Confirm `/studio` loads and the shared login works locally.
 - [ ] **2.3** `blockContent` type (§5.2).
