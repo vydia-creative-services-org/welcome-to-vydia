@@ -2838,7 +2838,7 @@ The full build broken into phases and tasks. Each task points to the section of 
 
 - [x] **1.1** `npx create-next-app@latest . --ts --no-tailwind --eslint --app --src-dir=false --import-alias "@/*"` (§2). Confirm which Next version was installed (16 vs 15) and note it in the README; it decides `proxy.ts` vs `middleware.ts` and the `revalidateTag` signature.
 - [ ] **1.2** Install dependencies from §2 (Sanity, Supabase, `@portabletext/react`, `lucide-react`, `server-only`, `pdfjs-dist`, Vitest, Playwright).
-- [ ] **1.3** Delete the starter page, starter CSS, and starter assets.
+- [x] **1.3** Delete the starter page, starter CSS, and starter assets.
 - [ ] **1.4** Create the route groups: `app/(site)/layout.tsx` and `app/studio/[[...tool]]/layout.tsx`, each with its own `<html>` root (§3, §6.4).
 - [ ] **1.5** Write `app/(site)/globals.css`: tokens, reset, `.visually-hidden` (§11.1).
 - [ ] **1.6** Load Source Sans 3 with `next/font` as `--font-source-sans` in the site layout (§11.1).
