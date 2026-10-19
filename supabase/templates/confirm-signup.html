@@ -1,0 +1,31 @@
+<!-- Subject: Confirm your email for Welcome to Vydia -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 16px;font-family:'Source Sans 3',Helvetica,Arial,sans-serif;color:#262626;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;">
+        <tr>
+          <td style="background:#121212;border-radius:12px 12px 0 0;padding:24px;text-align:center;color:#ffffff;font-size:20px;font-weight:600;letter-spacing:0.2em;">
+            VYDIA
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px 24px;">
+            <h1 style="margin:0 0 12px;font-size:20px;font-weight:600;">Confirm your email</h1>
+            <p style="margin:0 0 24px;font-size:16px;line-height:1.5;color:#404040;">
+              Confirm {{ .Email }} to finish setting up your login and open your Vydia resources.
+            </p>
+            <p style="margin:0 0 24px;">
+              <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&redirect_to={{ .RedirectTo }}"
+                 style="display:inline-block;padding:12px 20px;background:#121212;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;">
+                Confirm email
+              </a>
+            </p>
+            <p style="margin:0;font-size:14px;line-height:1.5;color:#6b7280;">
+              If you didn’t request this, you can ignore this email.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>

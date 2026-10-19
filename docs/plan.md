@@ -197,7 +197,7 @@ export const apiVersion = '2025-02-19'
 
 ### 4.2 Sanity project setup (sanity.io/manage)
 
-1. Create the project and the `production` dataset, then set **dataset visibility to Private** (D2).
+1. Create the project and the `production` dataset, then set **dataset visibility to Private** (D2). Private datasets need the **Growth** plan. New projects start on a 30-day Growth trial, and when it ends Sanity makes private datasets public, so the project has to be upgraded before then (task 0.17).
 2. **API → Tokens**: create a *Viewer* token and store it as `SANITY_API_READ_TOKEN`.
 3. **API → CORS origins**: add `http://localhost:3000` and `https://welcometovydia.com` with *Allow credentials* (needed by the embedded Studio).
 4. **Members**: invite `labelrelationships@vydia.com` and `creativeservices@vydia.com` with the **Editor** role, not Administrator, so the shared logins can't change tokens, CORS, or webhooks.
@@ -2804,15 +2804,30 @@ The full build broken into phases and tasks. Each task points to the section of 
 - [x] **0.2** Set dataset visibility to **Private** (D2).
 - [x] **0.3** Create a *Viewer* API token named `vercel-read` and store it in the password manager.
 - [x] **0.4** Add CORS origins `http://localhost:3000` (allow credentials). The production origin is added in 11.6.
-- [x] **0.5** 🧑‍🤝‍🧑 Invite `labelrelationships@vydia.com` and `creativeservices@vydia.com` with the **Editor** role. Confirm both can log in.
-- [ ] **0.6** Check the current plan's asset storage, bandwidth, and API request quotas on sanity.io/pricing and write the numbers down (needed for 12.2).
+- [ ] **0.5** 🧑‍🤝‍🧑 Invite `labelrelationships@vydia.com` and `creativeservices@vydia.com` with the **Editor** role. Confirm both can log in.
+- [x] **0.6** Check the current plan's asset storage, bandwidth, and API request quotas on sanity.io/pricing and write the numbers down (needed for 12.2).
+
+  | Quota | Growth Trial (now, until 2026-11-18) | Growth (paid) | Free (what the trial falls back to) |
+  |---|---|---|---|
+  | Price | $0 | $15 per seat per month | $0 |
+  | Non-viewer seats | 20 | up to 50 | up to 20 |
+  | Datasets | 2 | 2, private or public | 2, **public only** |
+  | Documents | 10,000 | 25,000 | 10,000 |
+  | Asset storage | 100 GB | 100 GB | 100 GB |
+  | Bandwidth | 100 GB/month | 100 GB/month | 100 GB/month |
+  | API requests | 250k/month | 250k/month | 250k/month |
+  | API CDN requests | 1M/month | 1M/month | 1M/month |
+  | GROQ webhooks | 2 | 4 | 2 |
+  | Overages | blocked | pay-as-you-go | blocked |
+
+  Trial numbers come from the project's subscription (Sanity management API). Growth and Free numbers come from sanity.io/pricing.
 
 **Supabase** (§4.3)
 - [x] **0.7** Create the Supabase project (region close to Vercel's default, e.g. `us-east-1`).
 - [x] **0.8** Auth → Providers → Email: enabled, **Confirm email ON**, minimum password length 8.
 - [x] **0.9** Auth → Sessions: time-box **never**, inactivity timeout **never** (D11).
 - [ ] **0.10** Auth → URL Configuration: Site URL `http://localhost:3000` for now. Redirect URLs `http://localhost:3000/**` and the Vercel preview pattern.
-- [ ] **0.11** 🧑‍🤝‍🧑 Google Cloud: create an OAuth consent screen + OAuth client (web). Redirect URI `https://<project>.supabase.co/auth/v1/callback`. Paste the client ID/secret into Auth → Providers → Google.
+- [x] **0.11** 🧑‍🤝‍🧑 Google Cloud: create an OAuth consent screen + OAuth client (web). Redirect URI `https://<project>.supabase.co/auth/v1/callback`. Paste the client ID/secret into Auth → Providers → Google.
 - [ ] **0.12** 🧑‍🤝‍🧑 Choose an SMTP provider (Resend, SendGrid, or Vydia's existing one), verify the sending domain (SPF/DKIM), and enter the credentials in Auth → SMTP. Sender: `no-reply@welcometovydia.com` or similar.
 - [ ] **0.13** Edit the **Confirm signup** and **Reset password** email templates to use the `token_hash` links from §4.3, with Vydia wording.
 
@@ -2821,7 +2836,11 @@ The full build broken into phases and tasks. Each task points to the section of 
 - [ ] **0.15** 🧑‍🤝‍🧑 Ask the product team for DNS control of (or records for) `welcometovydia.com`. The actual cutover happens in 11.4.
 
 **Repo**
-- [x] **0.16** Protect `main` (PRs required) and work on feature branches per phase.
+- [ ] **0.16** Protect `main` (PRs required) and work on feature branches per phase.
+
+**Added during validation**
+- [ ] **0.17** 🧑‍🤝‍🧑 **Upgrade the Sanity project to Growth before 2026-11-18.** When the trial ends without an upgrade, Sanity converts private datasets to **public** and turns every non-admin member into a viewer. That would make the artist roster and every allowed-email list readable by anyone, and lock L&A out of editing. Cost: $15 per non-viewer seat per month, so $45/month for the admin seat plus the two shared logins, or $30/month if the admin seat is removed once the shared logins are set up. Needs a payment card on the Vydia Sanity organization.
+- [ ] **0.18** 🧑‍🤝‍🧑 Branch protection for 0.16: upgrade the `vydia-creative-services-org` GitHub organization to **Team** (needed for branch protection or rulesets on private repos), or agree to work on feature branches by convention until then.
 
 **Done when:** all three dashboards are reachable, both shared Sanity logins work, a test confirmation email from Supabase arrives through the custom SMTP, and the Google provider is enabled.
 
@@ -2831,6 +2850,29 @@ The full build broken into phases and tasks. Each task points to the section of 
 - Google: Set up oauth client, added the information to Supabase to enable sign in with google.
 - Vercel: waiting on Vercel premium account access, will recieve soon. DNS records will come much later as well.
 - Repo: all good.
+
+**Validation (2026-10-19, checked against the live services)**
+
+| Task | Result | How it was checked |
+|---|---|---|
+| 0.1 | ✅ "Welcome to Vydia" (`t7ic4vs4`) in the Vydia org, `production` dataset | Sanity management API |
+| 0.2 | ✅ `production` is private. ⚠️ Only while the Growth trial lasts, see 0.17 | Dataset `aclMode` |
+| 0.3 | ✅ `vercel-read` token with the viewer role. Being in the password manager can't be checked | Project tokens API |
+| 0.4 | ✅ `http://localhost:3000` with credentials. A leftover `http://localhost:3333` (default standalone Studio port) is harmless; delete it if you like | Project CORS API |
+| 0.5 | ❌ Only `creativeservices@vydia.com` invited (Editor, not accepted). `labelrelationships@vydia.com` **not invited** | Project invitations API |
+| 0.6 | ✅ Quotas recorded above. Project is on **Growth Trial until 2026-11-18** | Project subscription API + sanity.io/pricing |
+| 0.7 | ✅ Project `cqqzvzljlthrqrttqnga` is up | Auth health endpoint |
+| 0.8 | ✅ Email provider on, confirm email on, 7-character password rejected with `weak_password` (no user created) | `/auth/v1/settings`, sign-up probe |
+| 0.9 | ☑️ Confirmed by you. Session settings aren't exposed without a management token. On Supabase's Free plan both are "never" by default anyway | Your status note |
+| 0.10 | ⏳ Site URL `http://localhost:3000` ✅, `localhost:3000/**` allowed ✅, unknown domains fall back to the Site URL ✅. Vercel preview pattern not added yet | Invalid-token `/verify` redirect probe |
+| 0.11 | ✅ Google provider on. Google accepts the client ID and redirect URI `https://cqqzvzljlthrqrttqnga.supabase.co/auth/v1/callback` and goes to its sign-in page with no `redirect_uri_mismatch` | `/authorize` → Google |
+| 0.12 | ⏳ Waiting on Resend. ⚠️ Supabase's built-in sender only delivers to **project team members** ("Email address not authorized" for anyone else) and is capped at **2 emails/hour**. Until Resend is in, test sign-ups only work with addresses on the Supabase team, and no artist can sign up with email/password (Google sign-in still works) | Supabase SMTP docs |
+| 0.13 | ⏳ Templates drafted in `supabase/templates/` (subject in the first line). Waiting to be pasted into Auth → Email Templates | — |
+| 0.14 | ⏳ No Vercel deployments or GitHub integration on the repo yet (waiting on the Vercel account) | GitHub deployments API |
+| 0.15 | ⏳ Waiting on the product team | — |
+| 0.16 | ❌ GitHub refuses branch protection and rulesets on this private repo under the org's free plan (HTTP 403). See 0.18 | GitHub branch-protection API |
+
+Also found: `.env.local` only has the two Supabase values. The rest of §4.1 (`NEXT_PUBLIC_SITE_URL`, Sanity project/dataset/token, revalidate secret, `PERMANENT_VIEWER_EMAILS`) is needed from Phase 1 on.
 
 ---
 
@@ -3103,6 +3145,7 @@ Scope depends on the answers to §17. Placeholders:
 | **Sanity storage/bandwidth for videos** | **Decision: videos stay in Sanity** (D14). Still unverified whether the quotas are enough. Before migrating, check the current plan's asset storage and bandwidth on sanity.io/pricing against the total size of the Seismic videos. Keep files small: MP4/H.264 at 1080p max (guidance is in the field description). Cards use `preload="metadata"`, so bandwidth is only spent when someone presses play. Watch usage in sanity.io/manage after launch. If the numbers don't fit, the answer is a higher Sanity plan, not a different host. |
 | **Public asset URLs** in a private dataset | Acceptable for client-facing collateral. If needed later: `/api/files/[id]` route that checks the session + an allowed artist before streaming from Sanity, with cards linking there instead of `cdn.sanity.io`. |
 | **Roster enumeration** | Proxy gates every artist path before any Sanity lookup. Denied = unknown (§9.3). Static metadata. `noindex`. Private dataset. `/` is a static instructions page with no artist list for anyone (D13). |
+| **Sanity trial ends and the dataset goes public** | The trial ends 2026-11-18. Upgrade to Growth before then (task 0.17). Without the upgrade, Sanity makes the private dataset public, which exposes the roster and allowed emails, and editors become viewers. |
 | **Email confirmations not arriving** | Custom SMTP is required for production (Supabase default sender is rate-limited). |
 | **Shared Sanity login: no per-person audit trail** | Open question for L&A (§17). Studio history still shows *what* changed and when. |
 | **Editors can't see that a resource is orphaned** | "Not in any section" list in Studio (§6.1). |
