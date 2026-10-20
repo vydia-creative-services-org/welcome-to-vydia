@@ -40,11 +40,12 @@ describe('coverSource', () => {
     expect(coverSource(cover)).toEqual({asset: {_ref: asset._id}, crop: undefined, hotspot: undefined})
   })
 
-  it('produces an uncropped URL when only a width is requested', async () => {
+  it('produces an uncropped, size-capped URL for card covers', async () => {
     const {coverSource, urlFor} = await import('@/lib/sanity/image')
     const source = coverSource({alt: null, hotspot: null, crop: null, asset})
-    const url = source ? urlFor(source).width(800).fit('max').url() : ''
+    const url = source ? urlFor(source).maxWidth(800).maxHeight(450).fit('max').url() : ''
     expect(url).not.toContain('rect=')
-    expect(url).toContain('w=800')
+    expect(url).toContain('max-w=800')
+    expect(url).toContain('max-h=450')
   })
 })

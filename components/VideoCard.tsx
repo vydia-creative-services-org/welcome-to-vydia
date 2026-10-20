@@ -30,7 +30,7 @@ export function VideoCard({resource, src}: {resource: ResourceCardData; src: str
         <button type="button" onClick={() => dialog.current?.close()} className={styles.close} aria-label="Close video">
           <X aria-hidden />
         </button>
-        <video ref={video} src={src} controls preload="metadata" playsInline className={styles.video} />
+        <video ref={video} src={src} controls preload="none" playsInline className={styles.video} />
       </dialog>
     </>
   )

@@ -10,7 +10,7 @@ export function CardCover({resource}: {resource: ResourceCardData}) {
     const lqip = cover.asset?.lqip ?? undefined
     return (
       <Image
-        src={urlFor(source).width(800).fit('max').url()}
+        src={urlFor(source).maxWidth(800).maxHeight(450).fit('max').url()}
         alt={cover.alt ?? ''}
         fill
         sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"

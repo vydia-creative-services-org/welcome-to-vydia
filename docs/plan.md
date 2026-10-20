@@ -146,10 +146,13 @@ welcome-to-vydia/
 ├─ sanity.config.ts
 ├─ sanity.cli.ts
 ├─ next.config.ts
+├─ playwright.config.ts
+├─ scripts/e2e-fixtures.ts            # npm run e2e:setup / e2e:teardown
+├─ .github/workflows/                 # ci.yml, e2e-preview.yml
+├─ docs/editor-guide.md               # written version of the Loom
 └─ tests/
-   ├─ access.test.ts
-   ├─ slug.test.ts
-   └─ e2e/access.spec.ts
+   ├─ *.test.ts                       # Vitest unit tests (access, slug, safe-redirect, format, image, cover-source, artist-page)
+   └─ e2e/                            # Playwright: access.spec.ts, a11y.spec.ts, global-setup.ts, users.ts
 ```
 
 ---
@@ -1252,9 +1255,18 @@ export function coverSource(cover: CardCover): SanityImageSource | null {
 // next.config.ts
 import type {NextConfig} from 'next'
 
+const securityHeaders = [
+  {key: 'X-Frame-Options', value: 'DENY'},
+  {key: 'X-Content-Type-Options', value: 'nosniff'},
+  {key: 'Referrer-Policy', value: 'same-origin'},
+  {key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), browsing-topics=()'},
+  {key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains'},
+]
+
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
+  poweredByHeader: false,
   images: {
     remotePatterns: [
       {
@@ -1264,6 +1276,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  headers: async () => [{source: '/:path*', headers: securityHeaders}],
 }
 
 export default nextConfig
@@ -1291,7 +1304,7 @@ export async function createClient() {
         try {
           toSet.forEach(({name, value, options}) => cookieStore.set(name, value, options))
         } catch {
-          // Called from a Server Component: the proxy handles refresh, safe to ignore.
+          // Server Components can't set cookies; the proxy refreshes the session instead.
         }
       },
     },
@@ -1302,9 +1315,9 @@ export async function createClient() {
 ```ts
 // lib/supabase/client.ts
 import {createBrowserClient} from '@supabase/ssr'
+import {SUPABASE_KEY, SUPABASE_URL} from '@/lib/env'
 
-export const createClient = () =>
-  createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!)
+export const createClient = () => createBrowserClient(SUPABASE_URL, SUPABASE_KEY)
 ```
 
 ### 8.2 Proxy: refresh the session and gate everything (D3, D11)
@@ -1313,44 +1326,38 @@ export const createClient = () =>
 // lib/supabase/proxy.ts
 import {createServerClient} from '@supabase/ssr'
 import {NextResponse, type NextRequest} from 'next/server'
+import {SUPABASE_KEY, SUPABASE_URL} from '@/lib/env'
 
-const PUBLIC_EXACT = ['/'] // instructions page, no data (D13)
+const PUBLIC_EXACT = ['/']
 const PUBLIC_PREFIXES = ['/login', '/auth']
+
+export const isPublicPath = (path: string) =>
+  PUBLIC_EXACT.includes(path) || PUBLIC_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({request})
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    {
-      cookies: {
-        getAll: () => request.cookies.getAll(),
-        setAll: (toSet) => {
-          toSet.forEach(({name, value}) => request.cookies.set(name, value))
-          response = NextResponse.next({request})
-          toSet.forEach(({name, value, options}) => response.cookies.set(name, value, options))
-        },
+  const supabase = createServerClient(SUPABASE_URL, SUPABASE_KEY, {
+    cookies: {
+      getAll: () => request.cookies.getAll(),
+      setAll: (toSet) => {
+        toSet.forEach(({name, value}) => request.cookies.set(name, value))
+        response = NextResponse.next({request})
+        toSet.forEach(({name, value, options}) => response.cookies.set(name, value, options))
       },
     },
-  )
+  })
 
-  // Do not put code between createServerClient and getClaims (session refresh happens here).
   const {data} = await supabase.auth.getClaims()
-  const signedIn = Boolean(data?.claims)
-
   const path = request.nextUrl.pathname
-  const isPublic =
-    PUBLIC_EXACT.includes(path) || PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))
 
-  if (!signedIn && !isPublic) {
-    // Same redirect for EVERY gated path: existing artist, missing artist, anything.
+  if (!data?.claims && !isPublicPath(path)) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.search = ''
     url.searchParams.set('next', path)
     const redirect = NextResponse.redirect(url)
-    response.cookies.getAll().forEach((c) => redirect.cookies.set(c))
+    response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie))
     return redirect
   }
 
@@ -1369,8 +1376,7 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Everything except Next internals, static files, Studio, and the webhook.
-    '/((?!_next/static|_next/image|favicon.ico|studio|api/revalidate|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|studio|api/revalidate|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|mjs)$).*)',
   ],
 }
 ```
@@ -1381,13 +1387,12 @@ export const config = {
 // lib/safe-redirect.ts
 import {SITE_URL} from './env'
 
-/** Accepts "/foo" or "https://welcometovydia.com/foo"; anything else → "/". */
 export function safeNext(raw: string | null | undefined): string {
   if (!raw) return '/'
   try {
-    const url = new URL(raw, SITE_URL)
-    if (url.origin !== new URL(SITE_URL).origin) return '/'
-    if (url.pathname.startsWith('//')) return '/'
+    const site = new URL(SITE_URL)
+    const url = new URL(raw, site)
+    if (url.origin !== site.origin || url.pathname.startsWith('//')) return '/'
     return `${url.pathname}${url.search}`
   } catch {
     return '/'
@@ -1401,39 +1406,47 @@ export function safeNext(raw: string | null | undefined): string {
 // app/(site)/login/actions.ts
 'use server'
 import {redirect} from 'next/navigation'
-import {createClient} from '@/lib/supabase/server'
-import {safeNext} from '@/lib/safe-redirect'
 import {SITE_URL} from '@/lib/env'
+import {safeNext} from '@/lib/safe-redirect'
+import {createClient} from '@/lib/supabase/server'
 
 export type AuthState = {error?: string; message?: string}
+
+const field = (form: FormData, name: string) => {
+  const value = form.get(name)
+  return typeof value === 'string' ? value : ''
+}
+
+const callbackUrl = (next: string) => `${SITE_URL}/auth/callback?next=${encodeURIComponent(next)}`
 
 export async function signIn(_: AuthState, form: FormData): Promise<AuthState> {
   const supabase = await createClient()
   const {error} = await supabase.auth.signInWithPassword({
-    email: String(form.get('email')).trim(),
-    password: String(form.get('password')),
+    email: field(form, 'email').trim(),
+    password: field(form, 'password'),
   })
   if (error) return {error: 'Invalid email or password, or your email isn’t confirmed yet.'}
-  redirect(safeNext(form.get('next') as string))
+  redirect(safeNext(field(form, 'next')))
 }
 
 export async function signUp(_: AuthState, form: FormData): Promise<AuthState> {
   const supabase = await createClient()
-  const next = safeNext(form.get('next') as string)
   const {error} = await supabase.auth.signUp({
-    email: String(form.get('email')).trim(),
-    password: String(form.get('password')),
-    options: {emailRedirectTo: `${SITE_URL}${next}`},
+    email: field(form, 'email').trim(),
+    password: field(form, 'password'),
+    options: {emailRedirectTo: callbackUrl(safeNext(field(form, 'next')))},
   })
-  if (error) return {error: error.message}
-  // Same message whether or not the email already has an account (no account enumeration).
+  if (error?.code === 'weak_password') return {error: 'Use a password with at least 8 characters.'}
+  if (error?.code === 'over_email_send_rate_limit')
+    return {error: 'Too many sign-up emails were sent just now. Please wait a few minutes and try again.'}
+  if (error && error.code !== 'user_already_exists') return {error: 'We couldn’t create your login. Please try again.'}
   return {message: 'Check your inbox for a confirmation link to finish signing up.'}
 }
 
 export async function requestPasswordReset(_: AuthState, form: FormData): Promise<AuthState> {
   const supabase = await createClient()
-  await supabase.auth.resetPasswordForEmail(String(form.get('email')).trim(), {
-    redirectTo: `${SITE_URL}/account/update-password`,
+  await supabase.auth.resetPasswordForEmail(field(form, 'email').trim(), {
+    redirectTo: callbackUrl('/account/update-password'),
   })
   return {message: 'If that email has an account, a reset link is on its way.'}
 }
@@ -1443,47 +1456,23 @@ export async function requestPasswordReset(_: AuthState, form: FormData): Promis
 // app/(site)/login/LoginForm.tsx
 'use client'
 import {useActionState, useState} from 'react'
-import {createClient} from '@/lib/supabase/client'
-import {cx} from '@/lib/cx'
 import ui from '@/components/ui/controls.module.css'
-import styles from './LoginForm.module.css'
+import {cx} from '@/lib/cx'
+import {createClient} from '@/lib/supabase/client'
 import {requestPasswordReset, signIn, signUp, type AuthState} from './actions'
+import styles from './LoginForm.module.css'
 
 type Mode = 'signin' | 'signup' | 'reset'
 
 const TITLES: Record<Mode, string> = {signin: 'Sign in', signup: 'Create your login', reset: 'Reset password'}
 const SUBMIT: Record<Mode, string> = {signin: 'Sign in', signup: 'Sign up', reset: 'Send reset link'}
+const ACTIONS = {signin: signIn, signup: signUp, reset: requestPasswordReset}
 
-export function LoginForm({next, linkError}: {next: string; linkError?: boolean}) {
-  const [mode, setMode] = useState<Mode>('signin')
-  const action = mode === 'signin' ? signIn : mode === 'signup' ? signUp : requestPasswordReset
-  const [state, formAction, pending] = useActionState<AuthState, FormData>(action, {})
-
-  async function google() {
-    await createClient().auth.signInWithOAuth({
-      provider: 'google',
-      options: {redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`},
-    })
-  }
-
+function ModeForm({mode, next}: {mode: Mode; next: string}) {
+  const [state, formAction, pending] = useActionState<AuthState, FormData>(ACTIONS[mode], {})
   return (
-    <div className={styles.card}>
-      <h1 className={styles.title}>{TITLES[mode]}</h1>
-
-      {linkError && !state.error && !state.message && (
-        <p role="alert" className={cx(ui.error, styles.feedback)}>That link is invalid or expired. Please try again.</p>
-      )}
-
-      {mode !== 'reset' && (
-        <>
-          <button type="button" onClick={google} className={ui.button}>
-            Continue with Google
-          </button>
-          <div className={styles.divider}>or</div>
-        </>
-      )}
-
-      <form action={formAction} className={styles.form} key={mode}>
+    <>
+      <form action={formAction} className={styles.form}>
         <input type="hidden" name="next" value={next} />
         <label className={styles.field}>
           <span className="visually-hidden">Email</span>
@@ -1507,18 +1496,72 @@ export function LoginForm({next, linkError}: {next: string; linkError?: boolean}
           {SUBMIT[mode]}
         </button>
       </form>
+      {state.error && (
+        <p role="alert" className={cx(ui.error, styles.feedback)}>
+          {state.error}
+        </p>
+      )}
+      {state.message && (
+        <p role="status" className={cx(ui.success, styles.feedback)}>
+          {state.message}
+        </p>
+      )}
+    </>
+  )
+}
 
-      {state.error && <p role="alert" className={cx(ui.error, styles.feedback)}>{state.error}</p>}
-      {state.message && <p role="status" className={cx(ui.success, styles.feedback)}>{state.message}</p>}
+export function LoginForm({next, linkError}: {next: string; linkError: boolean}) {
+  const [mode, setMode] = useState<Mode>('signin')
+  const [googleError, setGoogleError] = useState(false)
+
+  async function google() {
+    const {error} = await createClient().auth.signInWithOAuth({
+      provider: 'google',
+      options: {redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`},
+    })
+    setGoogleError(Boolean(error))
+  }
+
+  return (
+    <div className={styles.card}>
+      <h1 className={styles.title}>{TITLES[mode]}</h1>
+
+      {linkError && mode === 'signin' && (
+        <p role="alert" className={cx(ui.error, styles.notice)}>
+          That link is invalid or expired. Please try again.
+        </p>
+      )}
+
+      {mode !== 'reset' && (
+        <>
+          <button type="button" onClick={google} className={ui.button}>
+            Continue with Google
+          </button>
+          {googleError && (
+            <p role="alert" className={cx(ui.error, styles.feedback)}>
+              Google sign-in isn’t available right now. Please use your email instead.
+            </p>
+          )}
+          <div className={styles.divider}>or</div>
+        </>
+      )}
+
+      <ModeForm key={mode} mode={mode} next={next} />
 
       <div className={styles.footer}>
         {mode === 'signin' ? (
           <>
-            <button type="button" className={ui.textButton} onClick={() => setMode('signup')}>First time? Sign up</button>
-            <button type="button" className={ui.textButton} onClick={() => setMode('reset')}>Forgot password?</button>
+            <button type="button" className={ui.textButton} onClick={() => setMode('signup')}>
+              First time? Sign up
+            </button>
+            <button type="button" className={ui.textButton} onClick={() => setMode('reset')}>
+              Forgot password?
+            </button>
           </>
         ) : (
-          <button type="button" className={ui.textButton} onClick={() => setMode('signin')}>Back to sign in</button>
+          <button type="button" className={ui.textButton} onClick={() => setMode('signin')}>
+            Back to sign in
+          </button>
         )}
       </div>
     </div>
@@ -1543,6 +1586,10 @@ export function LoginForm({next, linkError}: {next: string; linkError?: boolean}
   margin-bottom: var(--space-4);
   font-size: 20px;
   font-weight: 600;
+}
+
+.notice {
+  margin-bottom: var(--space-4);
 }
 
 .divider {
@@ -1582,11 +1629,11 @@ import {LoginForm} from './LoginForm'
 
 export const instant = false
 
-export default async function LoginPage({searchParams}: {searchParams: Promise<{next?: string; error?: string}>}) {
+export default async function LoginPage({searchParams}: PageProps<'/login'>) {
   const {next, error} = await searchParams
   return (
     <PageShell>
-      <LoginForm next={safeNext(next)} linkError={Boolean(error)} />
+      <LoginForm next={safeNext(typeof next === 'string' ? next : null)} linkError={Boolean(error)} />
     </PageShell>
   )
 }
@@ -1597,42 +1644,47 @@ export default async function LoginPage({searchParams}: {searchParams: Promise<{
 ```ts
 // app/(site)/auth/callback/route.ts   (Google OAuth, PKCE)
 import {NextResponse, type NextRequest} from 'next/server'
-import {createClient} from '@/lib/supabase/server'
 import {safeNext} from '@/lib/safe-redirect'
+import {createClient} from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
   const {searchParams, origin} = request.nextUrl
   const code = searchParams.get('code')
   const next = safeNext(searchParams.get('next'))
+  const supabase = await createClient()
+
   if (code) {
-    const supabase = await createClient()
     const {error} = await supabase.auth.exchangeCodeForSession(code)
     if (!error) return NextResponse.redirect(`${origin}${next}`)
+  } else {
+    const {data} = await supabase.auth.getClaims()
+    if (data?.claims) return NextResponse.redirect(`${origin}${next}`)
   }
-  return NextResponse.redirect(`${origin}/login?error=oauth`)
+  return NextResponse.redirect(`${origin}/login?error=link&next=${encodeURIComponent(next)}`)
 }
 ```
 
 ```ts
 // app/(site)/auth/confirm/route.ts   (email confirmation + password recovery)
 import type {EmailOtpType} from '@supabase/supabase-js'
-import {redirect} from 'next/navigation'
-import type {NextRequest} from 'next/server'
-import {createClient} from '@/lib/supabase/server'
+import {NextResponse, type NextRequest} from 'next/server'
 import {safeNext} from '@/lib/safe-redirect'
+import {createClient} from '@/lib/supabase/server'
+
+const OTP_TYPES: EmailOtpType[] = ['signup', 'invite', 'magiclink', 'recovery', 'email_change', 'email']
 
 export async function GET(request: NextRequest) {
-  const sp = request.nextUrl.searchParams
-  const tokenHash = sp.get('token_hash')
-  const type = sp.get('type') as EmailOtpType | null
-  const next = safeNext(sp.get('redirect_to') ?? sp.get('next'))
+  const {searchParams, origin} = request.nextUrl
+  const tokenHash = searchParams.get('token_hash')
+  const type = OTP_TYPES.find((otpType) => otpType === searchParams.get('type'))
+  const next = safeNext(searchParams.get('redirect_to') ?? searchParams.get('next'))
 
   if (tokenHash && type) {
     const supabase = await createClient()
     const {error} = await supabase.auth.verifyOtp({type, token_hash: tokenHash})
-    if (!error) redirect(next)
+    if (!error) return NextResponse.redirect(`${origin}${next}`)
   }
-  redirect('/login?error=confirm')
+  return NextResponse.redirect(`${origin}/login?error=link`)
 }
 ```
 
@@ -1662,8 +1714,9 @@ import 'server-only'
 import type {User} from '@supabase/supabase-js'
 import {sanityFetch} from './sanity/fetch'
 import {ACCESS_QUERY} from './sanity/queries'
+import type {ACCESS_QUERY_RESULT} from './sanity/types.generated'
 
-export const normalizeEmail = (e: string) => e.trim().toLowerCase()
+export const normalizeEmail = (email: string) => email.trim().toLowerCase()
 
 const PERMANENT_VIEWERS = new Set(
   (process.env.PERMANENT_VIEWER_EMAILS ?? 'labelrelationships@vydia.com,creativeservices@vydia.com')
@@ -1672,47 +1725,44 @@ const PERMANENT_VIEWERS = new Set(
     .filter(Boolean),
 )
 
-export type AccessLookup = {
-  artist: {_id: string; slug: string; allowedEmails?: string[] | null} | null
-  internalViewers?: string[] | null
-}
-
 export type AccessDecision =
-  | {status: 'granted'; artistId: string}
-  | {status: 'redirect'; canonicalSlug: string}
-  | {status: 'denied'} // used for BOTH unknown artist and unapproved user
+  {status: 'granted'; artistId: string} | {status: 'redirect'; canonicalSlug: string} | {status: 'denied'}
 
 export function isInternalViewer(email: string, internalViewers: string[] | null | undefined) {
-  const e = normalizeEmail(email)
-  return PERMANENT_VIEWERS.has(e) || (internalViewers ?? []).some((v) => normalizeEmail(v) === e)
+  const normalized = normalizeEmail(email)
+  return PERMANENT_VIEWERS.has(normalized) || (internalViewers ?? []).some((v) => normalizeEmail(v) === normalized)
 }
 
-export function decideAccess(requestedSlug: string, email: string | null, lookup: AccessLookup): AccessDecision {
+export function decideAccess(requestedSlug: string, email: string | null, lookup: ACCESS_QUERY_RESULT): AccessDecision {
   const {artist} = lookup
-  if (!email || !artist) return {status: 'denied'}
+  if (!email || !artist?.slug) return {status: 'denied'}
 
-  const e = normalizeEmail(email)
+  const normalized = normalizeEmail(email)
   const allowed =
-    isInternalViewer(e, lookup.internalViewers) ||
-    (artist.allowedEmails ?? []).some((a) => normalizeEmail(a) === e)
+    isInternalViewer(normalized, lookup.internalViewers) ||
+    (artist.allowedEmails ?? []).some((allowedEmail) => normalizeEmail(allowedEmail) === normalized)
 
   if (!allowed) return {status: 'denied'}
-  // Redirect only AFTER access is confirmed, so old slugs don't leak existence.
   if (artist.slug !== requestedSlug) return {status: 'redirect', canonicalSlug: artist.slug}
   return {status: 'granted', artistId: artist._id}
 }
 
-/** A verified email from Supabase, or null. Email/password users need a confirmed email. */
 export function verifiedEmail(user: User | null): string | null {
-  if (!user?.email) return null
-  if (!user.email_confirmed_at) return null // Google users are confirmed by the provider
+  if (!user?.email || !user.email_confirmed_at) return null
   return user.email
 }
 
+export function normalizeSlug(rawSlug: string) {
+  try {
+    return decodeURIComponent(rawSlug).toLowerCase()
+  } catch {
+    return rawSlug.toLowerCase()
+  }
+}
+
 export async function resolveArtistAccess(rawSlug: string, user: User | null): Promise<AccessDecision> {
-  const slug = decodeURIComponent(rawSlug).toLowerCase()
-  // Always run the SAME query, even if the user has no verified email, to keep timing uniform.
-  const lookup = await sanityFetch<AccessLookup>(ACCESS_QUERY, {slug}, ['artist', 'website'])
+  const slug = normalizeSlug(rawSlug)
+  const lookup = await sanityFetch(ACCESS_QUERY, {slug}, ['artist', 'website'])
   return decideAccess(slug, verifiedEmail(user), lookup)
 }
 ```
@@ -1723,31 +1773,31 @@ export async function resolveArtistAccess(rawSlug: string, user: User | null): P
 // app/(site)/[slug]/page.tsx
 import type {Metadata} from 'next'
 import {notFound, redirect} from 'next/navigation'
-import {createClient} from '@/lib/supabase/server'
+import {Intro} from '@/components/Intro'
+import {PageShell} from '@/components/PageShell'
+import {ResourceSection} from '@/components/ResourceSection'
+import {RichText} from '@/components/RichText'
 import {resolveArtistAccess} from '@/lib/access'
 import {getArtistPage} from '@/lib/sanity/page'
-import {PageShell} from '@/components/PageShell'
-import {Intro} from '@/components/Intro'
-import {RichText} from '@/components/RichText'
-import {ResourceSection} from '@/components/ResourceSection'
+import {createClient} from '@/lib/supabase/server'
 import styles from './page.module.css'
 
-// Static title: we never put the artist's name in metadata (it would leak on denial paths).
 export const metadata: Metadata = {title: 'Welcome to Vydia', robots: {index: false, follow: false}}
 
-// Block until the access check finishes, so 404 / 307 are real status codes sent before any HTML (D15).
 export const instant = false
 
-export default async function ArtistPage({params}: {params: Promise<{slug: string}>}) {
+export default async function ArtistPage({params}: PageProps<'/[slug]'>) {
   const {slug} = await params
 
   const supabase = await createClient()
-  const {data: {user}} = await supabase.auth.getUser() // authoritative check against Supabase
+  const {
+    data: {user},
+  } = await supabase.auth.getUser()
   if (!user) redirect(`/login?next=/${encodeURIComponent(slug)}`)
 
   const access = await resolveArtistAccess(slug, user)
-  if (access.status === 'denied') notFound()                 // unknown OR unapproved → identical
-  if (access.status === 'redirect') redirect(`/${access.canonicalSlug}`) // D10: 307, not 308
+  if (access.status === 'denied') notFound()
+  if (access.status === 'redirect') redirect(`/${access.canonicalSlug}`)
 
   const page = await getArtistPage(access.artistId)
 
@@ -1759,8 +1809,8 @@ export default async function ArtistPage({params}: {params: Promise<{slug: strin
           <RichText value={page.additionalInfo} />
         </section>
       )}
-      {page.sections.map((s) => (
-        <ResourceSection key={s._id} section={s} />
+      {page.sections.map((section) => (
+        <ResourceSection key={section._id} section={section} />
       ))}
     </PageShell>
   )
@@ -1780,6 +1830,7 @@ export default async function ArtistPage({params}: {params: Promise<{slug: strin
 ```tsx
 // app/(site)/[slug]/not-found.tsx
 import {NoAccess} from '@/components/NoAccess'
+
 export default function NotFound() {
   return <NoAccess />
 }
@@ -1787,8 +1838,8 @@ export default function NotFound() {
 
 ```tsx
 // components/NoAccess.tsx   (ONE component for both cases. Never branch on the reason.)
-import {PageShell} from './PageShell'
 import {Notice} from './Notice'
+import {PageShell} from './PageShell'
 import ui from './ui/controls.module.css'
 
 export function NoAccess() {
@@ -1802,8 +1853,8 @@ export function NoAccess() {
           </form>
         }
       >
-        This page doesn’t exist or your email doesn’t have access to it. If you think this is a mistake,
-        contact your Vydia representative, or sign in with a different email.
+        This page doesn’t exist or your email doesn’t have access to it. If you think this is a mistake, contact your
+        Vydia representative, or sign in with a different email.
       </Notice>
     </PageShell>
   )
@@ -1831,16 +1882,16 @@ Optional hardening: wrap the denied path in a constant minimum duration (for exa
 
 ```tsx
 // app/(site)/page.tsx
-import {PageShell} from '@/components/PageShell'
 import {Notice} from '@/components/Notice'
+import {PageShell} from '@/components/PageShell'
 
 export default function Home() {
   return (
     <PageShell>
       <Notice title="Looking for your Vydia resources?">
         Open the personal link your Vydia representative sent you. It looks like{' '}
-        <strong>welcometovydia.com/your-artist-name</strong>. You’ll be asked to sign in with the email
-        address Vydia has on file for you. Can’t find your link? Reach out to your Vydia representative.
+        <strong>welcometovydia.com/your-artist-name</strong>. You’ll be asked to sign in with the email address Vydia
+        has on file for you. Can’t find your link? Reach out to your Vydia representative.
       </Notice>
     </PageShell>
   )
@@ -1860,20 +1911,20 @@ import {NextResponse, type NextRequest} from 'next/server'
 import {parseBody} from 'next-sanity/webhook'
 import type {SanityTag} from '@/lib/sanity/fetch'
 
-const TAGS = new Set<SanityTag>(['artist', 'resource', 'section', 'website'])
+const TAGS: readonly SanityTag[] = ['artist', 'resource', 'section', 'website']
 
-export async function POST(req: NextRequest) {
-  const {isValidSignature, body} = await parseBody<{_type?: string}>(
-    req,
-    process.env.SANITY_REVALIDATE_SECRET,
-    true, // wait for Content Lake eventual consistency before revalidating
-  )
-  if (!isValidSignature) return new NextResponse('Invalid signature', {status: 401})
-  if (!body?._type || !TAGS.has(body._type as SanityTag)) return new NextResponse('Ignored', {status: 400})
+export async function POST(request: NextRequest) {
+  const secret = process.env.SANITY_REVALIDATE_SECRET
+  if (!secret) return new NextResponse('Webhook secret is not configured', {status: 500})
 
-  // {expire: 0}: the next visitor gets fresh content, never a stale-while-revalidate copy.
-  revalidateTag(body._type, {expire: 0})
-  return NextResponse.json({revalidated: body._type, now: Date.now()})
+  const {isValidSignature, body} = await parseBody<{_type?: string}>(request, secret, true)
+  if (isValidSignature !== true) return new NextResponse('Invalid signature', {status: 401})
+
+  const tag = TAGS.find((t) => t === body?._type)
+  if (!tag) return new NextResponse('Ignored document type', {status: 400})
+
+  revalidateTag(tag, {expire: 0})
+  return NextResponse.json({revalidated: tag, now: Date.now()})
 }
 ```
 
@@ -2478,7 +2529,7 @@ export function CardCover({resource}: {resource: ResourceCardData}) {
     const lqip = cover.asset?.lqip ?? undefined
     return (
       <Image
-        src={urlFor(source).width(800).fit('max').url()}
+        src={urlFor(source).maxWidth(800).maxHeight(450).fit('max').url()}
         alt={cover.alt ?? ''}
         fill
         sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
@@ -2697,7 +2748,7 @@ export function VideoCard({resource, src}: {resource: ResourceCardData; src: str
         <button type="button" onClick={() => dialog.current?.close()} className={styles.close} aria-label="Close video">
           <X aria-hidden />
         </button>
-        <video ref={video} src={src} controls preload="metadata" playsInline className={styles.video} />
+        <video ref={video} src={src} controls preload="none" playsInline className={styles.video} />
       </dialog>
     </>
   )
@@ -2743,7 +2794,7 @@ export function VideoCard({resource, src}: {resource: ResourceCardData; src: str
 }
 ```
 
-> Video files stream straight from `cdn.sanity.io`, which supports HTTP range requests, so seeking works and `preload="metadata"` keeps a grid of video cards from downloading whole files on page load.
+> Video files stream straight from `cdn.sanity.io`, which supports HTTP range requests, so seeking works. `preload="none"` means a grid of video cards downloads nothing until someone presses play (measured in 10.10: `metadata` cost about 0.45 MB per video on every page view).
 
 ---
 
@@ -2828,53 +2879,149 @@ Checklist per asset: download from Seismic → create the Resource → upload th
 
 ```ts
 // tests/access.test.ts
-import {describe, expect, it, vi} from 'vitest'
+import type {User} from '@supabase/supabase-js'
+import {beforeAll, describe, expect, it, vi} from 'vitest'
+import type {ACCESS_QUERY_RESULT} from '@/lib/sanity/types.generated'
+
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/sanity/fetch', () => ({sanityFetch: vi.fn()}))
-import {decideAccess} from '@/lib/access'
 
-const artist = {_id: 'a1', slug: 'jane-doe', allowedEmails: ['Jane@Example.com']}
+type AccessModule = typeof import('@/lib/access')
+let access: AccessModule
+
+beforeAll(async () => {
+  process.env.PERMANENT_VIEWER_EMAILS = 'labelrelationships@vydia.com, CreativeServices@vydia.com'
+  access = await import('@/lib/access')
+})
+
+const lookup = (overrides: Partial<NonNullable<ACCESS_QUERY_RESULT['artist']>> = {}): ACCESS_QUERY_RESULT => ({
+  artist: {_id: 'a1', slug: 'jane-doe', allowedEmails: ['Jane@Example.com'], ...overrides},
+  internalViewers: ['ops@vydia.com'],
+})
+
+const unknown: ACCESS_QUERY_RESULT = {artist: null, internalViewers: ['ops@vydia.com']}
 
 describe('decideAccess', () => {
   it('denies unknown artists', () => {
-    expect(decideAccess('nope', 'jane@example.com', {artist: null})).toEqual({status: 'denied'})
+    expect(access.decideAccess('nope', 'jane@example.com', unknown)).toEqual({status: 'denied'})
   })
-  it('denies unapproved emails with the SAME result as unknown', () => {
-    expect(decideAccess('jane-doe', 'eve@example.com', {artist})).toEqual(
-      decideAccess('nope', 'eve@example.com', {artist: null}),
+
+  it('denies unapproved emails with exactly the same result as an unknown artist', () => {
+    expect(access.decideAccess('jane-doe', 'eve@example.com', lookup())).toEqual(
+      access.decideAccess('nope', 'eve@example.com', unknown),
     )
   })
-  it('matches emails case-insensitively and trims', () => {
-    expect(decideAccess('jane-doe', '  JANE@example.COM ', {artist}).status).toBe('granted')
+
+  it('matches allowed emails case-insensitively and ignores surrounding spaces', () => {
+    expect(access.decideAccess('jane-doe', '  JANE@example.COM ', lookup()).status).toBe('granted')
+    expect(
+      access.decideAccess('jane-doe', 'jane@example.com', lookup({allowedEmails: [' jane@EXAMPLE.com ']})).status,
+    ).toBe('granted')
   })
-  it('always allows the permanent internal emails', () => {
-    expect(decideAccess('jane-doe', 'LabelRelationships@vydia.com', {artist}).status).toBe('granted')
+
+  it('always allows the permanent internal emails, in any case', () => {
+    expect(access.decideAccess('jane-doe', 'LabelRelationships@vydia.com', lookup()).status).toBe('granted')
+    expect(access.decideAccess('jane-doe', 'creativeservices@VYDIA.com', lookup()).status).toBe('granted')
   })
-  it('allows internal viewers from the website singleton', () => {
-    expect(decideAccess('jane-doe', 'ops@vydia.com', {artist, internalViewers: ['OPS@vydia.com']}).status).toBe('granted')
+
+  it('allows internal viewers listed on the website, but not on unknown artists', () => {
+    expect(access.decideAccess('jane-doe', 'OPS@vydia.com', lookup()).status).toBe('granted')
+    expect(access.decideAccess('nope', 'ops@vydia.com', unknown)).toEqual({status: 'denied'})
   })
-  it('redirects old slugs only when allowed', () => {
-    expect(decideAccess('old-name', 'jane@example.com', {artist})).toEqual({status: 'redirect', canonicalSlug: 'jane-doe'})
-    expect(decideAccess('old-name', 'eve@example.com', {artist})).toEqual({status: 'denied'})
+
+  it('redirects an old slug to the current one only when access is allowed', () => {
+    expect(access.decideAccess('jane-old', 'jane@example.com', lookup())).toEqual({
+      status: 'redirect',
+      canonicalSlug: 'jane-doe',
+    })
+    expect(access.decideAccess('jane-old', 'eve@example.com', lookup())).toEqual({status: 'denied'})
   })
+
   it('denies when there is no verified email', () => {
-    expect(decideAccess('jane-doe', null, {artist})).toEqual({status: 'denied'})
+    expect(access.decideAccess('jane-doe', null, lookup())).toEqual({status: 'denied'})
+  })
+
+  it('denies an artist with no allowed emails to everyone except internal viewers', () => {
+    expect(access.decideAccess('jane-doe', 'jane@example.com', lookup({allowedEmails: null})).status).toBe('denied')
+    expect(access.decideAccess('jane-doe', 'ops@vydia.com', lookup({allowedEmails: null})).status).toBe('granted')
+  })
+})
+
+describe('verifiedEmail', () => {
+  const user = (email: string | undefined, confirmed: string | undefined): User => ({
+    id: 'u1',
+    aud: 'authenticated',
+    app_metadata: {},
+    user_metadata: {},
+    created_at: '2026-01-01T00:00:00Z',
+    email,
+    email_confirmed_at: confirmed,
+  })
+
+  it('returns the email of a confirmed user', () => {
+    expect(access.verifiedEmail(user('jane@example.com', '2026-01-02T00:00:00Z'))).toBe('jane@example.com')
+  })
+
+  it('returns null for unconfirmed users, users without email, and no user', () => {
+    expect(access.verifiedEmail(user('jane@example.com', undefined))).toBeNull()
+    expect(access.verifiedEmail(user(undefined, '2026-01-02T00:00:00Z'))).toBeNull()
+    expect(access.verifiedEmail(null)).toBeNull()
+  })
+})
+
+describe('normalizeSlug', () => {
+  it('decodes and lowercases, and survives malformed encoding', () => {
+    expect(access.normalizeSlug('Jane-Doe')).toBe('jane-doe')
+    expect(access.normalizeSlug('beyonc%C3%A9')).toBe('beyoncé')
+    expect(access.normalizeSlug('bad%E0%A4%A')).toBe('bad%e0%a4%a')
   })
 })
 ```
 
 ```ts
 // tests/slug.test.ts
-import {expect, it} from 'vitest'
-import {slugify} from '@/lib/slug'
+import {describe, expect, it} from 'vitest'
+import {RESERVED_SLUGS, SLUG_PATTERN, slugify} from '@/lib/slug'
 
-it.each([
-  ['Beyoncé', 'beyonce'],
-  ['Guns N’ Roses', 'guns-n-roses'],
-  ['Simon & Garfunkel', 'simon-and-garfunkel'],
-  ['  A$AP Rocky!! ', 'a-ap-rocky'],
-  ['múm', 'mum'],
-])('%s -> %s', (input, out) => expect(slugify(input)).toBe(out))
+describe('slugify', () => {
+  it.each([
+    ['Beyoncé', 'beyonce'],
+    ['Guns N’ Roses', 'guns-n-roses'],
+    ["Guns N' Roses", 'guns-n-roses'],
+    ['Simon & Garfunkel', 'simon-and-garfunkel'],
+    ['  A$AP Rocky!! ', 'a-ap-rocky'],
+    ['múm', 'mum'],
+    ['Sigur Rós', 'sigur-ros'],
+    ['---Already--Dashed---', 'already-dashed'],
+  ])('%s -> %s', (input, out) => expect(slugify(input)).toBe(out))
+
+  it('caps length at 64 without a trailing dash', () => {
+    const slug = slugify(`${'a'.repeat(63)} b`)
+    expect(slug.length).toBeLessThanOrEqual(64)
+    expect(slug.endsWith('-')).toBe(false)
+  })
+
+  it('always produces a slug that matches SLUG_PATTERN', () => {
+    for (const name of ['Beyoncé', 'Simon & Garfunkel', '  A$AP Rocky!! ', 'The 1975']) {
+      expect(slugify(name)).toMatch(SLUG_PATTERN)
+    }
+  })
+
+  it('returns an empty string when nothing is sluggable', () => {
+    expect(slugify('!!!')).toBe('')
+  })
+})
+
+describe('SLUG_PATTERN', () => {
+  it.each(['jane-doe', 'the-1975', 'a'])('accepts %s', (s) => expect(s).toMatch(SLUG_PATTERN))
+  it.each(['Jane', 'jane--doe', '-jane', 'jane-', 'jane_doe', ''])('rejects %s', (s) =>
+    expect(s).not.toMatch(SLUG_PATTERN),
+  )
+})
+
+describe('RESERVED_SLUGS', () => {
+  it.each(['studio', 'login', 'auth', 'api', 'account'])('reserves %s', (s) => expect(RESERVED_SLUGS.has(s)).toBe(true))
+})
 ```
 
 ### 13.2 End-to-end (Playwright, against a preview deployment with test users)
@@ -2882,68 +3029,127 @@ it.each([
 ```ts
 // tests/e2e/access.spec.ts
 import {expect, test} from '@playwright/test'
+import {storageStatePath} from './users'
 
-test('signed-out users are sent to login for real AND fake slugs', async ({page}) => {
-  for (const slug of ['test-artist', 'definitely-not-real-xyz']) {
-    await page.goto(`/${slug}`)
-    await expect(page).toHaveURL(new RegExp(`/login\\?next=%2F${slug}`))
-  }
-})
+const UNKNOWN = 'definitely-not-a-real-artist'
 
-test('"/" is public, shows instructions, and lists no artists', async ({page}) => {
-  const res = await page.goto('/')
-  expect(res?.status()).toBe(200)
-  await expect(page).toHaveURL('/') // no login redirect
-  await expect(page.getByRole('heading', {name: 'Looking for your Vydia resources?'})).toBeVisible()
-  await expect(page.locator('main a')).toHaveCount(0) // no artist links
+test.describe('signed out', () => {
+  test('real and fake artist URLs both go to login, with the same redirect', async ({page}) => {
+    for (const slug of ['test-artist', UNKNOWN]) {
+      await page.goto(`/${slug}`)
+      await expect(page).toHaveURL(`/login?next=%2F${slug}`)
+      await expect(page.getByRole('heading', {name: 'Sign in'})).toBeVisible()
+    }
+  })
+
+  test('"/" is public, shows instructions, and lists no artists', async ({page}) => {
+    const response = await page.goto('/')
+    expect(response?.status()).toBe(200)
+    await expect(page).toHaveURL('/')
+    await expect(page.getByRole('heading', {name: 'Looking for your Vydia resources?'})).toBeVisible()
+    await expect(page.locator('main a')).toHaveCount(0)
+  })
+
+  test('security headers are set', async ({request}) => {
+    const response = await request.get('/')
+    const headers = response.headers()
+    expect(headers['x-frame-options']).toBe('DENY')
+    expect(headers['x-content-type-options']).toBe('nosniff')
+    expect(headers['referrer-policy']).toBe('same-origin')
+    expect(headers['x-powered-by']).toBeUndefined()
+  })
 })
 
 test.describe('signed in as an unapproved user', () => {
-  test.use({storageState: 'tests/e2e/.auth/outsider.json'})
+  test.use({storageState: storageStatePath('outsider')})
 
-  test('unknown and forbidden render identically', async ({page}) => {
-    const a = await page.goto('/test-artist')
-    const htmlA = await page.locator('main').innerHTML()
-    const b = await page.goto('/definitely-not-real-xyz')
-    const htmlB = await page.locator('main').innerHTML()
-    expect(a?.status()).toBe(404)
-    expect(b?.status()).toBe(404)
-    expect(htmlA).toBe(htmlB)
+  test('unknown and forbidden artists render identically', async ({page}) => {
+    const forbidden = await page.goto('/test-artist')
+    const forbiddenHtml = await page.locator('main').innerHTML()
+    const unknown = await page.goto(`/${UNKNOWN}`)
+    const unknownHtml = await page.locator('main').innerHTML()
+    expect(forbidden?.status()).toBe(unknown?.status())
+    expect(forbiddenHtml).toBe(unknownHtml)
+    await expect(page.getByRole('heading', {name: 'This page isn’t available'})).toBeVisible()
     await expect(page).toHaveTitle('Welcome to Vydia')
+  })
+
+  test('an old URL does not redirect for someone without access', async ({page}) => {
+    await page.goto('/test-renamed-original')
+    await expect(page).toHaveURL('/test-renamed-original')
+    await expect(page.getByRole('heading', {name: 'This page isn’t available'})).toBeVisible()
   })
 })
 
 test.describe('signed in as an approved user', () => {
-  test.use({storageState: 'tests/e2e/.auth/approved.json'})
+  test.use({storageState: storageStatePath('approved')})
 
-  test('sees intro and cards', async ({page}) => {
+  test('sees the intro and resource cards', async ({page}) => {
     await page.goto('/test-artist')
     await expect(page.getByText('Welcome to Vydia!')).toBeVisible()
     await expect(page.getByRole('heading', {name: 'Vydia Platform Resources'})).toBeVisible()
     await expect(page.getByText(/^Added on /).first()).toBeVisible()
+  })
+
+  test('an old URL redirects to the current one', async ({page}) => {
+    await page.goto('/test-renamed-original')
+    await expect(page).toHaveURL('/test-renamed')
+    await expect(page.getByRole('heading', {name: 'Vydia Platform Resources'})).toBeVisible()
+  })
+
+  test('link cards open in a new tab without leaking the opener', async ({page}) => {
+    await page.goto('/test-artist')
+    const cards = page.locator('section[aria-labelledby] a')
+    expect(await cards.count()).toBeGreaterThan(0)
+    for (const card of await cards.all()) {
+      await expect(card).toHaveAttribute('target', '_blank')
+      await expect(card).toHaveAttribute('rel', 'noopener noreferrer')
+    }
+  })
+
+  test('the video dialog opens, plays, closes on Escape, and returns focus', async ({page}) => {
+    await page.goto('/test-artist')
+    const card = page.locator('section[aria-labelledby] button[aria-haspopup="dialog"]').first()
+    await card.click()
+    const dialog = page.locator('dialog[open]')
+    await expect(dialog).toBeVisible()
+    await expect.poll(() => dialog.locator('video').evaluate((video: HTMLVideoElement) => video.paused)).toBe(false)
+    await page.keyboard.press('Escape')
+    await expect(page.locator('dialog[open]')).toHaveCount(0)
+    await expect
+      .poll(() =>
+        page
+          .locator('dialog video')
+          .first()
+          .evaluate((video: HTMLVideoElement) => video.paused),
+      )
+      .toBe(true)
+    await expect(card).toBeFocused()
   })
 })
 ```
 
 ### 13.3 Manual QA checklist
 
-- [ ] Email sign-up sends a confirmation email (custom SMTP), and the link lands on the original `/[slug]`.
-- [ ] Signing in before confirming fails with a generic message.
-- [ ] Google sign-in works and returns to `next`.
-- [ ] Session survives closing the browser and returning a week later (check cookie max-age).
-- [ ] Publishing a resource change in Studio shows on the site within seconds without redeploying (webhook delivered: Sanity → Webhooks → attempts log).
-- [ ] Removing an email from an artist revokes access on the next page load.
-- [ ] Artist intro override and section override work; clearing them falls back to the global versions.
-- [ ] Card with no cover photo: PDF shows its first page; link/video/slides show the branded tile.
-- [ ] "Added on" doesn't change after editing a resource.
-- [ ] Renaming an artist doesn't change the URL. "Change URL…" keeps the old URL redirecting.
-- [ ] Reserved slug (`studio`) and duplicate/previous slugs are rejected in Studio.
-- [ ] Studio: can't create a second Website or delete it. Can't delete a resource still used in a section.
-- [ ] Uploaded videos play in the dialog, seeking works, and nothing downloads until play (`preload="metadata"`).
-- [ ] `/` shows only the instructions, signed in or out, as an internal viewer or a client. No artist names anywhere.
-- [ ] Keyboard: every card is focusable and opens with Enter, and the video dialog closes with Esc.
-- [ ] Mobile layout (single column), and the header logo scales down.
-- [ ] No Tailwind or global component classes: every component's styles live in its own `.module.css`, and `globals.css` contains only tokens, reset, and `.visually-hidden`.
+Results from task 10.10 (2026-10-20, local production build, Playwright + manual checks). ✅ = verified, ⏳ = blocked, with the reason.
+
+- [ ] ⏳ Email sign-up sends a confirmation email (custom SMTP), and the link lands on the original `/[slug]`. Blocked on Resend (0.12). The confirmation-link path is verified with a `token_hash` link (7.11).
+- [x] ✅ Signing in before confirming fails with a generic message.
+- [ ] ⏳ Google sign-in works and returns to `next`. The redirect to Google with the right callback is verified; a full round trip needs a person at Google's sign-in screen.
+- [x] ✅ Session survives closing the browser and returning a week later: the auth cookie lasts 400 days, and a fresh browser with the saved cookies is still signed in (7.12).
+- [ ] ⏳ Publishing a resource change in Studio shows on the site within seconds without redeploying. Verified with signed webhook calls on a local production build (9.4/9.5). Sanity's real webhook delivery needs a deployment (9.3/9.7).
+- [x] ✅ Removing an email from an artist revokes access on the next page load, once the `artist` webhook fires (8.9).
+- [x] ✅ Artist intro override and section override work; clearing them falls back to the global versions (`test-override` vs `test-artist` renders, plus unit tests for empty overrides).
+- [x] ✅ Card with no cover photo: PDF shows its first page; link/video/slides show the branded tile (6.13).
+- [x] ✅ "Added on" doesn't change after editing a resource (edited a temporary resource: `addedOn` stayed the same while `_updatedAt` changed).
+- [x] ✅ Renaming an artist doesn't change the URL. "Change URL…" keeps the old URL redirecting (3.4, 4.5, 8.7, e2e).
+- [x] ✅ Reserved slug (`studio`) and duplicate/previous slugs are rejected in Studio (2.16).
+- [x] ✅ Studio: can't create a second Website or delete it. Can't delete a resource still used in a section (3.2, 3.12).
+- [x] ✅ Uploaded videos play in the dialog, seeking works, and **nothing** downloads until play. Changed from `preload="metadata"` to `preload="none"` after measuring 1.8 MB of metadata requests on page load with the real tutorials; it's now 0 bytes before play, and seeking to 2.00s of a 358s video works.
+- [x] ✅ `/` shows only the instructions, signed in or out. No links and no artist names.
+- [x] ✅ Keyboard: every card is focusable and opens with Enter, and the video dialog closes with Esc (e2e `a11y.spec.ts`).
+- [x] ✅ Mobile layout (single column), and the header logo scales down (6.12).
+- [x] ✅ No Tailwind or global component classes (6.14).
 
 ---
 
@@ -3041,6 +3247,110 @@ The full build broken into phases and tasks. Each task points to the section of 
 | 0.16 | ❌ GitHub refuses branch protection and rulesets on this private repo under the org's free plan (HTTP 403). See 0.18 | GitHub branch-protection API |
 
 Also found: `.env.local` only has the two Supabase values. The rest of §4.1 (`NEXT_PUBLIC_SITE_URL`, Sanity project/dataset/token, revalidate secret, `PERMANENT_VIEWER_EMAILS`) is needed from Phase 1 on.
+
+
+**Unblock checklist (your steps, in priority order)**
+
+Everything left in the plan waits on one of these. Each step lists exactly what to do, what it unblocks, and what I'll check once you tell me it's done.
+
+| # | Step | Owner | Deadline / urgency | Unblocks |
+|---|---|---|---|---|
+| U1 | Upgrade Sanity to Growth | You (+ whoever holds the Vydia card) | **Before 2026-11-18** | 0.17; keeps 0.2 true |
+| U2 | Get the two shared Sanity seats working | You + L&A + Creative Services | Before the Loom (13.3) | 0.5, 11.7, 13.3, 13.6 |
+| U3 | Paste the two email templates into Supabase | You | Any time (5 min) | 0.13 |
+| U4 | Set up Vercel and connect the repo | You (once Pro access arrives) | Next big unblock | 0.10, 0.14, 1.15, 9.2–9.5, 9.7, 10.4, Phase 11 |
+| U5 | Create the Sanity webhook | You (after U4) | Before launch (8.9: revoked emails keep access without it) | 9.3, 9.7 |
+| U6 | GitHub secrets for the preview e2e workflow | You (after U4) | Optional before launch | 10.4 |
+| U7 | Set up Resend and Supabase SMTP | You (after Resend approval, needs DNS from U8) | Before any client signs up | 0.12, 7.11, 11.7 |
+| U8 | DNS for `welcometovydia.com` | Product team | Before launch | 0.15, 11.4, U7 domain verification |
+| U9 | One real Google sign-in | Anyone with a Google account | Any time | 7.11 |
+| U10 | Branch protection decision | GitHub org owner | Any time | 0.16, 0.18 |
+| U11 | Seismic asset list | L&A | Before migration | Phase 12 |
+
+**U1: Upgrade Sanity to Growth (0.17), before 2026-11-18**
+1. sanity.io/manage → **Welcome to Vydia** → **Plan** (or Billing) → **Upgrade** to **Growth**.
+2. Add the payment card on the **Vydia** organization.
+3. Seats are $15 per non-viewer member per month: your admin seat plus the two shared logins = $45/month ($30 if you later drop your own seat and keep a shared login as admin).
+- **I'll check:** the subscription shows Growth (not trial), and the `production` dataset is still `private`.
+
+**U2: Shared Sanity seats (0.5)**
+1. sanity.io/manage → Welcome to Vydia → **Members** → **Invite** `labelrelationships@vydia.com` with the **Editor** role. Only `creativeservices@` was invited so far.
+2. Whoever reads each shared inbox accepts the invite and signs in. Use the same sign-in method every time (Google or email) so the seat isn't duplicated.
+3. Each team opens `http://localhost:3000/studio` (or the Vercel URL after U4) and confirms they see Artists / Resources / Sections / Website.
+- **I'll check:** both members show as accepted Editors, and no pending invitations remain.
+
+**U3: Email templates (0.13), can do now**
+1. Supabase → **Authentication** → **Email Templates** → **Confirm signup**: set the subject to the first-line comment in `supabase/templates/confirm-signup.html` ("Confirm your email for Welcome to Vydia"), and paste the rest of the file as the body.
+2. Same for **Reset password** with `supabase/templates/reset-password.html`.
+3. Save both. The links use `{{ .SiteURL }}`, so they point at localhost now and switch to production when the Site URL changes in 11.2.
+- **I'll check:** after U7 (real email delivery), a sign-up and a reset email both land through `/auth/confirm`.
+
+**U4: Vercel (0.14, then 0.10 and 1.15)**
+1. In the Vercel Pro team: **Add New → Project → Import** `vydia-creative-services-org/welcome-to-vydia`. If the repo isn't listed, a GitHub org owner must install the Vercel GitHub app for the org and grant it this repo.
+2. Framework preset **Next.js**, Node.js **22.x**, root directory `/`. Leave the build and install commands as default.
+3. **Settings → Environment Variables**, for **Production** and **Preview**:
+
+   | Variable | Production | Preview |
+   |---|---|---|
+   | `NEXT_PUBLIC_SITE_URL` | `https://welcometovydia.com` (use the `*.vercel.app` production URL until DNS lands) | the project's stable preview URL, e.g. `https://welcome-to-vydia-git-main-<team>.vercel.app` |
+   | `NEXT_PUBLIC_SANITY_PROJECT_ID` | `t7ic4vs4` | same |
+   | `NEXT_PUBLIC_SANITY_DATASET` | `production` | same |
+   | `SANITY_API_READ_TOKEN` | the `vercel-read` token (password manager / `.env.local`) | same |
+   | `SANITY_REVALIDATE_SECRET` | the value in `.env.local` | same |
+   | `NEXT_PUBLIC_SUPABASE_URL` | `https://cqqzvzljlthrqrttqnga.supabase.co` | same |
+   | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | the `sb_publishable_…` key | same |
+   | `PERMANENT_VIEWER_EMAILS` | `labelrelationships@vydia.com,creativeservices@vydia.com` | same |
+
+   Don't add `SUPABASE_SERVICE_ROLE_KEY` to Vercel.
+4. **Settings → Deployment Protection → Protection Bypass for Automation → Generate.** Save the secret: it's needed for U5 (webhook to previews) and U6.
+5. **Supabase → Authentication → URL Configuration → Redirect URLs:** add `https://welcome-to-vydia-*-<team>.vercel.app/**` and the production `*.vercel.app` URL (0.10).
+6. **Sanity → API → CORS origins:** add `https://welcome-to-vydia-*.vercel.app` and the production URL, both with **Allow credentials**, so Studio works on Vercel.
+7. Tell me the project is linked. I'll push a branch, which completes 1.15.
+- **I'll check:** a preview builds, `/` loads, `/test-artist` redirects to `/login`, Studio loads on the preview URL, and the security headers are present.
+
+**U5: Sanity webhook (9.3), after U4**
+1. sanity.io/manage → Welcome to Vydia → **API → Webhooks → Create webhook**.
+2. **Name:** `revalidate-preview`. **URL:** `https://<preview URL>/api/revalidate?x-vercel-protection-bypass=<bypass secret from U4.4>`. **Dataset:** `production`. **Trigger on:** Create, Update, Delete.
+3. **Filter:** `_type in ["artist", "resource", "section", "website"]`. **Projection:** `{_type}`. **HTTP method:** POST. **API version:** `v2025-02-19`. **Drafts:** off. **Secret:** the `SANITY_REVALIDATE_SECRET` value.
+4. At launch (11.5), add a second webhook `revalidate-production` with URL `https://welcometovydia.com/api/revalidate` and the same settings. Growth allows 4 webhooks.
+- **I'll check:** publish a test edit, then confirm the attempts log shows 200 and the preview page updates (9.4, 9.5, 9.7).
+
+**U6: GitHub settings for the preview e2e workflow (10.4), after U4**
+1. In Sanity, create an **Editor** robot token named `e2e-ci` (API → Tokens).
+2. GitHub → repo → **Settings → Secrets and variables → Actions**.
+   - **Variables:** `NEXT_PUBLIC_SANITY_PROJECT_ID=t7ic4vs4`, `NEXT_PUBLIC_SANITY_DATASET=production`, `NEXT_PUBLIC_SUPABASE_URL=https://cqqzvzljlthrqrttqnga.supabase.co`.
+   - **Secrets:** `SANITY_E2E_EDITOR_TOKEN` (the `e2e-ci` token), `SUPABASE_SERVICE_ROLE_KEY`, `SANITY_REVALIDATE_SECRET`, `VERCEL_AUTOMATION_BYPASS_SECRET`.
+- **I'll check:** the "E2E (Vercel preview)" workflow runs green on the next preview deployment.
+
+**U7: Resend + Supabase SMTP (0.12), after Resend approval**
+1. Resend → **Domains → Add domain**. Use a sending subdomain such as `mail.welcometovydia.com` (or a `vydia.com` subdomain if that's faster to get DNS for). Send the DKIM/SPF records Resend shows to the product team (U8).
+2. Once the domain shows **Verified**, go to Resend → **API Keys** and create a key with "Sending access" for that domain.
+3. Supabase → **Authentication → SMTP Settings → Enable custom SMTP:** host `smtp.resend.com`, port `465`, username `resend`, password = the API key, sender email `no-reply@<your verified domain>`, sender name `Vydia`.
+4. Supabase → **Authentication → Rate Limits:** raise "emails sent per hour" from the built-in limit (e.g. to 100).
+- **I'll check:** a real sign-up to one of the shared inboxes gets the branded confirmation email, and the link lands on the original page signed in. That closes the email part of 7.11.
+
+**U8: DNS for `welcometovydia.com` (0.15), product team**
+Send them this list:
+- **Apex `welcometovydia.com`:** the A record Vercel shows in Project → Settings → Domains (currently `76.76.21.21`), or delegate nameservers to Vercel.
+- **`www`:** CNAME to `cname.vercel-dns.com` (redirects to the apex, set in Vercel).
+- **Resend's DKIM / SPF / return-path records** from U7.1.
+- **I'll check:** Vercel shows the domain as valid with SSL, and Resend shows the domain as verified. Phase 11 can then start.
+
+**U9: One real Google sign-in (7.11)**
+1. While the Google app is in **Testing** mode, add the tester's Google address under Google Cloud → **Google Auth Platform → Audience → Test users**.
+2. They open `/test-artist` (locally, or on the preview after U4), click **Continue with Google**, and finish sign-in. For it to open the page, their email must be on `test-artist`'s **Allowed emails** (or they'll see "This page isn't available", which also proves the round trip).
+- **I'll check:** a Supabase user with the Google identity exists, and their session reached `/test-artist`. At launch, 11.3 publishes the Google app so anyone can sign in.
+
+**U10: Branch protection (0.16 / 0.18)**
+- **Option A:** a GitHub org owner upgrades `vydia-creative-services-org` to **Team**. Then Settings → Rules → new branch ruleset for `main`: require a pull request and require the status check **check** (the CI job).
+- **Option B:** decide to keep working on feature branches by convention, and I'll mark 0.16 and 0.18 as "by agreement".
+
+**U11: Seismic asset list (12.1), from L&A**
+Ask L&A for every item on the current Seismic page: title, type (PDF / video / link / deck), which section it's in and its order, the "Added on" date, and whether it has a custom thumbnail. Plus the files themselves, or Seismic access to download them.
+
+**Housekeeping**
+- Remove `SUPABASE_SERVICE_ROLE_KEY` from `.env.local` when you're not running e2e tests locally. It's only for `npm run e2e:setup` / `e2e:teardown`.
+- Optional: delete the leftover `http://localhost:3333` CORS origin in Sanity.
 
 ---
 
@@ -3183,41 +3493,50 @@ Fixed along the way:
 
 ### Phase 7: Authentication
 
-- [ ] **7.1** `lib/supabase/server.ts` and `lib/supabase/client.ts` (§8.1).
-- [ ] **7.2** `lib/supabase/proxy.ts` + root `proxy.ts` (or `middleware.ts` on Next 15) with `PUBLIC_EXACT = ['/']`, the `/login` and `/auth` prefixes, and the matcher that excludes `/studio`, `/api/revalidate`, and static files (§8.2).
-- [ ] **7.3** `lib/safe-redirect.ts` (§8.3) + unit tests: relative path OK, same-origin absolute OK, other origin → `/`, `//evil.com` → `/`, garbage → `/`.
-- [ ] **7.4** Login server actions: `signIn`, `signUp` (same message whether the account exists or not), `requestPasswordReset` (§8.4).
-- [ ] **7.5** `LoginForm` + `LoginForm.module.css`: sign-in / sign-up / reset modes, Google button, labelled inputs, error + success messages, invalid-link message (§8.4).
-- [ ] **7.6** `login/page.tsx` using `PageShell` (§8.4).
-- [ ] **7.7** `/auth/callback` route for Google (§8.5).
-- [ ] **7.8** `/auth/confirm` route for email confirmation + recovery (§8.5).
-- [ ] **7.9** `/auth/signout` route (POST, 303 to `/login`) (§8.5).
-- [ ] **7.10** `/account/update-password` page: client form calling `updateUser({password})`, styled with `controls.module.css`.
+- [x] **7.1** `lib/supabase/server.ts` and `lib/supabase/client.ts` (§8.1).
+- [x] **7.2** `lib/supabase/proxy.ts` + root `proxy.ts` (or `middleware.ts` on Next 15) with `PUBLIC_EXACT = ['/']`, the `/login` and `/auth` prefixes, and the matcher that excludes `/studio`, `/api/revalidate`, and static files (§8.2).
+- [x] **7.3** `lib/safe-redirect.ts` (§8.3) + unit tests: relative path OK, same-origin absolute OK, other origin → `/`, `//evil.com` → `/`, garbage → `/`.
+- [x] **7.4** Login server actions: `signIn`, `signUp` (same message whether the account exists or not), `requestPasswordReset` (§8.4).
+- [x] **7.5** `LoginForm` + `LoginForm.module.css`: sign-in / sign-up / reset modes, Google button, labelled inputs, error + success messages, invalid-link message (§8.4).
+- [x] **7.6** `login/page.tsx` using `PageShell` (§8.4).
+- [x] **7.7** `/auth/callback` route for Google (§8.5).
+- [x] **7.8** `/auth/confirm` route for email confirmation + recovery (§8.5).
+- [x] **7.9** `/auth/signout` route (POST, 303 to `/login`) (§8.5).
+- [x] **7.10** `/account/update-password` page: client form calling `updateUser({password})`, styled with `controls.module.css`.
 - [ ] **7.11** Manually test every flow locally:
   - Sign up with email → confirmation email arrives → link lands on the original page, signed in.
   - Sign in before confirming → generic error.
   - Google sign-in → returns to `next`.
   - Forgot password → email → set a new password → signed in.
   - Sign out → back to `/login`.
-- [ ] **7.12** Confirm the session cookie's max-age is long-lived (≈400 days) and that a session survives a browser restart.
+  ⏳ **Partly verified (2026-10-19, Playwright against `next dev`, pre-confirmed test users made with the service key):**
+  - ✅ Sign in returns to `next`.
+  - ✅ Sign out goes to `/login`, and protected pages redirect afterwards.
+  - ✅ Sign in before confirming shows the generic error.
+  - ✅ Confirmation link (`/auth/confirm` with `token_hash`, the custom-template path) confirms the user and lands on the original page, signed in.
+  - ✅ Forgot password: the request shows a neutral message, the recovery link goes to `/account/update-password`, the new password saves and works for sign-in.
+  - ✅ The "Continue with Google" button redirects to `accounts.google.com` with the right callback.
+  - ✅ Invalid-link message.
+  - **Still open:** (1) real email delivery. Supabase's built-in sender returned `over_email_send_rate_limit` (2/hour) and only delivers to team members, so this needs Resend (0.12) and the templates (0.13). (2) A real Google account round trip needs a person at the Google sign-in screen. (3) The default template's PKCE link (`/auth/callback?code=…`) can only be tested with a real email.
+- [x] **7.12** Confirm the session cookie's max-age is long-lived (≈400 days) and that a session survives a browser restart.
 
 **Done when:** every flow in 7.11 works on localhost, and every non-public route redirects to `/login?next=…` when signed out.
 
 ---
 
-### Phase 8: Access control
+### Phase 8: Access control ✅ Complete
 
-- [ ] **8.0** 🧑‍🤝‍🧑 Decide how artist pages return status codes. Under `cacheComponents` the page always responds **200** (it streams), and unknown and denied stay identical (§9.3). Options:
+- [x] **8.0** 🧑‍🤝‍🧑 Decide how artist pages return status codes. **Decided: option 1, accept streamed 200.** Under `cacheComponents` the page always responds **200** (it streams), and unknown and denied stay identical (§9.3). Options:
   1. **Accept streamed 200** (recommended for the prototype). The not-found UI and `noindex` are identical for both cases, which meets the research requirement ("indistinguishable"). Old-slug redirects work, but client-side.
   2. **Access check in Proxy, after the session check.** Real 404 and 307, but Proxy queries Sanity on every artist-page request, and the access logic moves out of the page.
   3. **Turn `cacheComponents` off** (revisit D15). The plan's original 404/307 behaviour, but on the older caching model (§7.1/§10 change back).
-- [ ] **8.1** `lib/access.ts`: `normalizeEmail`, `PERMANENT_VIEWERS` from env, `isInternalViewer`, `decideAccess`, `verifiedEmail`, `resolveArtistAccess` (§9.1).
-- [ ] **8.2** `tests/access.test.ts` (§13.1): unknown, unapproved = unknown, case-insensitive + trim, permanent emails, internal viewers from the website, old-slug redirect only when allowed, no verified email.
-- [ ] **8.3** Replace the Phase 6 bypass with the real `[slug]/page.tsx`: `getUser` → `resolveArtistAccess` → `notFound()` / `redirect()` / render (§9.2). **Remove the temporary bypass code.**
-- [ ] **8.4** `[slug]/not-found.tsx` + `NoAccess` using `Notice`, with a "sign in with a different email" form (§9.2).
-- [ ] **8.5** Static `metadata` with no artist name, and `noindex` on the site layout and artist page.
-- [ ] **8.6** Root `/` instructions page: static, public, no session read, no Sanity query (§9.4, D13).
-- [ ] **8.7** Manual matrix test, signed in as each persona against each slug:
+- [x] **8.1** `lib/access.ts`: `normalizeEmail`, `PERMANENT_VIEWERS` from env, `isInternalViewer`, `decideAccess`, `verifiedEmail`, `resolveArtistAccess` (§9.1).
+- [x] **8.2** `tests/access.test.ts` (§13.1): unknown, unapproved = unknown, case-insensitive + trim, permanent emails, internal viewers from the website, old-slug redirect only when allowed, no verified email.
+- [x] **8.3** Replace the Phase 6 bypass with the real `[slug]/page.tsx`: `getUser` → `resolveArtistAccess` → `notFound()` / `redirect()` / render (§9.2). **Remove the temporary bypass code.**
+- [x] **8.4** `[slug]/not-found.tsx` + `NoAccess` using `Notice`, with a "sign in with a different email" form (§9.2).
+- [x] **8.5** Static `metadata` with no artist name, and `noindex` on the site layout and artist page.
+- [x] **8.6** Root `/` instructions page: static, public, no session read, no Sanity query (§9.4, D13).
+- [x] **8.7** Manual matrix test, signed in as each persona against each slug:
 
   | Persona ↓ / Slug → | `test-artist` | old `test-renamed` slug | `does-not-exist` |
   |---|---|---|---|
@@ -3227,9 +3546,13 @@ Fixed along the way:
   | Internal viewer from Website list | ✅ page | ↪ redirect | 404 NoAccess |
   | Signed out | → `/login` | → `/login` | → `/login` |
 
-- [ ] **8.8** Also confirm the status codes match whatever 8.0 decided. Diff the HTML of "unapproved on a real artist" against "anyone on a missing artist". It must be byte-identical apart from Next's per-request IDs.
-- [ ] **8.9** Remove an email from `test-artist` in Studio and confirm that user loses access on the next load (it works once Phase 9 is done; until then, restart dev).
-- [ ] **8.10** Mixed-case test: add `Jane.Doe@Example.com` in Studio, sign in as `jane.doe@example.com` → allowed.
+- [x] **8.8** Also confirm the status codes match whatever 8.0 decided. Diff the HTML of "unapproved on a real artist" against "anyone on a missing artist". It must be byte-identical apart from Next's per-request IDs.
+  ✅ Verified on a production build, signed in as an unapproved user:
+  - `/test-artist` (real, denied) and a missing slug both return **200** (decision 8.0) with identical headers and the same NoAccess page with `noindex`.
+  - No artist name or resource title anywhere in the response. Median response time is the same (101 vs 98 ms).
+  - Byte-level differences are only React's random per-request keys and stream chunking. These vary the same way across real, unknown-cold, and unknown-warm slugs (12 samples each, with the same three response shapes in every group), so they don't reveal whether an artist exists.
+- [x] **8.9** Remove an email from an artist and confirm that user loses access on the next load. ✅ On a production build: granted after adding the email and calling the `artist` webhook; still granted (cached) right after removing it; revoked on the next load after the `artist` webhook. Without the webhook, a removed email keeps access until the cache expires, so the webhook (9.3) is required before launch.
+- [x] **8.10** Mixed-case test: add `Jane.Doe@Example.com` in Studio, sign in as `jane.doe@example.com` → allowed.
 
 **Done when:** every cell in the 8.7 matrix behaves as shown, 8.8 shows no difference, and the access unit tests pass.
 
@@ -3237,13 +3560,13 @@ Fixed along the way:
 
 ### Phase 9: Caching and publish webhook
 
-- [ ] **9.1** `/api/revalidate` route with `parseBody` signature check and type-tag revalidation (§10). Use the `revalidateTag` signature for the installed Next version.
-- [ ] **9.2** Generate `SANITY_REVALIDATE_SECRET` and add it to `.env.local` and Vercel (Preview + Production).
-- [ ] **9.3** Create the Sanity webhook pointed at the **preview** deployment first, with filter, projection `{_type}`, and the secret (§10).
-- [ ] **9.4** Test on the preview deployment: edit a resource title → publish → reload `/test-artist` → new title shows within seconds.
-- [ ] **9.5** Test each type: website intro, section order, artist allowed emails (revocation), resource delete.
-- [ ] **9.6** Test a bad signature → 401, and an unknown `_type` → 400.
-- [ ] **9.7** Check the webhook attempt log in sanity.io/manage shows 200s.
+- [x] **9.1** `/api/revalidate` route with `parseBody` signature check and type-tag revalidation (§10). Use the `revalidateTag` signature for the installed Next version.
+- [ ] **9.2** Generate `SANITY_REVALIDATE_SECRET` and add it to `.env.local` and Vercel (Preview + Production). ✅ Generated (64 hex chars) and written to `.env.local`. ⏳ Vercel part blocked on 0.14.
+- [ ] **9.3** ⏳ Blocked on 0.14 (no deployment URL yet). Create the Sanity webhook pointed at the **preview** deployment first, with filter, projection `{_type}`, and the secret (§10).
+- [ ] **9.4** Test on the preview deployment: edit a resource title → publish → reload `/test-artist` → new title shows within seconds. ✅ Verified on a local production build (`next start`) with correctly signed webhook calls: the edited title stays cached until the `resource` webhook, then shows immediately. ⏳ Repeat against the preview once 9.3 exists.
+- [ ] **9.5** Test each type: website intro, section order, artist allowed emails (revocation), resource delete. ✅ All four verified locally on a production build with a warm cache: stale before the matching webhook, fresh right after. Revocation also covers 8.9. ⏳ Repeat on the preview.
+- [x] **9.6** Test a bad signature → 401, and an unknown `_type` → 400. ✅ Unsigned → 401, wrong secret → 401, `sanity.imageAsset` → 400, missing secret env → 500.
+- [ ] **9.7** ⏳ Blocked on 9.3. Check the webhook attempt log in sanity.io/manage shows 200s.
 
 **Done when:** every edit type in 9.5 appears on the deployed preview without a redeploy.
 
@@ -3251,16 +3574,16 @@ Fixed along the way:
 
 ### Phase 10: Testing and hardening
 
-- [ ] **10.1** Create Supabase test users for e2e (`approved`, `outsider`) and a Playwright global setup that signs in and saves `storageState` files (gitignored).
-- [ ] **10.2** Write `tests/e2e/access.spec.ts` (§13.2): signed-out redirects, `/` is public with no links, unknown vs forbidden identical, approved user sees content.
-- [ ] **10.3** Add e2e tests: old slug redirects for an approved user, the video dialog opens and closes, link cards have `target="_blank"` and `rel="noopener noreferrer"`.
-- [ ] **10.4** Run Playwright against the Vercel preview in CI (on PRs to `main`).
-- [ ] **10.5** Security headers in `next.config.ts` for site routes: `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`, `X-Content-Type-Options: nosniff`, `Permissions-Policy` minimal. Exclude `/studio` if they break it.
-- [ ] **10.6** Confirm no server-only module ends up in a client bundle (`server-only` import errors would show at build). Grep the client build output for `SANITY_API_READ_TOKEN`.
-- [ ] **10.7** Confirm the Sanity dataset rejects unauthenticated queries (`curl` the public API without a token → no documents).
-- [ ] **10.8** Accessibility: keyboard-only walk-through (cards, video dialog, login form), axe/Lighthouse a11y ≥ 95, color contrast of the muted date text, alt text on cover images.
-- [ ] **10.9** Performance: Lighthouse on `/test-artist` (mobile). LCP image is the header logo (`priority`), covers are lazy, no layout shift from cards.
-- [ ] **10.10** Run the full manual QA checklist (§13.3) and record the results in the PR.
+- [x] **10.1** ✅ `npm run e2e:setup` / `e2e:teardown` (`scripts/e2e-fixtures.ts`) create and delete pre-confirmed users and grant or revoke access on `test-artist`/`test-renamed`, then revalidate the cache. `tests/e2e/global-setup.ts` signs in through the real form and saves `storageState` (gitignored). Create Supabase test users for e2e (`approved`, `outsider`) and a Playwright global setup that signs in and saves `storageState` files (gitignored).
+- [x] **10.2** Write `tests/e2e/access.spec.ts` (§13.2): signed-out redirects, `/` is public with no links, unknown vs forbidden identical, approved user sees content.
+- [x] **10.3** ✅ 16 Playwright tests (`access.spec.ts` + `a11y.spec.ts`) pass on a local production build, 3× repeat-stable. Add e2e tests: old slug redirects for an approved user, the video dialog opens and closes, link cards have `target="_blank"` and `rel="noopener noreferrer"`.
+- [ ] **10.4** Run Playwright against the Vercel preview in CI (on PRs to `main`). ⏳ Prepared, but can't be verified until 0.14: `.github/workflows/e2e-preview.yml` runs on successful Vercel preview deployments, creates throwaway fixtures (`npm run e2e:setup`), runs `npm run e2e` against the preview URL, and always tears down. It needs repo variables `NEXT_PUBLIC_SANITY_PROJECT_ID`, `NEXT_PUBLIC_SANITY_DATASET` and `NEXT_PUBLIC_SUPABASE_URL`, plus secrets `SANITY_E2E_EDITOR_TOKEN` (Editor robot token), `SUPABASE_SERVICE_ROLE_KEY`, `SANITY_REVALIDATE_SECRET` and `VERCEL_AUTOMATION_BYPASS_SECRET`.
+- [x] **10.5** Security headers in `next.config.ts` for site routes: `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`, `X-Content-Type-Options: nosniff`, `Permissions-Policy` minimal. Exclude `/studio` if they break it.
+- [x] **10.6** Confirm no server-only module ends up in a client bundle (`server-only` import errors would show at build). Grep the client build output for `SANITY_API_READ_TOKEN`.
+- [x] **10.7** Confirm the Sanity dataset rejects unauthenticated queries (`curl` the public API without a token → no documents).
+- [x] **10.8** ✅ axe (WCAG 2.0/2.1/2.2 A+AA, colour contrast included): **0 violations** on `/`, all three login modes, NoAccess, the artist page, and the open video dialog. Keyboard-only test passes. Lighthouse accessibility **100** on `/`, `/login` and `/test-artist`. Accessibility: keyboard-only walk-through (cards, video dialog, login form), axe/Lighthouse a11y ≥ 95, color contrast of the muted date text, alt text on cover images.
+- [x] **10.9** ✅ Lighthouse mobile on a local production build: `/test-artist` performance 97, `/` 99, `/login` 97. CLS 0, TBT 10–20 ms, best practices 100. The LCP element is the intro text (fine; the header logo is preloaded with `preload`, since `priority` is deprecated in Next 16). Card covers lazy-load and are now capped at `max-w=800&max-h=450`, so tall portrait previews no longer download at full height. Performance: Lighthouse on `/test-artist` (mobile). LCP image is the header logo (`priority`), covers are lazy, no layout shift from cards.
+- [x] **10.10** Run the full manual QA checklist (§13.3) and record the results in the PR. ✅ Results recorded in §13.3: 14 verified; 3 blocked on SMTP, a Google account, or a deployment.
 
 **Done when:** CI runs unit + e2e green against preview, every §13.3 item passes, and Lighthouse a11y ≥ 95.
 
@@ -3300,8 +3623,8 @@ Fixed along the way:
 
 ### Phase 13: Handoff
 
-- [ ] **13.1** Write `README.md`: what the app is, local setup, env vars, the deploy flow, where each dashboard lives, how to rotate the Sanity token and webhook secret.
-- [ ] **13.2** Write a short `docs/editor-guide.md` (a text version of the Loom for quick reference).
+- [x] **13.1** Write `README.md`: what the app is, local setup, env vars, the deploy flow, where each dashboard lives, how to rotate the Sanity token and webhook secret.
+- [x] **13.2** Write a short `docs/editor-guide.md` (a text version of the Loom for quick reference).
 - [ ] **13.3** Record the Loom walkthrough following the §16 outline (all 9 steps), using the production Studio.
 - [ ] **13.4** 🧑‍🤝‍🧑 Present the prototype to L&A and Creative Services: live demo of Flow 1 and Flow 2, then the client view.
 - [ ] **13.5** 🧑‍🤝‍🧑 Go through the open questions (§17) in that meeting and record the answers in this plan.
@@ -3332,7 +3655,7 @@ Scope depends on the answers to §17. Placeholders:
 | **"Added on" dates** reflect edits | Explicit `addedOn` field, initialised on create and editable for migration. GROQ falls back to `_createdAt`, never `_updatedAt`. |
 | **Missing cover photos** | Three-step fallback: cover → auto PDF preview → branded grain tile that matches the existing thumbnail style. The card layout is identical in every case (fixed 16:9 cover box). |
 | **Global edits look like failed publishes** | Type-tagged cache + signed webhook with immediate expiry (§10). Pages refresh within seconds. |
-| **Sanity storage/bandwidth for videos** | **Decision: videos stay in Sanity** (D14). Still unverified whether the quotas are enough. Before migrating, check the current plan's asset storage and bandwidth on sanity.io/pricing against the total size of the Seismic videos. Keep files small: MP4/H.264 at 1080p max (guidance is in the field description). Cards use `preload="metadata"`, so bandwidth is only spent when someone presses play. Watch usage in sanity.io/manage after launch. If the numbers don't fit, the answer is a higher Sanity plan, not a different host. |
+| **Sanity storage/bandwidth for videos** | **Decision: videos stay in Sanity** (D14). Still unverified whether the quotas are enough. Before migrating, check the current plan's asset storage and bandwidth on sanity.io/pricing against the total size of the Seismic videos. Keep files small: MP4/H.264 at 1080p max (guidance is in the field description). Cards use `preload="none"`, so no video bytes are spent until someone presses play (measured: 0 bytes on page load). Watch usage in sanity.io/manage after launch. If the numbers don't fit, the answer is a higher Sanity plan, not a different host. |
 | **Public asset URLs** in a private dataset | Acceptable for client-facing collateral. If needed later: `/api/files/[id]` route that checks the session + an allowed artist before streaming from Sanity, with cards linking there instead of `cdn.sanity.io`. |
 | **Roster enumeration** | Proxy gates every artist path before any Sanity lookup. Denied = unknown (§9.3). Static metadata. `noindex`. Private dataset. `/` is a static instructions page with no artist list for anyone (D13). |
 | **Sanity trial ends and the dataset goes public** | The trial ends 2026-11-18. Upgrade to Growth before then (task 0.17). Without the upgrade, Sanity makes the private dataset public, which exposes the roster and allowed emails, and editors become viewers. |

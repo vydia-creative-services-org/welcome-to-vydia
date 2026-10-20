@@ -1,27 +1,32 @@
 import type {Metadata} from 'next'
-import {notFound} from 'next/navigation'
+import {notFound, redirect} from 'next/navigation'
 import {Intro} from '@/components/Intro'
 import {PageShell} from '@/components/PageShell'
 import {ResourceSection} from '@/components/ResourceSection'
 import {RichText} from '@/components/RichText'
-import {sanityFetch} from '@/lib/sanity/fetch'
+import {resolveArtistAccess} from '@/lib/access'
 import {getArtistPage} from '@/lib/sanity/page'
-import {ACCESS_QUERY} from '@/lib/sanity/queries'
+import {createClient} from '@/lib/supabase/server'
 import styles from './page.module.css'
 
 export const metadata: Metadata = {title: 'Welcome to Vydia', robots: {index: false, follow: false}}
 
 export const instant = false
 
-// TEMPORARY (Phase 6): renders any artist without an access check. Task 8.3 replaces this with resolveArtistAccess.
 export default async function ArtistPage({params}: PageProps<'/[slug]'>) {
   const {slug} = await params
-  const {artist} = await sanityFetch(ACCESS_QUERY, {slug: decodeURIComponent(slug).toLowerCase()}, [
-    'artist',
-    'website',
-  ])
-  if (!artist) notFound()
-  const page = await getArtistPage(artist._id)
+
+  const supabase = await createClient()
+  const {
+    data: {user},
+  } = await supabase.auth.getUser()
+  if (!user) redirect(`/login?next=/${encodeURIComponent(slug)}`)
+
+  const access = await resolveArtistAccess(slug, user)
+  if (access.status === 'denied') notFound()
+  if (access.status === 'redirect') redirect(`/${access.canonicalSlug}`)
+
+  const page = await getArtistPage(access.artistId)
 
   return (
     <PageShell>
