@@ -288,3 +288,121 @@ export type AllSanitySchemaTypes =
   | SanityAssetSourceData
   | SanityImageAsset
   | Geopoint
+
+// Source: lib/sanity/queries.ts
+// Variable: ACCESS_QUERY
+// Query: {  "artist": *[_type == "artist" && (slug.current == $slug || $slug in previousSlugs)][0]{    _id,    "slug": slug.current,    allowedEmails  },  "internalViewers": *[_type == "website" && _id == "website"][0].internalViewerEmails}
+export type ACCESS_QUERY_RESULT = {
+  artist: {
+    _id: string
+    slug: string | null
+    allowedEmails: Array<string> | null
+  } | null
+  internalViewers: Array<string> | null
+}
+
+// Source: lib/sanity/queries.ts
+// Variable: ARTIST_PAGE_QUERY
+// Query: {  "website": *[_type == "website" && _id == "website"][0]{    intro,    "sections": sections[defined(@->_id)]->{  _id,  title,  subtitle,  "resources": resources[defined(@->_id)]->{  _id,  title,  type,  url,  "addedOn": coalesce(addedOn, _createdAt),  "fileUrl": file.asset->url,  "fileName": file.asset->originalFilename,  "cover": coalesce(coverImage, pdfPreview){    alt,    hotspot,    crop,    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}  }}}  },  "artist": *[_type == "artist" && _id == $artistId][0]{    name,    introOverride,    additionalInfo,    "sectionOverride": sectionOverride[defined(@->_id)]->{  _id,  title,  subtitle,  "resources": resources[defined(@->_id)]->{  _id,  title,  type,  url,  "addedOn": coalesce(addedOn, _createdAt),  "fileUrl": file.asset->url,  "fileName": file.asset->originalFilename,  "cover": coalesce(coverImage, pdfPreview){    alt,    hotspot,    crop,    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}  }}}  }}
+export type ARTIST_PAGE_QUERY_RESULT = {
+  website: {
+    intro: BlockContent | null
+    sections: Array<{
+      _id: string
+      title: string | null
+      subtitle: string | null
+      resources: Array<{
+        _id: string
+        title: string | null
+        type: 'link' | 'pdf' | 'slides' | 'video' | null
+        url: string | null
+        addedOn: string
+        fileUrl: string | null
+        fileName: string | null
+        cover:
+          | {
+              alt: null
+              hotspot: SanityImageHotspot | null
+              crop: SanityImageCrop | null
+              asset: {
+                _id: string
+                url: string | null
+                lqip: string | null
+                width: number | null
+                height: number | null
+              } | null
+            }
+          | {
+              alt: string | null
+              hotspot: SanityImageHotspot | null
+              crop: SanityImageCrop | null
+              asset: {
+                _id: string
+                url: string | null
+                lqip: string | null
+                width: number | null
+                height: number | null
+              } | null
+            }
+          | null
+      }> | null
+    }> | null
+  } | null
+  artist: {
+    name: string | null
+    introOverride: BlockContent | null
+    additionalInfo: BlockContent | null
+    sectionOverride: Array<{
+      _id: string
+      title: string | null
+      subtitle: string | null
+      resources: Array<{
+        _id: string
+        title: string | null
+        type: 'link' | 'pdf' | 'slides' | 'video' | null
+        url: string | null
+        addedOn: string
+        fileUrl: string | null
+        fileName: string | null
+        cover:
+          | {
+              alt: null
+              hotspot: SanityImageHotspot | null
+              crop: SanityImageCrop | null
+              asset: {
+                _id: string
+                url: string | null
+                lqip: string | null
+                width: number | null
+                height: number | null
+              } | null
+            }
+          | {
+              alt: string | null
+              hotspot: SanityImageHotspot | null
+              crop: SanityImageCrop | null
+              asset: {
+                _id: string
+                url: string | null
+                lqip: string | null
+                width: number | null
+                height: number | null
+              } | null
+            }
+          | null
+      }> | null
+    }> | null
+  } | null
+}
+
+// Query TypeMap
+declare global {
+  interface SanityQueries {
+    '{\n  "artist": *[_type == "artist" && (slug.current == $slug || $slug in previousSlugs)][0]{\n    _id,\n    "slug": slug.current,\n    allowedEmails\n  },\n  "internalViewers": *[_type == "website" && _id == "website"][0].internalViewerEmails\n}': ACCESS_QUERY_RESULT
+    '{\n  "website": *[_type == "website" && _id == "website"][0]{\n    intro,\n    "sections": sections[defined(@->_id)]->{\n  _id,\n  title,\n  subtitle,\n  "resources": resources[defined(@->_id)]->{\n  _id,\n  title,\n  type,\n  url,\n  "addedOn": coalesce(addedOn, _createdAt),\n  "fileUrl": file.asset->url,\n  "fileName": file.asset->originalFilename,\n  "cover": coalesce(coverImage, pdfPreview){\n    alt,\n    hotspot,\n    crop,\n    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}\n  }\n}\n}\n  },\n  "artist": *[_type == "artist" && _id == $artistId][0]{\n    name,\n    introOverride,\n    additionalInfo,\n    "sectionOverride": sectionOverride[defined(@->_id)]->{\n  _id,\n  title,\n  subtitle,\n  "resources": resources[defined(@->_id)]->{\n  _id,\n  title,\n  type,\n  url,\n  "addedOn": coalesce(addedOn, _createdAt),\n  "fileUrl": file.asset->url,\n  "fileName": file.asset->originalFilename,\n  "cover": coalesce(coverImage, pdfPreview){\n    alt,\n    hotspot,\n    crop,\n    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}\n  }\n}\n}\n  }\n}': ARTIST_PAGE_QUERY_RESULT
+  }
+}
+// Lets @sanity/client releases that predate the global registry read it too
+declare module '@sanity/client' {
+  interface SanityQueries extends globalThis.SanityQueries {}
+}

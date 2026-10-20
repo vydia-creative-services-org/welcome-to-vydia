@@ -1060,9 +1060,9 @@ export const sanity = createClient({
   projectId,
   dataset,
   apiVersion,
-  useCdn: false,               // 'use cache' is our cache; avoid CDN lag after publish
-  perspective: 'published',    // never serve drafts
-  token: process.env.SANITY_API_READ_TOKEN, // private dataset
+  useCdn: false,
+  perspective: 'published',
+  token: process.env.SANITY_API_READ_TOKEN,
 })
 ```
 
@@ -1070,16 +1070,20 @@ export const sanity = createClient({
 // lib/sanity/fetch.ts
 import 'server-only'
 import {cacheLife, cacheTag} from 'next/cache'
-import type {QueryParams} from 'next-sanity'
+import type {ClientReturn, QueryParams} from 'next-sanity'
 import {sanity} from './client'
 
 export type SanityTag = 'artist' | 'resource' | 'section' | 'website'
 
-export async function sanityFetch<T>(query: string, params: QueryParams, tags: SanityTag[]): Promise<T> {
+export async function sanityFetch<const Q extends string>(
+  query: Q,
+  params: QueryParams,
+  tags: SanityTag[],
+): Promise<ClientReturn<Q, never>> {
   'use cache'
   cacheLife('max')
   cacheTag(...tags)
-  return sanity.fetch<T>(query, params)
+  return sanity.fetch<ClientReturn<Q, never>>(query, params)
 }
 ```
 
@@ -1091,17 +1095,13 @@ With `cacheComponents` on (D15), this is Next 16's native data cache. `query`, `
 // lib/sanity/queries.ts
 import {defineQuery} from 'next-sanity'
 
-/**
- * ACCESS LOOKUP. Must have the same shape and cost for unknown and known slugs.
- * Always fetches both the artist (possibly null) and the internal viewer list.
- */
 export const ACCESS_QUERY = defineQuery(`{
   "artist": *[_type == "artist" && (slug.current == $slug || $slug in previousSlugs)][0]{
     _id,
     "slug": slug.current,
     allowedEmails
   },
-  "internalViewers": *[_id == "website"][0].internalViewerEmails
+  "internalViewers": *[_type == "website" && _id == "website"][0].internalViewerEmails
 }`)
 
 const RESOURCE_PROJECTION = `{
@@ -1116,7 +1116,7 @@ const RESOURCE_PROJECTION = `{
     alt,
     hotspot,
     crop,
-    asset->{_id, url, metadata{lqip, dimensions}}
+    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}
   }
 }`
 
@@ -1124,61 +1124,53 @@ const SECTION_PROJECTION = `{
   _id,
   title,
   subtitle,
-  "resources": resources[]->${RESOURCE_PROJECTION}
+  "resources": resources[defined(@->_id)]->${RESOURCE_PROJECTION}
 }`
 
-/** PAGE CONTENT. Only run after access is granted. */
 export const ARTIST_PAGE_QUERY = defineQuery(`{
-  "website": *[_id == "website"][0]{
+  "website": *[_type == "website" && _id == "website"][0]{
     intro,
-    "sections": sections[]->${SECTION_PROJECTION}
+    "sections": sections[defined(@->_id)]->${SECTION_PROJECTION}
   },
   "artist": *[_type == "artist" && _id == $artistId][0]{
     name,
     introOverride,
     additionalInfo,
-    "sectionOverride": sectionOverride[]->${SECTION_PROJECTION}
+    "sectionOverride": sectionOverride[defined(@->_id)]->${SECTION_PROJECTION}
   }
 }`)
 ```
 
 ### 7.3 Types
 
-Generate them with `npx sanity typegen generate` (it reads the `defineQuery` calls). Until then, the hand-written equivalent is:
+Query result types come from typegen (`npm run typegen` reads the `defineQuery` calls and registers them, so `sanityFetch(ARTIST_PAGE_QUERY, …)` is typed automatically, with no generic and no `any`). `lib/sanity/types.ts` derives the card types from the generated result. The data layer normalizes them: resources without a title or type are dropped, and section titles are never null.
 
 ```ts
 // lib/sanity/types.ts
-import type {PortableTextBlock} from '@portabletext/react'
 import type {ResourceType} from '@/sanity/schemaTypes/resource'
+import type {ARTIST_PAGE_QUERY_RESULT, BlockContent} from './types.generated'
 
-export type CardImage = {
-  alt?: string
-  hotspot?: unknown
-  crop?: unknown
-  asset: {_id: string; url: string; metadata?: {lqip?: string; dimensions?: {width: number; height: number}}}
-} | null
+type RawWebsite = NonNullable<ARTIST_PAGE_QUERY_RESULT['website']>
+export type RawSection = NonNullable<RawWebsite['sections']>[number]
+export type RawResource = NonNullable<RawSection['resources']>[number]
 
-export type ResourceCardData = {
-  _id: string
+export type CardCover = NonNullable<RawResource['cover']>
+
+export type ResourceCardData = Omit<RawResource, 'title' | 'type'> & {
   title: string
   type: ResourceType
-  url?: string | null
-  addedOn: string
-  fileUrl?: string | null
-  fileName?: string | null
-  cover: CardImage
 }
 
-export type SectionData = {_id: string; title: string; subtitle?: string | null; resources: (ResourceCardData | null)[] | null}
+export type SectionData = Omit<RawSection, 'title' | 'resources'> & {
+  title: string
+  resources: ResourceCardData[]
+}
 
-export type ArtistPageData = {
-  website: {intro: PortableTextBlock[]; sections: (SectionData | null)[] | null} | null
-  artist: {
-    name: string
-    introOverride?: PortableTextBlock[] | null
-    additionalInfo?: PortableTextBlock[] | null
-    sectionOverride?: (SectionData | null)[] | null
-  } | null
+export type ArtistPage = {
+  artistName: string
+  intro: BlockContent
+  additionalInfo: BlockContent | null
+  sections: SectionData[]
 }
 ```
 
@@ -1189,34 +1181,36 @@ export type ArtistPageData = {
 import 'server-only'
 import {sanityFetch} from './fetch'
 import {ARTIST_PAGE_QUERY} from './queries'
-import type {ArtistPageData, ResourceCardData, SectionData} from './types'
+import type {ArtistPage, RawResource, RawSection, ResourceCardData, SectionData} from './types'
 
-const nonEmpty = <T,>(arr: T[] | null | undefined): arr is T[] => Array.isArray(arr) && arr.length > 0
+const nonEmpty = <T>(list: T[] | null | undefined): list is T[] => Array.isArray(list) && list.length > 0
 
-export async function getArtistPage(artistId: string) {
-  const data = await sanityFetch<ArtistPageData>(
-    ARTIST_PAGE_QUERY,
-    {artistId},
-    ['website', 'section', 'resource', 'artist'],
-  )
-  const {website, artist} = data
+function toCard(resource: RawResource): ResourceCardData | null {
+  const {title, type} = resource
+  return title && type ? {...resource, title, type} : null
+}
 
-  // Rendering sequence step 2: artist intro override, else global intro
-  const intro = nonEmpty(artist?.introOverride) ? artist!.introOverride! : website?.intro ?? []
+function toSection(section: RawSection): SectionData {
+  const resources = (section.resources ?? []).map(toCard).filter((card): card is ResourceCardData => card !== null)
+  return {...section, title: section.title ?? '', resources}
+}
 
-  // Step 4: section override REPLACES global sections (never appends)
-  const rawSections = nonEmpty(artist?.sectionOverride) ? artist!.sectionOverride! : website?.sections ?? []
+export async function getArtistPage(artistId: string): Promise<ArtistPage> {
+  const {website, artist} = await sanityFetch(ARTIST_PAGE_QUERY, {artistId}, [
+    'website',
+    'section',
+    'resource',
+    'artist',
+  ])
 
-  // Drop dangling refs (unpublished/deleted sections or resources)
-  const sections = rawSections
-    .filter((s): s is SectionData => Boolean(s))
-    .map((s) => ({...s, resources: (s.resources ?? []).filter((r): r is ResourceCardData => Boolean(r))}))
+  const intro = nonEmpty(artist?.introOverride) ? artist.introOverride : (website?.intro ?? [])
+  const sections = nonEmpty(artist?.sectionOverride) ? artist.sectionOverride : (website?.sections ?? [])
 
   return {
     artistName: artist?.name ?? '',
     intro,
-    additionalInfo: nonEmpty(artist?.additionalInfo) ? artist!.additionalInfo! : null,
-    sections,
+    additionalInfo: nonEmpty(artist?.additionalInfo) ? artist.additionalInfo : null,
+    sections: sections.map(toSection),
   }
 }
 ```
@@ -1225,21 +1219,33 @@ export async function getArtistPage(artistId: string) {
 
 ```ts
 // lib/sanity/image.ts
-import {createImageUrlBuilder} from '@sanity/image-url'
+import {createImageUrlBuilder, type SanityImageSource} from '@sanity/image-url'
 import {dataset, projectId} from '@/sanity/env'
 
 const builder = createImageUrlBuilder({projectId, dataset})
-export const urlFor = (source: Parameters<typeof builder.image>[0]) => builder.image(source).auto('format')
+
+export const urlFor = (source: SanityImageSource) => builder.image(source).auto('format')
 ```
 
 ```ts
 // next.config.ts
 import type {NextConfig} from 'next'
 
-const config: NextConfig = {
-  images: {remotePatterns: [{protocol: 'https', hostname: 'cdn.sanity.io'}]},
+const nextConfig: NextConfig = {
+  cacheComponents: true,
+  partialPrefetching: true,
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'cdn.sanity.io',
+        pathname: `/images/${process.env.NEXT_PUBLIC_SANITY_PROJECT_ID}/**`,
+      },
+    ],
+  },
 }
-export default config
+
+export default nextConfig
 ```
 
 ---
@@ -2288,15 +2294,19 @@ export function Intro({value}: {value: PortableTextBlock[]}) {
 
 ```ts
 // lib/format.ts
-const TZ = 'America/New_York' // fixed so server output is deterministic
+const TIME_ZONE = 'America/New_York'
 
-const date = new Intl.DateTimeFormat('en-US', {month: 'short', day: 'numeric', year: 'numeric', timeZone: TZ})
-const time = new Intl.DateTimeFormat('en-US', {hour: 'numeric', minute: '2-digit', timeZone: TZ})
+const dateFormat = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: TIME_ZONE,
+})
+const timeFormat = new Intl.DateTimeFormat('en-US', {hour: 'numeric', minute: '2-digit', timeZone: TIME_ZONE})
 
-/** "Added on May 16, 2025 at 12:08 PM" */
 export function formatAddedOn(iso: string) {
-  const d = new Date(iso)
-  return `Added on ${date.format(d)} at ${time.format(d)}`
+  const date = new Date(iso)
+  return `Added on ${dateFormat.format(date)} at ${timeFormat.format(date)}`
 }
 ```
 
@@ -3056,18 +3066,20 @@ Also found: `.env.local` only has the two Supabase values. The rest of §4.1 (`N
 
 ---
 
-### Phase 5: Server data layer
+### Phase 5: Server data layer ✅ Complete
 
-- [ ] **5.1** `lib/sanity/client.ts`: private client with token, `useCdn: false`, `perspective: 'published'` (§7.1).
-- [ ] **5.2** `lib/sanity/fetch.ts`: `sanityFetch` with `'use cache'`, `cacheLife('max')` and type tags via `cacheTag` (§7.1).
-- [ ] **5.3** `lib/sanity/queries.ts`: `ACCESS_QUERY`, resource and section projections, `ARTIST_PAGE_QUERY` (§7.2).
-- [ ] **5.4** Swap the hand-written types (§7.3) for the generated ones where they match. Keep `ResourceCardData` and `SectionData` as named exports either way.
-- [ ] **5.5** `lib/sanity/page.ts`: `getArtistPage` with the override rules (intro override, sections REPLACE) and dangling-reference filtering (§7.4).
-- [ ] **5.6** `lib/sanity/image.ts` + `images.remotePatterns` for `cdn.sanity.io` in `next.config.ts` (§7.5). Confirm the `@sanity/image-url` export name for the installed version.
-- [ ] **5.7** `lib/format.ts`: `formatAddedOn` in America/New_York (§11.4). Unit test: `2025-05-16T16:08:00Z` → `Added on May 16, 2025 at 12:08 PM`.
-- [ ] **5.8** Unit-test `getArtistPage`'s override logic with a mocked `sanityFetch`: no override, intro override only, section override only, empty arrays treated as "no override", null references dropped.
+- [x] **5.1** `lib/sanity/client.ts`: private client with token, `useCdn: false`, `perspective: 'published'` (§7.1).
+- [x] **5.2** `lib/sanity/fetch.ts`: `sanityFetch` with `'use cache'`, `cacheLife('max')` and type tags via `cacheTag` (§7.1).
+- [x] **5.3** `lib/sanity/queries.ts`: `ACCESS_QUERY`, resource and section projections, `ARTIST_PAGE_QUERY` (§7.2).
+- [x] **5.4** Swap the hand-written types (§7.3) for the generated ones where they match. Keep `ResourceCardData` and `SectionData` as named exports either way.
+- [x] **5.5** `lib/sanity/page.ts`: `getArtistPage` with the override rules (intro override, sections REPLACE) and dangling-reference filtering (§7.4).
+- [x] **5.6** `lib/sanity/image.ts` + `images.remotePatterns` for `cdn.sanity.io` in `next.config.ts` (§7.5). Confirm the `@sanity/image-url` export name for the installed version.
+- [x] **5.7** `lib/format.ts`: `formatAddedOn` in America/New_York (§11.4). Unit test: `2025-05-16T16:08:00Z` → `Added on May 16, 2025 at 12:08 PM`.
+- [x] **5.8** Unit-test `getArtistPage`'s override logic with a mocked `sanityFetch`: no override, intro override only, section override only, empty arrays treated as "no override", null references dropped.
 
 **Done when:** a temporary server component can print the resolved data for `test-artist` and `test-override`, and the override unit tests pass.
+
+✅ Verified: a temporary server component rendered both artists correctly (global layout vs. intro/info/section overrides) in dev, and prerendered statically in a production build through `'use cache'` (Revalidate 30d / Expire 1y = `cacheLife('max')`). It was deleted afterwards. 39 unit tests pass. Dangling references are filtered in GROQ (`[defined(@->_id)]`), because typegen types resolved references as non-null.
 
 ---
 
