@@ -2,6 +2,7 @@ import {DocumentIcon} from '@sanity/icons/Document'
 import {createImageUrlBuilder} from '@sanity/image-url'
 import {defineField, defineType, type FileValue, type ImageValue, type SanityDocument} from 'sanity'
 import {apiVersion, dataset, projectId} from '../env'
+import {PdfPreviewInput} from '../components/PdfPreviewInput'
 
 export const RESOURCE_TYPES = [
   {title: 'PDF', value: 'pdf'},
@@ -27,6 +28,13 @@ const MIME_RULES: Record<ResourceType, (mime: string) => boolean> = {
   video: (m) => m.startsWith('video/'),
   slides: (m) => SLIDE_MIME_TYPES.has(m),
   link: () => false,
+}
+
+const FILE_LABELS: Record<ResourceType, string> = {
+  pdf: 'PDF',
+  video: 'video',
+  slides: 'slide deck (PDF, PowerPoint, or Keynote)',
+  link: 'link',
 }
 
 type ResourceDocument = SanityDocument & {
@@ -62,7 +70,7 @@ export const resource = defineType({
       name: 'file',
       type: 'file',
       description:
-        'Upload the PDF, video, or slide deck. Videos: MP4 (H.264), 1080p max, to keep storage and bandwidth down.',
+        'Upload the PDF, video, or slide deck. For videos, export as MP4 at 1080p or smaller to keep file sizes down.',
       hidden: ({document}) => document?.type === 'link',
       validation: (rule) =>
         rule.custom<FileValue>(async (file, context) => {
@@ -72,7 +80,7 @@ export const resource = defineType({
           const mime = await context.getClient({apiVersion}).fetch<string | null>('*[_id == $ref][0].mimeType', {ref})
           return mime && MIME_RULES[type](mime)
             ? true
-            : `This file (${mime ?? 'unknown type'}) doesn't match the "${type}" resource type.`
+            : `This file isn't a ${FILE_LABELS[type]} (it's ${mime ?? 'an unknown type'}). Upload the right file or change the Type above.`
         }),
     }),
     defineField({
@@ -98,6 +106,8 @@ export const resource = defineType({
       type: 'image',
       description: 'Generated automatically when you upload a PDF. Only used when there is no cover photo.',
       hidden: ({document}) => document?.type !== 'pdf',
+      components: {input: PdfPreviewInput},
+      fields: [defineField({name: 'source', title: 'Generated from file', type: 'string', hidden: true})],
     }),
     defineField({
       name: 'addedOn',
@@ -116,7 +126,7 @@ export const resource = defineType({
       const hasUrl = Boolean(doc.url)
       if (doc.type === 'pdf' && !hasFile) return 'Upload a PDF.'
       if (doc.type === 'video' && !hasFile) return 'Upload the video file.'
-      if (doc.type === 'link' && !hasUrl) return 'Add a link URL.'
+      if (doc.type === 'link' && !hasUrl) return 'Add the link URL.'
       if (doc.type === 'slides' && !hasFile && !hasUrl) return 'Upload the deck or add a link.'
       if (doc.type === 'slides' && hasFile && hasUrl) return 'Use either an upload or a link, not both.'
       return true

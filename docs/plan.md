@@ -228,18 +228,27 @@ export const apiVersion = '2025-02-19'
 ```ts
 // lib/slug.ts
 export const RESERVED_SLUGS = new Set([
-  'studio', 'login', 'logout', 'auth', 'api', 'account', 'admin',
-  '_next', 'static', 'favicon.ico', 'robots.txt', 'sitemap.xml',
+  'studio',
+  'login',
+  'logout',
+  'auth',
+  'api',
+  'account',
+  'admin',
+  '_next',
+  'static',
+  'favicon.ico',
+  'robots.txt',
+  'sitemap.xml',
 ])
 
-/** "Beyoncé & The Band!" -> "beyonce-and-the-band" */
 export function slugify(input: string): string {
   return input
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '') // strip accents
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/&/g, ' and ')
-    .replace(/['’]/g, '')            // "Guns N' Roses" -> "guns-n-roses"
+    .replace(/['’]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 64)
@@ -253,7 +262,7 @@ export const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 ```ts
 // sanity/schemaTypes/blockContent.ts
-import {defineArrayMember, defineType} from 'sanity'
+import {defineArrayMember, defineField, defineType} from 'sanity'
 
 export const blockContent = defineType({
   name: 'blockContent',
@@ -276,12 +285,19 @@ export const blockContent = defineType({
           {title: 'Italic', value: 'em'},
         ],
         annotations: [
-          {
+          defineArrayMember({
             name: 'link',
             type: 'object',
             title: 'Link',
-            fields: [{name: 'href', type: 'url', validation: (r) => r.required().uri({scheme: ['http', 'https', 'mailto']})}],
-          },
+            fields: [
+              defineField({
+                name: 'href',
+                title: 'URL',
+                type: 'url',
+                validation: (rule) => rule.required().uri({scheme: ['http', 'https', 'mailto']}),
+              }),
+            ],
+          }),
         ],
       },
     }),
@@ -293,9 +309,10 @@ export const blockContent = defineType({
 
 ```ts
 // sanity/schemaTypes/resource.ts
-import {defineField, defineType} from 'sanity'
 import {DocumentIcon} from '@sanity/icons/Document'
-import {apiVersion} from '../env'
+import {createImageUrlBuilder} from '@sanity/image-url'
+import {defineField, defineType, type FileValue, type ImageValue, type SanityDocument} from 'sanity'
+import {apiVersion, dataset, projectId} from '../env'
 import {PdfPreviewInput} from '../components/PdfPreviewInput'
 
 export const RESOURCE_TYPES = [
@@ -304,18 +321,43 @@ export const RESOURCE_TYPES = [
   {title: 'Link (pitch forms, external pages)', value: 'link'},
   {title: 'Slide deck', value: 'slides'},
 ] as const
+
 export type ResourceType = (typeof RESOURCE_TYPES)[number]['value']
+
+const resourceTypeOf = (doc: SanityDocument | undefined): ResourceType | undefined =>
+  RESOURCE_TYPES.find((t) => t.value === doc?.type)?.value
+
+const SLIDE_MIME_TYPES = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.apple.keynote',
+])
 
 const MIME_RULES: Record<ResourceType, (mime: string) => boolean> = {
   pdf: (m) => m === 'application/pdf',
   video: (m) => m.startsWith('video/'),
-  slides: (m) =>
-    m === 'application/pdf' ||
-    m === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
-    m === 'application/vnd.ms-powerpoint' ||
-    m === 'application/vnd.apple.keynote',
+  slides: (m) => SLIDE_MIME_TYPES.has(m),
   link: () => false,
 }
+
+const FILE_LABELS: Record<ResourceType, string> = {
+  pdf: 'PDF',
+  video: 'video',
+  slides: 'slide deck (PDF, PowerPoint, or Keynote)',
+  link: 'link',
+}
+
+type ResourceDocument = SanityDocument & {
+  type?: ResourceType
+  file?: FileValue
+  url?: string
+}
+
+const imageBuilder = createImageUrlBuilder({projectId, dataset})
+
+const thumbnailUrl = (image: ImageValue | undefined) =>
+  image?.asset ? imageBuilder.image(image.asset).width(120).height(120).fit('max').url() : undefined
 
 export const resource = defineType({
   name: 'resource',
@@ -326,31 +368,30 @@ export const resource = defineType({
     defineField({
       name: 'title',
       type: 'string',
-      validation: (r) => r.required().max(120),
+      validation: (rule) => rule.required().max(120),
     }),
     defineField({
       name: 'type',
       type: 'string',
       options: {list: [...RESOURCE_TYPES], layout: 'radio'},
       initialValue: 'pdf',
-      validation: (r) => r.required(),
+      validation: (rule) => rule.required(),
     }),
     defineField({
       name: 'file',
       type: 'file',
-      description: 'Upload the PDF, video, or slide deck. Videos: MP4 (H.264), 1080p max, to keep storage and bandwidth down.',
+      description:
+        'Upload the PDF, video, or slide deck. For videos, export as MP4 at 1080p or smaller to keep file sizes down.',
       hidden: ({document}) => document?.type === 'link',
-      validation: (r) =>
-        r.custom(async (file, ctx) => {
-          const type = ctx.document?.type as ResourceType | undefined
-          const ref = (file as {asset?: {_ref?: string}} | undefined)?.asset?._ref
+      validation: (rule) =>
+        rule.custom<FileValue>(async (file, context) => {
+          const type = resourceTypeOf(context.document)
+          const ref = file?.asset?._ref
           if (!type || type === 'link' || !ref) return true
-          const mime = await ctx
-            .getClient({apiVersion})
-            .fetch<string | null>('*[_id == $ref][0].mimeType', {ref})
+          const mime = await context.getClient({apiVersion}).fetch<string | null>('*[_id == $ref][0].mimeType', {ref})
           return mime && MIME_RULES[type](mime)
             ? true
-            : `This file (${mime ?? 'unknown type'}) doesn't match the "${type}" resource type.`
+            : `This file isn't a ${FILE_LABELS[type]} (it's ${mime ?? 'an unknown type'}). Upload the right file or change the Type above.`
         }),
     }),
     defineField({
@@ -358,16 +399,16 @@ export const resource = defineType({
       title: 'Link URL',
       type: 'url',
       description: 'For links and pitch forms. Slide decks can use a link (e.g. Google Slides) instead of an upload.',
-      // PDFs and videos are always uploaded to Sanity (D14)
       hidden: ({document}) => document?.type === 'pdf' || document?.type === 'video',
-      validation: (r) => r.uri({scheme: ['https', 'http']}),
+      validation: (rule) => rule.uri({scheme: ['https', 'http']}),
     }),
     defineField({
       name: 'coverImage',
       title: 'Cover photo (optional)',
       type: 'image',
       options: {hotspot: true},
-      description: 'Shown on the card. If empty, PDFs use their first page and everything else uses a branded Vydia tile.',
+      description:
+        'Shown on the card. If empty, PDFs use their first page and everything else uses a branded Vydia tile.',
       fields: [defineField({name: 'alt', type: 'string', title: 'Alt text'})],
     }),
     defineField({
@@ -377,6 +418,7 @@ export const resource = defineType({
       description: 'Generated automatically when you upload a PDF. Only used when there is no cover photo.',
       hidden: ({document}) => document?.type !== 'pdf',
       components: {input: PdfPreviewInput},
+      fields: [defineField({name: 'source', title: 'Generated from file', type: 'string', hidden: true})],
     }),
     defineField({
       name: 'addedOn',
@@ -385,20 +427,19 @@ export const resource = defineType({
       description:
         'Shown on the card as "Added on …". Defaults to when this resource was created. Editing the resource later does NOT change it. When migrating from Seismic, set this to the original date.',
       initialValue: () => new Date().toISOString(),
-      validation: (r) => r.required(),
+      validation: (rule) => rule.required(),
     }),
   ],
-  validation: (r) =>
-    r.custom((doc) => {
-      const d = doc as {type?: ResourceType; file?: {asset?: unknown}; url?: string} | undefined
-      if (!d?.type) return true
-      const hasFile = Boolean(d.file?.asset)
-      const hasUrl = Boolean(d.url)
-      if (d.type === 'pdf' && !hasFile) return 'Upload a PDF.'
-      if (d.type === 'video' && !hasFile) return 'Upload the video file.'
-      if (d.type === 'link' && !hasUrl) return 'Add a link URL.'
-      if (d.type === 'slides' && !hasFile && !hasUrl) return 'Upload the deck or add a link.'
-      if (d.type === 'slides' && hasFile && hasUrl) return 'Use either an upload or a link, not both.'
+  validation: (rule) =>
+    rule.custom<ResourceDocument>((doc) => {
+      if (!doc?.type) return true
+      const hasFile = Boolean(doc.file?.asset)
+      const hasUrl = Boolean(doc.url)
+      if (doc.type === 'pdf' && !hasFile) return 'Upload a PDF.'
+      if (doc.type === 'video' && !hasFile) return 'Upload the video file.'
+      if (doc.type === 'link' && !hasUrl) return 'Add the link URL.'
+      if (doc.type === 'slides' && !hasFile && !hasUrl) return 'Upload the deck or add a link.'
+      if (doc.type === 'slides' && hasFile && hasUrl) return 'Use either an upload or a link, not both.'
       return true
     }),
   orderings: [
@@ -407,12 +448,24 @@ export const resource = defineType({
   ],
   preview: {
     select: {title: 'title', type: 'type', addedOn: 'addedOn', cover: 'coverImage', pdf: 'pdfPreview'},
-    prepare: ({title, type, addedOn, cover, pdf}) => ({
+    prepare: ({
+      title,
+      type,
+      addedOn,
+      cover,
+      pdf,
+    }: {
+      title?: string
+      type?: ResourceType
+      addedOn?: string
+      cover?: ImageValue
+      pdf?: ImageValue
+    }) => ({
       title,
       subtitle: [RESOURCE_TYPES.find((t) => t.value === type)?.title, addedOn?.slice(0, 10)]
         .filter(Boolean)
         .join(' · '),
-      media: cover ?? pdf,
+      imageUrl: thumbnailUrl(cover) ?? thumbnailUrl(pdf),
     }),
   },
 })
@@ -422,8 +475,8 @@ export const resource = defineType({
 
 ```ts
 // sanity/schemaTypes/section.ts
-import {defineArrayMember, defineField, defineType} from 'sanity'
 import {ThListIcon} from '@sanity/icons/ThList'
+import {defineArrayMember, defineField, defineType, type Reference} from 'sanity'
 
 export const section = defineType({
   name: 'section',
@@ -431,22 +484,28 @@ export const section = defineType({
   type: 'document',
   icon: ThListIcon,
   fields: [
-    defineField({name: 'title', type: 'string', validation: (r) => r.required().max(80)}),
+    defineField({
+      name: 'title',
+      type: 'string',
+      description: 'Shown as the heading above this group of cards.',
+      validation: (rule) => rule.required().max(80),
+    }),
     defineField({name: 'subtitle', title: 'Subtitle (optional)', type: 'text', rows: 2}),
     defineField({
       name: 'resources',
       type: 'array',
-      description: 'Drag to reorder. Cards appear on the site in this order.',
+      description:
+        'Drag to reorder. Cards appear on the site in this order. A resource only shows up on the site once it’s added to a section.',
       of: [defineArrayMember({type: 'reference', to: [{type: 'resource'}]})],
-      validation: (r) => r.unique(),
+      validation: (rule) => rule.unique(),
     }),
   ],
   preview: {
     select: {title: 'title', resources: 'resources'},
-    prepare: ({title, resources}) => ({
-      title,
-      subtitle: `${resources?.length ?? 0} resource${resources?.length === 1 ? '' : 's'}`,
-    }),
+    prepare: ({title, resources}: {title?: string; resources?: Reference[]}) => {
+      const count = resources?.length ?? 0
+      return {title, subtitle: `${count} resource${count === 1 ? '' : 's'}`}
+    },
   },
 })
 ```
@@ -455,10 +514,9 @@ export const section = defineType({
 
 ```ts
 // sanity/schemaTypes/website.ts
-import {defineArrayMember, defineField, defineType} from 'sanity'
 import {HomeIcon} from '@sanity/icons/Home'
-
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+import {defineArrayMember, defineField, defineType} from 'sanity'
+import {EMAIL_PATTERN} from './shared'
 
 export const website = defineType({
   name: 'website',
@@ -471,14 +529,15 @@ export const website = defineType({
       title: 'Intro text',
       type: 'blockContent',
       description: 'Shown on every artist page unless the artist has an intro override.',
-      validation: (r) => r.required(),
+      validation: (rule) => rule.required(),
     }),
     defineField({
       name: 'sections',
       type: 'array',
-      description: 'Default sections, in display order. Artists with a section override show their own sections instead.',
+      description:
+        'Default sections, in display order. Artists with a section override show their own sections instead.',
       of: [defineArrayMember({type: 'reference', to: [{type: 'section'}]})],
-      validation: (r) => r.required().min(1).unique(),
+      validation: (rule) => rule.required().min(1).unique(),
     }),
     defineField({
       name: 'internalViewerEmails',
@@ -489,15 +548,21 @@ export const website = defineType({
       of: [
         defineArrayMember({
           type: 'string',
-          validation: (r) =>
-            r.custom((v) =>
-              !v || (EMAIL.test(v) && v.toLowerCase().endsWith('@vydia.com'))
+          validation: (rule) =>
+            rule.custom<string>((value) =>
+              !value || (EMAIL_PATTERN.test(value.trim()) && value.trim().toLowerCase().endsWith('@vydia.com'))
                 ? true
-                : 'Must be a valid @vydia.com email',
+                : 'Use a full @vydia.com email address.',
             ),
         }),
       ],
-      validation: (r) => r.unique(),
+      validation: (rule) =>
+        rule.custom<string[]>((list) => {
+          const lower = (list ?? []).map((email) => email.trim().toLowerCase())
+          return new Set(lower).size === lower.length
+            ? true
+            : 'This email is listed twice (upper/lower case doesn’t matter).'
+        }),
     }),
   ],
   preview: {prepare: () => ({title: 'Website (global layout)'})},
@@ -508,22 +573,21 @@ export const website = defineType({
 
 ```ts
 // sanity/schemaTypes/artist.ts
-import {defineArrayMember, defineField, defineType, type SlugValidationContext} from 'sanity'
 import {UserIcon} from '@sanity/icons/User'
-import {apiVersion} from '../env'
+import {defineArrayMember, defineField, defineType, type SlugValue, type ValidationContext} from 'sanity'
 import {RESERVED_SLUGS, SLUG_PATTERN, slugify} from '../../lib/slug'
+import {apiVersion} from '../env'
+import {EMAIL_PATTERN} from './shared'
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-async function isSlugAvailable(slug: string, ctx: SlugValidationContext) {
-  const id = ctx.document?._id.replace(/^drafts\./, '')
-  return ctx.getClient({apiVersion}).fetch<boolean>(
+const isSlugAvailable = async (slug: string, context: ValidationContext) => {
+  const published = context.document?._id.replace(/^drafts\./, '') ?? ''
+  return context.getClient({apiVersion}).fetch<boolean>(
     `!defined(*[
       _type == "artist" &&
       !(_id in [$draft, $published]) &&
       (slug.current == $slug || $slug in previousSlugs)
     ][0]._id)`,
-    {draft: `drafts.${id}`, published: id, slug},
+    {draft: `drafts.${published}`, published, slug},
   )
 }
 
@@ -544,7 +608,8 @@ export const artist = defineType({
       title: 'Artist name',
       type: 'string',
       group: 'basics',
-      validation: (r) => r.required(),
+      description: 'Used to generate the URL below. Renaming the artist later does not change the URL.',
+      validation: (rule) => rule.required(),
     }),
     defineField({
       name: 'slug',
@@ -552,15 +617,17 @@ export const artist = defineType({
       type: 'slug',
       group: 'basics',
       description:
-        'welcometovydia.com/<this>. Click "Generate" after typing the name. Locked after the first publish because clients bookmark this link. Use "Change URL…" in the publish menu if you really need to change it.',
-      options: {source: 'name', slugify, isUnique: isSlugAvailable},
+        'welcometovydia.com/<this>. Click "Generate" after typing the name. Locked after the first publish because clients bookmark this link. If you really need to change it, use "Change URL…" in the "…" menu next to Publish.',
+      options: {source: 'name', slugify, isUnique: () => true},
       readOnly: ({document}) => Boolean(document?.slugLocked),
-      validation: (r) =>
-        r.required().custom((value) => {
-          const s = value?.current
-          if (!s) return true
-          if (!SLUG_PATTERN.test(s)) return 'Only lowercase letters, numbers, and single dashes.'
-          if (RESERVED_SLUGS.has(s)) return `"${s}" is reserved. Pick another URL.`
+      validation: (rule) =>
+        rule.required().custom<SlugValue>(async (value, context) => {
+          const slug = value?.current
+          if (!slug) return true
+          if (!SLUG_PATTERN.test(slug)) return 'Only lowercase letters, numbers, and single dashes.'
+          if (RESERVED_SLUGS.has(slug)) return `"${slug}" is reserved. Pick another URL.`
+          if (!(await isSlugAvailable(slug, context)))
+            return 'Another artist already uses this URL (or used it before). Pick a different one.'
           return true
         }),
     }),
@@ -575,13 +642,18 @@ export const artist = defineType({
       of: [
         defineArrayMember({
           type: 'string',
-          validation: (r) => r.custom((v) => (!v || EMAIL.test(v.trim()) ? true : 'Not a valid email')),
+          validation: (rule) =>
+            rule.custom<string>((value) =>
+              !value || EMAIL_PATTERN.test(value.trim()) ? true : 'This doesn’t look like an email address.',
+            ),
         }),
       ],
-      validation: (r) =>
-        r.custom((list) => {
-          const lower = ((list as string[] | undefined) ?? []).map((e) => e.trim().toLowerCase())
-          return new Set(lower).size === lower.length ? true : 'Duplicate email (case-insensitive)'
+      validation: (rule) =>
+        rule.custom<string[]>((list) => {
+          const lower = (list ?? []).map((email) => email.trim().toLowerCase())
+          return new Set(lower).size === lower.length
+            ? true
+            : 'This email is listed twice (upper/lower case doesn’t matter).'
         }),
     }),
     defineField({
@@ -606,13 +678,13 @@ export const artist = defineType({
       description:
         'If you add ANY sections here, they REPLACE the global sections on this artist’s page (not added to them). Leave empty to use the global sections.',
       of: [defineArrayMember({type: 'reference', to: [{type: 'section'}]})],
-      validation: (r) => r.unique(),
+      validation: (rule) => rule.unique(),
     }),
     defineField({
       name: 'customization',
       type: 'object',
       group: 'content',
-      hidden: true, // post-prototype: profile picture, background image, etc.
+      hidden: true,
       fields: [defineField({name: 'placeholder', type: 'string'})],
     }),
     defineField({
@@ -627,7 +699,7 @@ export const artist = defineType({
   ],
   preview: {
     select: {title: 'name', slug: 'slug.current', emails: 'allowedEmails'},
-    prepare: ({title, slug, emails}) => ({
+    prepare: ({title, slug, emails}: {title?: string; slug?: string; emails?: string[]}) => ({
       title,
       subtitle: `/${slug ?? '(no URL yet)'} · ${emails?.length ?? 0} allowed email(s)`,
     }),
@@ -637,13 +709,14 @@ export const artist = defineType({
 
 ```ts
 // sanity/schemaTypes/index.ts
+import type {SchemaTypeDefinition} from 'sanity'
 import {artist} from './artist'
 import {blockContent} from './blockContent'
 import {resource} from './resource'
 import {section} from './section'
 import {website} from './website'
 
-export const schemaTypes = [website, artist, section, resource, blockContent]
+export const schemaTypes: SchemaTypeDefinition[] = [website, artist, section, resource, blockContent]
 ```
 
 ### 5.7 How the model maps to the page
@@ -699,21 +772,20 @@ Resources is a single flat list (plan-review decision): no separate "Not in any 
 import {useDocumentOperation, type DocumentActionComponent} from 'sanity'
 
 export function lockSlugOnPublish(original: DocumentActionComponent): DocumentActionComponent {
-  const Action: DocumentActionComponent = (props) => {
+  const LockSlugPublishAction: DocumentActionComponent = (props) => {
     const {patch} = useDocumentOperation(props.id, props.type)
     const result = original(props)
     if (!result) return null
     return {
       ...result,
       onHandle: () => {
-        const draft = props.draft as {slugLocked?: boolean} | null
-        if (draft && !draft.slugLocked) patch.execute([{set: {slugLocked: true}}])
+        if (props.draft && props.draft.slugLocked !== true) patch.execute([{set: {slugLocked: true}}])
         result.onHandle?.()
       },
     }
   }
-  Action.action = original.action
-  return Action
+  LockSlugPublishAction.action = original.action
+  return LockSlugPublishAction
 }
 ```
 
@@ -723,15 +795,14 @@ export function lockSlugOnPublish(original: DocumentActionComponent): DocumentAc
 // sanity/actions/changeUrl.ts
 import {useState} from 'react'
 import {useDocumentOperation, type DocumentActionComponent} from 'sanity'
+import {currentSlug} from './currentSlug'
 
-type ArtistDoc = {slug?: {current?: string}; slugLocked?: boolean; previousSlugs?: string[]}
-
-export const changeUrlAction: DocumentActionComponent = (props) => {
+export const ChangeUrlAction: DocumentActionComponent = (props) => {
   const {patch} = useDocumentOperation(props.id, props.type)
   const [open, setOpen] = useState(false)
-  const doc = (props.draft ?? props.published) as ArtistDoc | null
-  const current = doc?.slug?.current
-  if (!doc?.slugLocked || !current) return null
+  const doc = props.draft ?? props.published
+  const current = currentSlug(doc)
+  if (doc?.slugLocked !== true || !current) return null
 
   return {
     label: 'Change URL…',
@@ -739,7 +810,9 @@ export const changeUrlAction: DocumentActionComponent = (props) => {
     onHandle: () => setOpen(true),
     dialog: open && {
       type: 'confirm',
+      tone: 'caution',
       message: `Clients may have bookmarked /${current}. It will keep working as a redirect to the new URL. After confirming, edit the URL field and publish.`,
+      confirmButtonText: 'Unlock URL',
       onCancel: () => setOpen(false),
       onConfirm: () => {
         patch.execute([
@@ -748,7 +821,6 @@ export const changeUrlAction: DocumentActionComponent = (props) => {
           {set: {slugLocked: false}},
         ])
         setOpen(false)
-        props.onComplete()
       },
     },
   }
@@ -759,16 +831,17 @@ export const changeUrlAction: DocumentActionComponent = (props) => {
 
 ```ts
 // sanity/actions/openSite.ts
-import type {DocumentActionComponent} from 'sanity'
 import {LaunchIcon} from '@sanity/icons/Launch'
+import type {DocumentActionComponent} from 'sanity'
+import {currentSlug} from './currentSlug'
 
-export const openSiteAction: DocumentActionComponent = (props) => {
-  const slug = (props.published as {slug?: {current?: string}} | null)?.slug?.current
-  if (!slug) return null
+export const OpenSiteAction: DocumentActionComponent = (props) => {
+  const current = currentSlug(props.published)
+  if (!current) return null
   return {
     label: 'Open site',
     icon: LaunchIcon,
-    onHandle: () => window.open(`${process.env.NEXT_PUBLIC_SITE_URL}/${slug}`, '_blank', 'noopener'),
+    onHandle: () => window.open(`${process.env.NEXT_PUBLIC_SITE_URL}/${current}`, '_blank', 'noopener'),
   }
 }
 ```
@@ -777,73 +850,95 @@ export const openSiteAction: DocumentActionComponent = (props) => {
 
 ```tsx
 // sanity/components/PdfPreviewInput.tsx
-import {useCallback, useEffect, useRef, useState} from 'react'
-import {set, useClient, useFormValue, type ObjectInputProps} from 'sanity'
 import {Button, Flex, Spinner, Stack, Text} from '@sanity/ui'
+import {useCallback, useEffect, useRef, useState} from 'react'
+import {set, useClient, useFormValue, type ImageValue, type ObjectInputProps} from 'sanity'
 import {apiVersion} from '../env'
+
+const MAX_PREVIEW_WIDTH = 1200
 
 async function renderFirstPage(url: string): Promise<Blob> {
   const pdfjs = await import('pdfjs-dist')
-  pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
-  const pdf = await pdfjs.getDocument({url}).promise
-  const page = await pdf.getPage(1)
-  const viewport = page.getViewport({scale: 1.5})
-  const canvas = document.createElement('canvas')
-  canvas.width = viewport.width
-  canvas.height = viewport.height
-  await page.render({canvas, canvasContext: canvas.getContext('2d')!, viewport}).promise
-  return new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/jpeg', 0.85),
-  )
+  const worker = new Worker(new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url), {type: 'module'})
+  pdfjs.GlobalWorkerOptions.workerPort = worker
+  const loadingTask = pdfjs.getDocument({url})
+  try {
+    const pdf = await loadingTask.promise
+    const page = await pdf.getPage(1)
+    const base = page.getViewport({scale: 1})
+    const viewport = page.getViewport({scale: Math.min(2, MAX_PREVIEW_WIDTH / base.width)})
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.floor(viewport.width)
+    canvas.height = Math.floor(viewport.height)
+    await page.render({canvas, viewport}).promise
+    return await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error('Could not encode the preview'))),
+        'image/jpeg',
+        0.85,
+      ),
+    )
+  } finally {
+    await loadingTask.destroy()
+    worker.terminate()
+  }
 }
 
-export function PdfPreviewInput(props: ObjectInputProps) {
+const errorMessage = (error: Error) =>
+  error.name === 'PasswordException'
+    ? 'This PDF is password-protected, so a preview can’t be generated. The card will use the branded tile instead.'
+    : 'Couldn’t render the PDF. The card will use the branded tile instead.'
+
+type PdfPreviewValue = ImageValue & {source?: string}
+
+export function PdfPreviewInput(props: ObjectInputProps<PdfPreviewValue>) {
   const {onChange, value, renderDefault} = props
   const client = useClient({apiVersion})
-  const fileRef = useFormValue(['file', 'asset', '_ref']) as string | undefined
-  const type = useFormValue(['type']) as string | undefined
+  const fileRefValue = useFormValue(['file', 'asset', '_ref'])
+  const typeValue = useFormValue(['type'])
+  const fileRef = typeof fileRefValue === 'string' ? fileRefValue : undefined
+  const isPdf = typeValue === 'pdf'
   const [status, setStatus] = useState<'idle' | 'working' | 'error'>('idle')
-  const seenRef = useRef(fileRef)
+  const [message, setMessage] = useState('')
+  const handledRef = useRef<string | undefined>(value?.asset && value.source === fileRef ? fileRef : undefined)
 
-  const generate = useCallback(async () => {
-    if (!fileRef) return
-    setStatus('working')
-    try {
-      const url = await client.fetch<string>('*[_id == $id][0].url', {id: fileRef})
-      const blob = await renderFirstPage(url)
-      const asset = await client.assets.upload('image', blob, {filename: 'pdf-preview.jpg'})
-      onChange(set({_type: 'image', asset: {_type: 'reference', _ref: asset._id}}))
-      setStatus('idle')
-    } catch (err) {
-      console.error(err)
-      setStatus('error')
-    }
-  }, [client, fileRef, onChange])
+  const generate = useCallback(
+    async (ref: string) => {
+      handledRef.current = ref
+      setStatus('working')
+      try {
+        const url = await client.fetch<string | null>('*[_id == $id][0].url', {id: ref})
+        if (!url) throw new Error('PDF file not found')
+        const blob = await renderFirstPage(url)
+        const asset = await client.assets.upload('image', blob, {filename: 'pdf-preview.jpg'})
+        onChange(set({_type: 'image', asset: {_type: 'reference', _ref: asset._id}, source: ref}))
+        setStatus('idle')
+      } catch (error) {
+        setMessage(errorMessage(error instanceof Error ? error : new Error(String(error))))
+        setStatus('error')
+      }
+    },
+    [client, onChange],
+  )
 
-  // Auto-generate when a PDF is present but has no preview, or when the PDF is replaced.
   useEffect(() => {
-    if (type !== 'pdf' || !fileRef) return
-    const replaced = seenRef.current !== fileRef
-    if (replaced || !value?.asset) {
-      seenRef.current = fileRef
-      void generate()
-    }
-  }, [type, fileRef]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (isPdf && fileRef && handledRef.current !== fileRef) void generate(fileRef)
+  }, [isPdf, fileRef, generate])
 
   return (
-    <Stack space={3}>
+    <Stack gap={3}>
       {renderDefault(props)}
       <Flex gap={3} align="center">
         <Button
           text={value?.asset ? 'Regenerate from PDF' : 'Generate from PDF'}
           mode="ghost"
           disabled={!fileRef || status === 'working'}
-          onClick={generate}
+          onClick={() => fileRef && void generate(fileRef)}
         />
         {status === 'working' && <Spinner muted />}
         {status === 'error' && (
           <Text size={1} muted>
-            Couldn’t render the PDF. The card will use the branded tile instead.
+            {message}
           </Text>
         )}
       </Flex>
@@ -852,22 +947,22 @@ export function PdfPreviewInput(props: ObjectInputProps) {
 }
 ```
 
-> Note: `pdfjs-dist` v5 accepts `canvas` in `render()`; older versions only take `canvasContext`. Passing both works on either. Loading the worker from unpkg avoids bundler worker-URL problems inside the embedded Studio. If Vydia prefers no third-party CDN, copy the worker into `public/` and point `workerSrc` at `/pdf.worker.min.mjs`.
+> pdf.js worker (task 3.9): loaded with `new Worker(new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url), {type: 'module'})`, so Next bundles it from the installed package. No CDN, no copied file, and the worker always matches the installed pdf.js version. Verified in `next dev` and in a production build. The preview stores the file it was made from in `pdfPreview.source`, so it regenerates whenever the PDF changes, even if the file was swapped while the form was closed. Password-protected PDFs show a clear message and fall back to the branded tile.
 
 ### 6.4 Studio config
 
 ```ts
 // sanity.config.ts
 'use client'
+import {visionTool} from '@sanity/vision'
 import {defineConfig} from 'sanity'
 import {structureTool} from 'sanity/structure'
-import {visionTool} from '@sanity/vision'
+import {ChangeUrlAction} from './sanity/actions/changeUrl'
+import {lockSlugOnPublish} from './sanity/actions/lockSlugOnPublish'
+import {OpenSiteAction} from './sanity/actions/openSite'
 import {apiVersion, dataset, projectId} from './sanity/env'
 import {schemaTypes} from './sanity/schemaTypes'
 import {structure} from './sanity/structure'
-import {lockSlugOnPublish} from './sanity/actions/lockSlugOnPublish'
-import {changeUrlAction} from './sanity/actions/changeUrl'
-import {openSiteAction} from './sanity/actions/openSite'
 
 const SINGLETONS = new Set(['website'])
 const SINGLETON_ACTIONS = new Set(['publish', 'discardChanges', 'restore'])
@@ -884,7 +979,6 @@ export default defineConfig({
   ],
   schema: {
     types: schemaTypes,
-    // No "New Website" button: there's exactly one.
     templates: (templates) => templates.filter(({schemaType}) => !SINGLETONS.has(schemaType)),
   },
   document: {
@@ -892,15 +986,15 @@ export default defineConfig({
       if (SINGLETONS.has(schemaType)) return prev.filter(({action}) => action && SINGLETON_ACTIONS.has(action))
       if (schemaType === 'artist') {
         return [
-          ...prev.map((a) => (a.action === 'publish' ? lockSlugOnPublish(a) : a)),
-          changeUrlAction,
-          openSiteAction,
+          ...prev.map((action) => (action.action === 'publish' ? lockSlugOnPublish(action) : action)),
+          ChangeUrlAction,
+          OpenSiteAction,
         ]
       }
       return prev
     },
     newDocumentOptions: (prev, {creationContext}) =>
-      creationContext.type === 'global' ? prev.filter((t) => !SINGLETONS.has(t.templateId)) : prev,
+      creationContext.type === 'global' ? prev.filter((item) => !SINGLETONS.has(item.templateId)) : prev,
   },
 })
 ```
@@ -908,9 +1002,20 @@ export default defineConfig({
 ```ts
 // sanity.cli.ts
 import {defineCliConfig} from 'sanity/cli'
+
 export default defineCliConfig({
-  api: {projectId: process.env.NEXT_PUBLIC_SANITY_PROJECT_ID, dataset: process.env.NEXT_PUBLIC_SANITY_DATASET},
-  typegen: {path: './{app,components,lib}/**/*.{ts,tsx}', generates: './lib/sanity/types.generated.ts'},
+  api: {
+    projectId: process.env.NEXT_PUBLIC_SANITY_PROJECT_ID,
+    dataset: process.env.NEXT_PUBLIC_SANITY_DATASET,
+  },
+  schemaExtraction: {
+    path: './sanity/schema.json',
+  },
+  typegen: {
+    path: './{app,components,lib}/**/*.{ts,tsx}',
+    schema: './sanity/schema.json',
+    generates: './lib/sanity/types.generated.ts',
+  },
 })
 ```
 
@@ -2889,7 +2994,7 @@ Also found: `.env.local` only has the two Supabase values. The rest of §4.1 (`N
 
 ---
 
-### Phase 2: Sanity content model
+### Phase 2: Sanity content model ✅ Complete
 
 - [x] **2.0** Decide on `cacheComponents` (turned on by the Next 16.4 scaffold in `next.config.ts`). It changes three snippets in this plan: §6.4's `export const dynamic = 'force-static'` errors under it (just remove it), §7.1's `cache: 'force-cache'` + `next.tags` still works but the native pattern is `'use cache'` + `cacheTag`, and §9.2's cookie read (`supabase.auth.getUser()`) has to sit inside a `<Suspense>` boundary or the route has to opt out with `instant = false`. Either keep it and update those snippets, or turn it off so the plan works as written. See `node_modules/next/dist/docs/01-app/02-guides/migrating-to-cache-components.md`. **Decided: keep it (D15).** Snippets in §6.4, §7.1, §8.4, §9.2 and §10 are updated.
 - [x] **2.1** `sanity.cli.ts` with project/dataset and typegen config (§6.4).
@@ -2915,37 +3020,37 @@ Also found: `.env.local` only has the two Supabase values. The rest of §4.1 (`N
 
 ---
 
-### Phase 3: Studio editor experience
+### Phase 3: Studio editor experience ✅ Complete
 
 - [x] **3.1** Desk structure, in this order: **Artists**, divider, **Resources** (one flat list of all resources), **Sections**, **Website** (singleton editor) (§6.1).
-- [ ] **3.2** Singleton guards: filter the `website` template from "new document", limit its actions to publish / discard / restore (§6.4).
-- [ ] **3.3** `lockSlugOnPublish` wrapper around the publish action (§6.2). Test: publish a new artist → slug becomes read-only.
-- [ ] **3.4** `changeUrlAction` (§6.2). Test: Change URL → old slug appears in Previous URLs → edit slug → publish → re-locks.
-- [ ] **3.5** `openSiteAction` (§6.2). Test it opens `NEXT_PUBLIC_SITE_URL/<slug>` in a new tab.
-- [ ] **3.6** `PdfPreviewInput` (§6.3): render page 1 with pdf.js, upload as an image asset, set the field.
-- [ ] **3.7** `PdfPreviewInput` behaviour: auto-generate when a PDF has no preview, regenerate when the PDF is replaced, manual button, error message on failure.
-- [ ] **3.8** Test the PDF preview with a portrait one-pager, a landscape deck exported to PDF, a large (>20 MB) PDF, and a password-protected PDF (should fail gracefully).
-- [ ] **3.9** Decide where the pdf.js worker loads from (unpkg vs copied to `public/`) and finalise it (§6.3 note).
-- [ ] **3.10** Vision tool loaded in development only.
-- [ ] **3.11** Read every field title and description aloud as a non-developer would, and rewrite anything unclear.
-- [ ] **3.12** Confirm strong references block deleting a resource that's still in a section, and a section that's still on the website or an artist.
+- [x] **3.2** Singleton guards: filter the `website` template from "new document", limit its actions to publish / discard / restore (§6.4).
+- [x] **3.3** `lockSlugOnPublish` wrapper around the publish action (§6.2). Test: publish a new artist → slug becomes read-only.
+- [x] **3.4** `ChangeUrlAction` (§6.2). Test: Change URL → old slug appears in Previous URLs → edit slug → publish → re-locks.
+- [x] **3.5** `OpenSiteAction` (§6.2). Test it opens `NEXT_PUBLIC_SITE_URL/<slug>` in a new tab.
+- [x] **3.6** `PdfPreviewInput` (§6.3): render page 1 with pdf.js, upload as an image asset, set the field.
+- [x] **3.7** `PdfPreviewInput` behaviour: auto-generate when a PDF has no preview, regenerate when the PDF is replaced, manual button, error message on failure.
+- [x] **3.8** Test the PDF preview with a portrait one-pager, a landscape deck exported to PDF, a large (>20 MB) PDF, and a password-protected PDF (should fail gracefully).
+- [x] **3.9** Decide where the pdf.js worker loads from (unpkg vs copied to `public/`) and finalise it (§6.3 note). **Decided: bundled by Next via `new Worker(new URL(…, import.meta.url))`.**
+- [x] **3.10** Vision tool loaded in development only.
+- [x] **3.11** Read every field title and description aloud as a non-developer would, and rewrite anything unclear.
+- [x] **3.12** Confirm strong references block deleting a resource that's still in a section, and a section that's still on the website or an artist.
 
 **Done when:** you can run Flow 1 (create a microsite) and Flow 2 (edit resources → sections → website) from the research end to end in Studio without touching code, and the slug lock / Change URL / PDF preview all behave as specified.
 
 ---
 
-### Phase 4: Seed and test content
+### Phase 4: Seed and test content ✅ Complete
 
-- [ ] **4.1** Write `scripts/seed.ts` (§12) and run `npx sanity exec scripts/seed.ts --with-user-token`.
-- [ ] **4.2** Confirm in Studio: the Website singleton has the intro text from the reference, plus the three sections in order.
-- [ ] **4.3** Create test resources covering every case: PDF with cover, PDF without cover (auto preview), uploaded video, link (pitch form), slide deck as upload, slide deck as link, resource with a long title.
-- [ ] **4.4** Add the test resources to the three sections.
-- [ ] **4.5** Create test artists:
+- [x] **4.1** Write `scripts/seed.ts` (§12) and run `npx sanity exec scripts/seed.ts --with-user-token`.
+- [x] **4.2** Confirm in Studio: the Website singleton has the intro text from the reference, plus the three sections in order.
+- [x] **4.3** Create test resources covering every case: PDF with cover, PDF without cover (auto preview), uploaded video, link (pitch form), slide deck as upload, slide deck as link, resource with a long title.
+- [x] **4.4** Add the test resources to the three sections.
+- [x] **4.5** Create test artists:
   - `test-artist`: default layout, your personal email allowed.
   - `test-override`: intro override, additional info, section override with one artist-specific section.
   - `test-renamed`: published, then renamed via Change URL (so it has a previous slug).
-- [ ] **4.6** Create one resource that's in no section, and confirm it shows up in Resources but on no artist page.
-- [ ] **4.7** Run `npx sanity typegen generate` and commit `lib/sanity/types.generated.ts`.
+- [x] **4.6** Create one resource that's in no section, and confirm it shows up in Resources but on no artist page.
+- [x] **4.7** Run `npx sanity typegen generate` and commit `lib/sanity/types.generated.ts`. ✅ Generated (20 schema types; queries are added in Phase 5). Regenerate with `npm run typegen` (`sanity schema extract --force && sanity typegen generate`). Generated together with `sanity/schema.json`; both are ready to commit.
 
 **Done when:** the dataset contains every content shape the site has to render, and the generated types compile.
 

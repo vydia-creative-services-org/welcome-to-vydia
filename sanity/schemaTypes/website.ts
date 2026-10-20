@@ -36,14 +36,16 @@ export const website = defineType({
             rule.custom<string>((value) =>
               !value || (EMAIL_PATTERN.test(value.trim()) && value.trim().toLowerCase().endsWith('@vydia.com'))
                 ? true
-                : 'Must be a valid @vydia.com email',
+                : 'Use a full @vydia.com email address.',
             ),
         }),
       ],
       validation: (rule) =>
         rule.custom<string[]>((list) => {
           const lower = (list ?? []).map((email) => email.trim().toLowerCase())
-          return new Set(lower).size === lower.length ? true : 'Duplicate email (case-insensitive)'
+          return new Set(lower).size === lower.length
+            ? true
+            : 'This email is listed twice (upper/lower case doesn’t matter).'
         }),
     }),
   ],

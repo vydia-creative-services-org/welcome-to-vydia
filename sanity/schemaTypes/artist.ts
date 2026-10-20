@@ -1,10 +1,10 @@
 import {UserIcon} from '@sanity/icons/User'
-import {defineArrayMember, defineField, defineType, type SlugIsUniqueValidator, type SlugValue} from 'sanity'
+import {defineArrayMember, defineField, defineType, type SlugValue, type ValidationContext} from 'sanity'
 import {RESERVED_SLUGS, SLUG_PATTERN, slugify} from '../../lib/slug'
 import {apiVersion} from '../env'
 import {EMAIL_PATTERN} from './shared'
 
-const isSlugAvailable: SlugIsUniqueValidator = async (slug, context) => {
+const isSlugAvailable = async (slug: string, context: ValidationContext) => {
   const published = context.document?._id.replace(/^drafts\./, '') ?? ''
   return context.getClient({apiVersion}).fetch<boolean>(
     `!defined(*[
@@ -33,6 +33,7 @@ export const artist = defineType({
       title: 'Artist name',
       type: 'string',
       group: 'basics',
+      description: 'Used to generate the URL below. Renaming the artist later does not change the URL.',
       validation: (rule) => rule.required(),
     }),
     defineField({
@@ -41,15 +42,17 @@ export const artist = defineType({
       type: 'slug',
       group: 'basics',
       description:
-        'welcometovydia.com/<this>. Click "Generate" after typing the name. Locked after the first publish because clients bookmark this link. Use "Change URL…" in the publish menu if you really need to change it.',
-      options: {source: 'name', slugify, isUnique: isSlugAvailable},
+        'welcometovydia.com/<this>. Click "Generate" after typing the name. Locked after the first publish because clients bookmark this link. If you really need to change it, use "Change URL…" in the "…" menu next to Publish.',
+      options: {source: 'name', slugify, isUnique: () => true},
       readOnly: ({document}) => Boolean(document?.slugLocked),
       validation: (rule) =>
-        rule.required().custom<SlugValue>((value) => {
+        rule.required().custom<SlugValue>(async (value, context) => {
           const slug = value?.current
           if (!slug) return true
           if (!SLUG_PATTERN.test(slug)) return 'Only lowercase letters, numbers, and single dashes.'
           if (RESERVED_SLUGS.has(slug)) return `"${slug}" is reserved. Pick another URL.`
+          if (!(await isSlugAvailable(slug, context)))
+            return 'Another artist already uses this URL (or used it before). Pick a different one.'
           return true
         }),
     }),
@@ -65,13 +68,17 @@ export const artist = defineType({
         defineArrayMember({
           type: 'string',
           validation: (rule) =>
-            rule.custom<string>((value) => (!value || EMAIL_PATTERN.test(value.trim()) ? true : 'Not a valid email')),
+            rule.custom<string>((value) =>
+              !value || EMAIL_PATTERN.test(value.trim()) ? true : 'This doesn’t look like an email address.',
+            ),
         }),
       ],
       validation: (rule) =>
         rule.custom<string[]>((list) => {
           const lower = (list ?? []).map((email) => email.trim().toLowerCase())
-          return new Set(lower).size === lower.length ? true : 'Duplicate email (case-insensitive)'
+          return new Set(lower).size === lower.length
+            ? true
+            : 'This email is listed twice (upper/lower case doesn’t matter).'
         }),
     }),
     defineField({
