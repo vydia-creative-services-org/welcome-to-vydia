@@ -131,8 +131,13 @@
     scale(calc(1 - var(--ac) * (1 - var(--side-scale))));
   opacity: clamp(0, calc(var(--visible) + 1 - var(--a)), 1);
   border-radius: var(--radius-md);
-  box-shadow: 0 20px 40px rgb(0 0 0 / 0.45);
   will-change: transform;
+}
+
+/* The shadow lives on the card (not the slide) so it travels with it during the view switch. */
+.card {
+  border-radius: var(--radius-md);
+  box-shadow: 0 20px 40px rgb(0 0 0 / 0.45);
 }
 
 .scroller:focus-visible .slide[aria-hidden='false'] {

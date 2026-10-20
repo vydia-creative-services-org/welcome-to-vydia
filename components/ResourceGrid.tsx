@@ -28,7 +28,7 @@ export function ResourceGrid({
         <section aria-label="Resources">
           <ul className={styles.grid}>
             {resources.map((resource) => (
-              <li key={resource._id} className={styles.item}>
+              <li key={resource._id} className={styles.item} data-morph-id={resource._id}>
                 <ResourceCard resource={resource} />
               </li>
             ))}

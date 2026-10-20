@@ -147,7 +147,12 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
                 aria-hidden={!isActive}
                 style={{'--i': index, zIndex: resources.length - Math.abs(index - current)} as React.CSSProperties}
               >
-                <div inert={!isActive}>
+                <div
+                  inert={!isActive}
+                  className={styles.card}
+                  data-morph-id={resource._id}
+                  data-morph-depth={Math.abs(index - current)}
+                >
                   <ResourceCard resource={resource} hideTitle />
                 </div>
                 {!isActive && (

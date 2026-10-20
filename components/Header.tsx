@@ -7,7 +7,8 @@ export function Header() {
   const viewMode = useViewMode()
 
   return (
-    <header className={styles.header}>
+    // Named so view transitions keep it pinned above the moving cards (see globals.css).
+    <header className={styles.header} style={{viewTransitionName: 'site-header'}}>
       <span className={styles.text}>Welcome to Vydia</span>
 
       {viewMode && (
