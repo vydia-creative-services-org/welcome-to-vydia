@@ -18,7 +18,8 @@ const GESTURE_END_MS = 200
  * cover-flow transforms are derived from it, so cards track the user's scroll continuously.
  */
 export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
-  const [current, setCurrent] = useState(0)
+  // `dir` is which way we last moved (1 = next, -1 = previous), so the title can enter from that side.
+  const [{index: current, dir}, setActive] = useState({index: 0, dir: 1})
   const scroller = useRef<HTMLDivElement>(null)
   const stage = useRef<HTMLDivElement>(null)
   const cell = useRef(1)
@@ -36,7 +37,8 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
     const sync = () => {
       const pos = Math.min(last, Math.max(0, el.scrollTop / cell.current))
       stage.current?.style.setProperty('--pos', String(pos))
-      setCurrent(Math.round(pos))
+      const index = Math.round(pos)
+      setActive((prev) => (prev.index === index ? prev : {index, dir: Math.sign(index - prev.index)}))
     }
     const measure = () => {
       const second = el.querySelector<HTMLElement>('[data-snap="1"]')
@@ -149,7 +151,10 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
       </div>
 
       <h2 className={styles.title} aria-live="polite">
-        {activeResource.title}
+        {/* Keyed so each new title remounts and replays its entrance. */}
+        <span key={current} className={styles.titleText} style={{'--dir': dir} as React.CSSProperties}>
+          {activeResource.title}
+        </span>
       </h2>
     </section>
   )

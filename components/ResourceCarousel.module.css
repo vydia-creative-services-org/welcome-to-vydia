@@ -125,6 +125,13 @@
   pointer-events: none;
 }
 
+.titleText {
+  --enter-from: translateX(calc(var(--dir) * 14px));
+
+  display: inline-block;
+  animation: title-in 320ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
 @media (max-width: 768px) {
   .carousel {
     --card: min(62vw, 300px);
@@ -140,12 +147,16 @@
 
   .slide {
     top: calc(50% + (72px - 100px) / 2);
-    transform: translate(-50%, -50%) translateY(var(--shift)) rotateX(calc(var(--c) * var(--tilt) * -1))
+    transform: translate(-50%, -50%) translateY(var(--shift)) rotateX(calc(var(--c) * var(--tilt)))
       scale(calc(1 - var(--ac) * (1 - var(--side-scale))));
   }
 
   .title {
     bottom: var(--space-10);
+  }
+
+  .titleText {
+    --enter-from: translateY(calc(var(--dir) * 10px));
   }
 }
 
@@ -155,8 +166,17 @@
   }
 }
 
+@keyframes title-in {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+    transform: var(--enter-from);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .backdropImage {
+  .backdropImage,
+  .titleText {
     animation: none;
   }
 }
