@@ -4,11 +4,25 @@
   gap: var(--space-10);
   max-width: var(--content-width);
   margin: 0 auto;
-  padding: 0;
+  padding: 48px;
 }
 
 @media (min-width: 640px) {
   .shell {
     padding: 0;
   }
+}
+
+.fullscreen {
+  height: 100dvh;
+  max-width: none;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* No document scrolling (or iOS rubber-banding) while a fullscreen shell is mounted. */
+:global(html):has(.fullscreen),
+:global(body):has(.fullscreen) {
+  overflow: hidden;
+  overscroll-behavior: none;
 }

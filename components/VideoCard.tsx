@@ -6,7 +6,7 @@ import {CardBody} from './CardBody'
 import cardStyles from './ResourceCard.module.css'
 import styles from './VideoCard.module.css'
 
-export function VideoCard({resource, src}: {resource: ResourceCardData; src: string}) {
+export function VideoCard({resource, src, hideTitle}: {resource: ResourceCardData; src: string; hideTitle?: boolean}) {
   const dialog = useRef<HTMLDialogElement>(null)
   const video = useRef<HTMLVideoElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -24,7 +24,7 @@ export function VideoCard({resource, src}: {resource: ResourceCardData; src: str
   return (
     <>
       <button ref={trigger} type="button" className={cardStyles.card} onClick={open} aria-haspopup="dialog">
-        <CardBody resource={resource} />
+        <CardBody resource={resource} hideTitle={hideTitle} />
       </button>
       <dialog ref={dialog} onClose={handleClose} className={styles.dialog} aria-label={resource.title}>
         <button type="button" onClick={() => dialog.current?.close()} className={styles.close} aria-label="Close video">
