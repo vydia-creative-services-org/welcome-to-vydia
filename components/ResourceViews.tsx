@@ -1,8 +1,7 @@
 'use client'
 import type {ResourceCardData} from '@/lib/sanity/types'
-import {ResourceCard} from './ResourceCard'
 import {ResourceCarousel} from './ResourceCarousel'
-import styles from './ResourceViews.module.css'
+import {ResourceGrid} from './ResourceGrid'
 import {useViewMode} from './ViewMode'
 
 export function ResourceViews({
@@ -16,26 +15,7 @@ export function ResourceViews({
   const viewMode = useViewMode()
   if (!resources.length) return null
 
-  if (viewMode?.view === 'grid') {
-    return (
-      <div className={styles.gridScroller}>
-        <section aria-label="Resources">
-          <ul className={styles.grid}>
-            {resources.map((resource) => (
-              <li key={resource._id} className={styles.item}>
-                <ResourceCard resource={resource} />
-              </li>
-            ))}
-          </ul>
-        </section>
-        {additionalInfo && (
-          <section aria-label="Additional information" className={styles.additionalInfo}>
-            {additionalInfo}
-          </section>
-        )}
-      </div>
-    )
-  }
+  if (viewMode?.view === 'grid') return <ResourceGrid resources={resources} additionalInfo={additionalInfo} />
 
   return <ResourceCarousel resources={resources} />
 }

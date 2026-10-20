@@ -1,10 +1,20 @@
 'use client'
-import Image from 'next/image'
-import {useEffect, useRef, useState} from 'react'
+import {useEffect, useEffectEvent, useRef, useState} from 'react'
 import {coverSource, urlFor} from '@/lib/sanity/image'
 import type {ResourceCardData} from '@/lib/sanity/types'
 import styles from './ResourceCarousel.module.css'
 import {ResourceCard} from './ResourceCard'
+import {useScrollInertia} from './useScrollInertia'
+
+/** Backdrop layers kept mounted so outgoing ones can finish fading while new ones fade in. */
+const MAX_BACKDROP_LAYERS = 4
+
+/** The cover's tiny blurred placeholder ships with the page, so the backdrop never waits on a download. */
+function backdropSrc(resource: ResourceCardData): string | null {
+  const source = resource.cover && coverSource(resource.cover)
+  if (!source) return null
+  return resource.cover?.asset?.lqip ?? urlFor(source).width(64).height(64).fit('crop').url()
+}
 
 /** Accumulated horizontal wheel distance that counts as one sideways swipe. */
 const SWIPE_THRESHOLD = 30
@@ -18,11 +28,21 @@ const GESTURE_END_MS = 200
  * cover-flow transforms are derived from it, so cards track the user's scroll continuously.
  */
 export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
-  // `dir` is which way we last moved (1 = next, -1 = previous), so the title can enter from that side.
-  const [{index: current, dir}, setActive] = useState({index: 0, dir: 1})
+  const [current, setCurrent] = useState(0)
   const scroller = useRef<HTMLDivElement>(null)
   const stage = useRef<HTMLDivElement>(null)
   const cell = useRef(1)
+  // The eased scrollTop the visuals are currently drawn at (see useScrollInertia).
+  const drawnY = useRef(0)
+
+  const draw = (y: number) => {
+    drawnY.current = y
+    const pos = Math.min(resources.length - 1, Math.max(0, y / cell.current))
+    stage.current?.style.setProperty('--pos', String(pos))
+    setCurrent(Math.round(pos))
+  }
+  useScrollInertia(scroller, draw)
+  const redraw = useEffectEvent(() => draw(drawnY.current))
 
   const scrollToIndex = (index: number) => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -34,16 +54,10 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
     if (!el) return
     const last = resources.length - 1
 
-    const sync = () => {
-      const pos = Math.min(last, Math.max(0, el.scrollTop / cell.current))
-      stage.current?.style.setProperty('--pos', String(pos))
-      const index = Math.round(pos)
-      setActive((prev) => (prev.index === index ? prev : {index, dir: Math.sign(index - prev.index)}))
-    }
     const measure = () => {
       const second = el.querySelector<HTMLElement>('[data-snap="1"]')
       cell.current = second?.offsetTop || 1
-      sync()
+      redraw()
     }
 
     // Vertical scrolling is native. Sideways trackpad swipes have no native axis to scroll, so each
@@ -70,12 +84,10 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
 
     const observer = new ResizeObserver(measure)
     observer.observe(el)
-    el.addEventListener('scroll', sync, {passive: true})
     el.addEventListener('wheel', onWheel, {passive: false})
     return () => {
       clearTimeout(gestureTimer)
       observer.disconnect()
-      el.removeEventListener('scroll', sync)
       el.removeEventListener('wheel', onWheel)
     }
   }, [resources.length])
@@ -89,22 +101,31 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
   }
 
   const activeResource = resources[current]
-  const backdrop = activeResource.cover && coverSource(activeResource.cover)
+
+  // Crossfade: each newly active resource adds a layer on top; older layers fade out underneath.
+  // Updating state during render (rather than in an effect) avoids a frame with the wrong layer.
+  // `n` keys each layer, since A → B → A can briefly mount two layers for the same resource.
+  const [backdrops, setBackdrops] = useState(() => [{id: activeResource._id, n: 0, src: backdropSrc(activeResource)}])
+  const top = backdrops[backdrops.length - 1]
+  if (top.id !== activeResource._id) {
+    setBackdrops([
+      ...backdrops.slice(1 - MAX_BACKDROP_LAYERS),
+      {id: activeResource._id, n: top.n + 1, src: backdropSrc(activeResource)},
+    ])
+  }
 
   return (
     <section aria-roledescription="carousel" aria-label="Resources" className={styles.carousel}>
-      {backdrop && (
-        <div className={styles.backdrop} aria-hidden>
-          <Image
-            key={activeResource._id}
-            src={urlFor(backdrop).width(200).height(200).fit('crop').url()}
-            alt=""
-            fill
-            sizes="200px"
-            className={styles.backdropImage}
+      <div className={styles.backdrop} aria-hidden>
+        {backdrops.map((layer, index) => (
+          <div
+            key={layer.n}
+            className={styles.backdropLayer}
+            data-active={index === backdrops.length - 1 || undefined}
+            style={layer.src ? {backgroundImage: `url("${layer.src}")`} : undefined}
           />
-        </div>
-      )}
+        ))}
+      </div>
 
       <div
         ref={scroller}
@@ -152,7 +173,7 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
 
       <h2 className={styles.title} aria-live="polite">
         {/* Keyed so each new title remounts and replays its entrance. */}
-        <span key={current} className={styles.titleText} style={{'--dir': dir} as React.CSSProperties}>
+        <span key={current} className={styles.titleText}>
           {activeResource.title}
         </span>
       </h2>
