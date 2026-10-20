@@ -25,10 +25,11 @@
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
+  --space-8: 32px;
   --space-10: 40px;
   --space-16: 64px;
 
-  --content-width: 1150px;
+  --content-width: 1600px;
 
   --font-sans: var(--font-public-sans), ui-sans-serif, system-ui, sans-serif;
 

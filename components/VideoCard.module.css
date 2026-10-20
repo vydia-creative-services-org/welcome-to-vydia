@@ -1,0 +1,35 @@
+.dialog {
+  width: min(960px, 92vw);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
+  border: 0;
+  border-radius: var(--radius-lg);
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 0.7);
+}
+
+.close {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: 1;
+  padding: var(--space-1);
+  background: none;
+  border: 0;
+  color: #fff;
+  cursor: pointer;
+}
+
+.close:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}

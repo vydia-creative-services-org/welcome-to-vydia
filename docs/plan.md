@@ -41,7 +41,7 @@ The security rule that drives most of the design: an unknown slug and a known sl
 | D12 | **No Tailwind. Styling is CSS Modules**: each component has a co-located `Component.module.css`, and one global stylesheet holds only design tokens (CSS custom properties) and a base reset | Plan-review decision. Scoped class names with no build plugin, and plain CSS that anyone can read. Tokens keep colors, radii, and spacing consistent across modules. |
 | D13 | **`/` is an instructions-only page, not an artist index.** It's public, reads nothing from Sanity, and tells the visitor to open the link their Vydia rep sent | Plan-review decision. Assume the visitor is an artist looking for their page. Internal viewers reach artist pages by direct URL or with Studio's "Open site" action. |
 | D14 | **Videos are uploaded to Sanity** (no YouTube/Vimeo/Mux link option for the `video` type) | Plan-review decision, matches the research ("Sanity will store all … videos"). Storage and bandwidth still get measured (§15). |
-| D15 | **Keep Next 16's `cacheComponents`.** Sanity data is cached with `'use cache'` + `cacheLife('max')` + `cacheTag` (§7.1) and expired by the webhook (§10). Pages that read the request (`/[slug]`, `/login`) set `export const instant = false` | Decided in task 2.0. It's the Next 16 default. Opting the gated page out of streaming means the access check finishes on the server before any HTML is sent, so `notFound()` returns a real 404 and old-slug redirects a real 307, identical for unknown and denied (§9.3). With streaming, both would come back as `200` after the shell had already gone out. |
+| D15 | **Keep Next 16's `cacheComponents`.** Sanity data is cached with `'use cache'` + `cacheLife('max')` + `cacheTag` (§7.1) and expired by the webhook (§10). Pages that read the request (`/[slug]`, `/login`) set `export const instant = false` | Decided in task 2.0. It's the Next 16 default. **Correction (found in Phase 6):** `instant = false` only relaxes navigation validation. It does **not** stop prerendering. In a production build `/[slug]` is a partial prerender: the static shell (layout and header) streams first, so `notFound()` comes back as **200** with the not-found UI and a `noindex` tag, and `redirect()` becomes a streamed client-side redirect. A dynamic root layout (`await connection()`) didn't change this. Unknown and denied still get identical responses, so the security requirement holds. Real 404/307 status codes need a Proxy check or turning `cacheComponents` off; see task 8.0. |
 
 ---
 
@@ -1033,10 +1033,12 @@ export default function StudioPage() {
 
 ```tsx
 // app/studio/layout.tsx   (separate root layout: no site CSS or fonts; must sit above [[...tool]], or Next treats `tool` as a root param)
+import styles from './layout.module.css'
+
 export default function StudioLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="en">
-      <body style={{margin: 0}}>{children}</body>
+      <body className={styles.body}>{children}</body>
     </html>
   )
 }
@@ -1221,10 +1223,29 @@ export async function getArtistPage(artistId: string): Promise<ArtistPage> {
 // lib/sanity/image.ts
 import {createImageUrlBuilder, type SanityImageSource} from '@sanity/image-url'
 import {dataset, projectId} from '@/sanity/env'
+import type {CardCover} from './types'
 
 const builder = createImageUrlBuilder({projectId, dataset})
 
 export const urlFor = (source: SanityImageSource) => builder.image(source).auto('format')
+
+export function coverSource(cover: CardCover): SanityImageSource | null {
+  if (!cover.asset) return null
+  const {crop, hotspot} = cover
+  const fullCrop =
+    crop && crop.top !== undefined && crop.bottom !== undefined && crop.left !== undefined && crop.right !== undefined
+      ? {top: crop.top, bottom: crop.bottom, left: crop.left, right: crop.right}
+      : undefined
+  const fullHotspot =
+    hotspot &&
+    hotspot.x !== undefined &&
+    hotspot.y !== undefined &&
+    hotspot.width !== undefined &&
+    hotspot.height !== undefined
+      ? {x: hotspot.x, y: hotspot.y, width: hotspot.width, height: hotspot.height}
+      : undefined
+  return {asset: {_ref: cover.asset._id}, crop: fullCrop, hotspot: fullHotspot}
+}
 ```
 
 ```ts
@@ -1796,7 +1817,7 @@ export function NoAccess() {
 | Signal | Unknown slug | Known slug, email not allowed |
 |---|---|---|
 | Before sign-in | Proxy → `302 /login?next=/x` | Proxy → `302 /login?next=/x` |
-| After sign-in: status | `404` via `notFound()` | `404` via `notFound()` |
+| After sign-in: status | `200` (streamed `notFound()`; `404` only if 8.0 picks a Proxy check) | `200` (identical) |
 | After sign-in: body | `<NoAccess/>` | `<NoAccess/>` |
 | After sign-in: `<title>` | Static "Welcome to Vydia" | Static "Welcome to Vydia" |
 | Sanity work | 1 × `ACCESS_QUERY` (same shape, cached) | 1 × `ACCESS_QUERY` (same shape, cached) |
@@ -1879,11 +1900,11 @@ Visual spec taken from the screenshot:
 
 | Element | Spec |
 |---|---|
-| Page | Light gray background `#F3F4F6`, content max-width ≈ 1150px, generous vertical spacing |
+| Page | Light gray background `#F3F4F6`, content up to 1600px wide with 32px side padding (the reference is near full-width), generous vertical spacing |
 | Header | Full-width rounded (≈12px) near-black banner with subtle grain texture, white logo centered, ≈140px tall on desktop |
 | Intro | Regular body text, bullets with **bold** section names followed by " - description" |
 | Section title | Medium-weight, ≈18px, dark gray, no subtitle in reference (optional subtitle below in muted text) |
-| Grid | **Grid, not horizontal scroll** (research): auto-fill columns, min 240px wide, which gives 1 column on phones and up to 4 at full width |
+| Grid | **Grid, not horizontal scroll** (research): auto-fill columns, min 300px wide: 1 / 2 / 3 / 4 columns at 375 / 768 / 1024 / 1440px (verified in 6.12) |
 | Card | White, 1px `#E5E7EB` border, ≈8px radius, cover area on top (≈16:9), file-type badge overlapping the bottom-left of the cover, title (≈17px, medium), "Added on MMM D, YYYY at h:mm AM" pinned to the bottom in muted text |
 | Badges | PDF: red `#E5322D` (Acrobat glyph). Video: plum `#8E1B5A` (play). Link: orange `#F5A524` (link). Slides: yellow `#F4B400` (slides glyph) |
 
@@ -1926,7 +1947,6 @@ export default function SiteLayout({children}: {children: React.ReactNode}) {
 ```css
 /* app/(site)/globals.css: tokens + reset ONLY. Component styles live in *.module.css. */
 :root {
-  /* color */
   --color-page: #f3f4f6;
   --color-surface: #ffffff;
   --color-border: #e5e7eb;
@@ -1941,30 +1961,26 @@ export default function SiteLayout({children}: {children: React.ReactNode}) {
   --color-badge-link: #f5a524;
   --color-badge-slides: #f4b400;
 
-  /* shape */
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
   --shadow-md: 0 6px 16px rgb(0 0 0 / 0.08);
 
-  /* spacing (4px scale) */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
+  --space-8: 32px;
   --space-10: 40px;
   --space-16: 64px;
 
-  /* layout */
-  --content-width: 1150px;
+  --content-width: 1600px;
 
-  /* type */
   --font-sans: var(--font-public-sans), ui-sans-serif, system-ui, sans-serif;
 
-  /* film grain used by the header and placeholder tiles */
   --grain:
     radial-gradient(ellipse at 30% 20%, rgb(255 255 255 / 0.06), transparent 60%),
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='.18'/></svg>");
@@ -1985,16 +2001,23 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, p, ul, ol {
+h1,
+h2,
+h3,
+p,
+ul,
+ol {
   margin: 0;
 }
 
-img, video {
+img,
+video {
   display: block;
   max-width: 100%;
 }
 
-button, input {
+button,
+input {
   font: inherit;
   color: inherit;
 }
@@ -2042,7 +2065,7 @@ export function PageShell({children}: {children: React.ReactNode}) {
 
 @media (min-width: 640px) {
   .shell {
-    padding-inline: var(--space-6);
+    padding: var(--space-6) var(--space-8) var(--space-16);
   }
 }
 ```
@@ -2060,7 +2083,7 @@ export function Header() {
         alt="Vydia, a gamma company"
         width={1233}
         height={139}
-        priority
+        preload
         className={styles.logo}
       />
     </header>
@@ -2101,7 +2124,15 @@ export function Header() {
 // components/Notice.tsx   (centered message card used by NoAccess and "/")
 import styles from './Notice.module.css'
 
-export function Notice({title, children, action}: {title: string; children: React.ReactNode; action?: React.ReactNode}) {
+export function Notice({
+  title,
+  children,
+  action,
+}: {
+  title: string
+  children: React.ReactNode
+  action?: React.ReactNode
+}) {
   return (
     <div className={styles.notice}>
       <h1 className={styles.title}>{title}</h1>
@@ -2218,7 +2249,8 @@ Element styles are scoped under one local class (`.richText p`, `.richText ul`),
 
 ```tsx
 // components/RichText.tsx
-import {PortableText, type PortableTextComponents, type PortableTextBlock} from '@portabletext/react'
+import {PortableText, type PortableTextComponents} from '@portabletext/react'
+import type {BlockContent} from '@/lib/sanity/types.generated'
 import styles from './RichText.module.css'
 
 const components: PortableTextComponents = {
@@ -2231,7 +2263,7 @@ const components: PortableTextComponents = {
   },
 }
 
-export function RichText({value}: {value: PortableTextBlock[]}) {
+export function RichText({value}: {value: BlockContent}) {
   return (
     <div className={styles.richText}>
       <PortableText value={value} components={components} />
@@ -2277,10 +2309,10 @@ export function RichText({value}: {value: PortableTextBlock[]}) {
 
 ```tsx
 // components/Intro.tsx
-import type {PortableTextBlock} from '@portabletext/react'
+import type {BlockContent} from '@/lib/sanity/types.generated'
 import {RichText} from './RichText'
 
-export function Intro({value}: {value: PortableTextBlock[]}) {
+export function Intro({value}: {value: BlockContent}) {
   if (!value.length) return null
   return (
     <section aria-label="Introduction">
@@ -2312,23 +2344,25 @@ export function formatAddedOn(iso: string) {
 
 ```tsx
 // components/ResourceSection.tsx
-import type {SectionData, ResourceCardData} from '@/lib/sanity/types'
+import type {SectionData} from '@/lib/sanity/types'
 import {ResourceCard} from './ResourceCard'
 import styles from './ResourceSection.module.css'
 
-export function ResourceSection({section}: {section: Omit<SectionData, 'resources'> & {resources: ResourceCardData[]}}) {
+export function ResourceSection({section}: {section: SectionData}) {
   if (!section.resources.length) return null
   const headingId = `section-${section._id}`
   return (
     <section aria-labelledby={headingId} className={styles.section}>
       <div>
-        <h2 id={headingId} className={styles.title}>{section.title}</h2>
+        <h2 id={headingId} className={styles.title}>
+          {section.title}
+        </h2>
         {section.subtitle && <p className={styles.subtitle}>{section.subtitle}</p>}
       </div>
       <ul className={styles.grid}>
-        {section.resources.map((r) => (
-          <li key={r._id} className={styles.item}>
-            <ResourceCard resource={r} />
+        {section.resources.map((resource) => (
+          <li key={resource._id} className={styles.item}>
+            <ResourceCard resource={resource} />
           </li>
         ))}
       </ul>
@@ -2356,10 +2390,9 @@ export function ResourceSection({section}: {section: Omit<SectionData, 'resource
   color: var(--color-text-muted);
 }
 
-/* Grid, not horizontal scroll. auto-fill gives 1 to 4 columns with no breakpoints. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: var(--space-6);
   margin: 0;
   padding: 0;
@@ -2367,18 +2400,18 @@ export function ResourceSection({section}: {section: Omit<SectionData, 'resource
 }
 
 .item {
-  display: flex; /* lets cards in a row stretch to equal height */
+  display: flex;
 }
 ```
 
 ```tsx
 // components/FileTypeBadge.tsx
-import {FileText, Link2, Play, Presentation} from 'lucide-react'
-import type {ResourceType} from '@/sanity/schemaTypes/resource'
+import {FileText, Link2, Play, Presentation, type LucideIcon} from 'lucide-react'
 import {cx} from '@/lib/cx'
+import type {ResourceType} from '@/sanity/schemaTypes/resource'
 import styles from './FileTypeBadge.module.css'
 
-const BADGES: Record<ResourceType, {Icon: typeof FileText; label: string}> = {
+const BADGES: Record<ResourceType, {Icon: LucideIcon; label: string}> = {
   pdf: {Icon: FileText, label: 'PDF'},
   video: {Icon: Play, label: 'Video'},
   link: {Icon: Link2, label: 'Link'},
@@ -2406,7 +2439,7 @@ export function FileTypeBadge({type, className}: {type: ResourceType; className?
   height: 32px;
   border-radius: var(--radius-sm);
   color: #fff;
-  box-shadow: 0 0 0 2px var(--color-surface); /* white ring where it overlaps the cover */
+  box-shadow: 0 0 0 2px var(--color-surface);
 }
 
 .icon {
@@ -2414,40 +2447,51 @@ export function FileTypeBadge({type, className}: {type: ResourceType; className?
   height: 16px;
 }
 
-.pdf    { background: var(--color-badge-pdf); }
-.video  { background: var(--color-badge-video); }
-.link   { background: var(--color-badge-link); }
-.slides { background: var(--color-badge-slides); }
+.pdf {
+  background: var(--color-badge-pdf);
+}
+
+.video {
+  background: var(--color-badge-video);
+}
+
+.link {
+  background: var(--color-badge-link);
+}
+
+.slides {
+  background: var(--color-badge-slides);
+}
 ```
 
 ```tsx
 // components/CardCover.tsx
 import Image from 'next/image'
-import {urlFor} from '@/lib/sanity/image'
+import {coverSource, urlFor} from '@/lib/sanity/image'
 import type {ResourceCardData} from '@/lib/sanity/types'
 import styles from './CardCover.module.css'
 
-/** cover photo → PDF preview (both arrive as `cover`) → branded placeholder */
 export function CardCover({resource}: {resource: ResourceCardData}) {
   const {cover, title} = resource
-  if (cover?.asset) {
+  const source = cover && coverSource(cover)
+  if (cover && source) {
+    const lqip = cover.asset?.lqip ?? undefined
     return (
       <Image
-        src={urlFor(cover).width(800).height(450).fit('max').url()}
+        src={urlFor(source).width(800).fit('max').url()}
         alt={cover.alt ?? ''}
         fill
         sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
         className={styles.image}
-        placeholder={cover.asset.metadata?.lqip ? 'blur' : 'empty'}
-        blurDataURL={cover.asset.metadata?.lqip}
+        placeholder={lqip ? 'blur' : 'empty'}
+        blurDataURL={lqip}
       />
     )
   }
-  // Mirrors the existing Seismic thumbnails: dark grain tile, uppercase title, small logo.
   return (
     <div className={styles.placeholder}>
       <span className={styles.placeholderTitle}>{title}</span>
-      <img src="/vydia-logo.svg" alt="" className={styles.placeholderLogo} />
+      <Image src="/vydia-logo.svg" alt="" width={1233} height={139} className={styles.placeholderLogo} />
     </div>
   )
 }
@@ -2497,8 +2541,8 @@ export function CardCover({resource}: {resource: ResourceCardData}) {
 
 ```tsx
 // components/CardBody.tsx
-import type {ResourceCardData} from '@/lib/sanity/types'
 import {formatAddedOn} from '@/lib/format'
+import type {ResourceCardData} from '@/lib/sanity/types'
 import {CardCover} from './CardCover'
 import {FileTypeBadge} from './FileTypeBadge'
 import styles from './ResourceCard.module.css'
@@ -2523,17 +2567,16 @@ export function CardBody({resource}: {resource: ResourceCardData}) {
 // components/ResourceCard.tsx
 import type {ResourceCardData} from '@/lib/sanity/types'
 import {CardBody} from './CardBody'
-import {VideoCard} from './VideoCard'
 import styles from './ResourceCard.module.css'
+import {VideoCard} from './VideoCard'
 
-export function resourceHref(r: ResourceCardData): string | null {
-  return r.type === 'link' ? r.url ?? null : r.fileUrl ?? r.url ?? null
+export function resourceHref(resource: ResourceCardData): string | null {
+  return resource.type === 'link' ? resource.url : (resource.fileUrl ?? resource.url)
 }
 
 export function ResourceCard({resource}: {resource: ResourceCardData}) {
-  // Videos are always Sanity uploads (D14) and play in a modal.
   if (resource.type === 'video') {
-    return resource.fileUrl ? <VideoCard resource={resource} /> : null
+    return resource.fileUrl ? <VideoCard resource={resource} src={resource.fileUrl} /> : null
   }
   const href = resourceHref(resource)
   if (!href) return null
@@ -2560,7 +2603,9 @@ export function ResourceCard({resource}: {resource: ResourceCardData}) {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .card:hover {
@@ -2621,26 +2666,38 @@ export function ResourceCard({resource}: {resource: ResourceCardData}) {
 ```tsx
 // components/VideoCard.tsx
 'use client'
-import {useRef} from 'react'
 import {X} from 'lucide-react'
+import {useRef} from 'react'
 import type {ResourceCardData} from '@/lib/sanity/types'
 import {CardBody} from './CardBody'
 import cardStyles from './ResourceCard.module.css'
 import styles from './VideoCard.module.css'
 
-export function VideoCard({resource}: {resource: ResourceCardData}) {
+export function VideoCard({resource, src}: {resource: ResourceCardData; src: string}) {
   const dialog = useRef<HTMLDialogElement>(null)
   const video = useRef<HTMLVideoElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+
+  const open = () => {
+    dialog.current?.showModal()
+    void video.current?.play().catch(() => {})
+  }
+
+  const handleClose = () => {
+    video.current?.pause()
+    trigger.current?.focus()
+  }
+
   return (
     <>
-      <button type="button" className={cardStyles.card} onClick={() => dialog.current?.showModal()}>
+      <button ref={trigger} type="button" className={cardStyles.card} onClick={open} aria-haspopup="dialog">
         <CardBody resource={resource} />
       </button>
-      <dialog ref={dialog} onClose={() => video.current?.pause()} className={styles.dialog} aria-label={resource.title}>
-        <button type="button" onClick={() => dialog.current?.close()} className={styles.close} aria-label="Close">
+      <dialog ref={dialog} onClose={handleClose} className={styles.dialog} aria-label={resource.title}>
+        <button type="button" onClick={() => dialog.current?.close()} className={styles.close} aria-label="Close video">
           <X aria-hidden />
         </button>
-        <video ref={video} src={resource.fileUrl!} controls preload="metadata" className={styles.video} />
+        <video ref={video} src={src} controls preload="metadata" playsInline className={styles.video} />
       </dialog>
     </>
   )
@@ -2673,6 +2730,11 @@ export function VideoCard({resource}: {resource: ResourceCardData}) {
   border: 0;
   color: #fff;
   cursor: pointer;
+}
+
+.close:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
 
 .video {
@@ -3083,26 +3145,39 @@ Also found: `.env.local` only has the two Supabase values. The rest of §4.1 (`N
 
 ---
 
-### Phase 6: UI components (rendering, no auth yet)
+### Phase 6: UI components (rendering, no auth yet) ✅ Complete
 
 Temporarily render `/[slug]` without the auth check (hard-code the artist ID lookup) so the UI can be built against real data. **This bypass is removed in 8.3.**
 
-- [ ] **6.1** `PageShell` + `.module.css` (§11.2).
-- [ ] **6.2** `Header` + `.module.css`: grain banner, centered logo, responsive height (§11.2).
-- [ ] **6.3** `Notice` + `.module.css` (§11.2).
-- [ ] **6.4** `RichText` + `.module.css`, and `Intro` (§11.3).
-- [ ] **6.5** `ResourceSection` + `.module.css`: heading, optional subtitle, auto-fill grid (§11.4).
-- [ ] **6.6** `FileTypeBadge` + `.module.css`: four colors, icons, screen-reader label (§11.4).
-- [ ] **6.7** `CardCover` + `.module.css`: Sanity image with LQIP blur, branded placeholder tile (§11.4).
-- [ ] **6.8** `CardBody` (shared) and `ResourceCard` + `.module.css`: link cards open in a new tab, card hover/focus states, reduced-motion handling (§11.4).
-- [ ] **6.9** `VideoCard` + `.module.css`: `<dialog>` player, pause on close, Esc closes, focus returns to the card (§11.4).
-- [ ] **6.10** Additional-info block styling (`[slug]/page.module.css`, §9.2).
-- [ ] **6.11** Visual comparison with `docs/screenshots/sample website.png` side by side at 1440px: header proportions, intro typography, section titles, card border/radius/shadow, badge position, date line. Adjust tokens until it matches.
-- [ ] **6.12** Responsive check at 375px, 768px, 1024px, 1440px: columns step 1 → 2 → 3 → 4 and the header logo scales.
-- [ ] **6.13** Check all card states with the test content: with cover, auto PDF preview, placeholder, long title (wraps, date stays pinned), video, link, slides.
-- [ ] **6.14** Grep for stray inline styles or global classes. Everything is in modules except tokens, reset, and `.visually-hidden` (D12).
+- [x] **6.1** `PageShell` + `.module.css` (§11.2).
+- [x] **6.2** `Header` + `.module.css`: grain banner, centered logo, responsive height (§11.2).
+- [x] **6.3** `Notice` + `.module.css` (§11.2).
+- [x] **6.4** `RichText` + `.module.css`, and `Intro` (§11.3).
+- [x] **6.5** `ResourceSection` + `.module.css`: heading, optional subtitle, auto-fill grid (§11.4).
+- [x] **6.6** `FileTypeBadge` + `.module.css`: four colors, icons, screen-reader label (§11.4).
+- [x] **6.7** `CardCover` + `.module.css`: Sanity image with LQIP blur, branded placeholder tile (§11.4).
+- [x] **6.8** `CardBody` (shared) and `ResourceCard` + `.module.css`: link cards open in a new tab, card hover/focus states, reduced-motion handling (§11.4).
+- [x] **6.9** `VideoCard` + `.module.css`: `<dialog>` player, pause on close, Esc closes, focus returns to the card (§11.4).
+- [x] **6.10** Additional-info block styling (`[slug]/page.module.css`, §9.2).
+- [x] **6.11** Visual comparison with `docs/screenshots/sample website.png` side by side at 1440px: header proportions, intro typography, section titles, card border/radius/shadow, badge position, date line. Adjust tokens until it matches.
+- [x] **6.12** Responsive check at 375px, 768px, 1024px, 1440px: columns step 1 → 2 → 3 → 4 and the header logo scales.
+- [x] **6.13** Check all card states with the test content: with cover, auto PDF preview, placeholder, long title (wraps, date stays pinned), video, link, slides.
+- [x] **6.14** Grep for stray inline styles or global classes. Everything is in modules except tokens, reset, and `.visually-hidden` (D12).
 
 **Done when:** `/test-artist` and `/test-override` render correctly against real Sanity data and match the reference at desktop and mobile sizes.
+
+✅ Verified in dev and in a production build (`next start`):
+- Both pages render from real Sanity data. Columns are 1/2/3/4 at 375/768/1024/1440px, and the logo goes from 28px to 40px.
+- Every non-video card links to the right file or URL in a new tab (`noopener noreferrer`).
+- Video cards open a `<dialog>` that plays; Esc and the close button close it, the video pauses, and focus returns to the card.
+- No inline styles anywhere.
+
+Fixed along the way:
+- `@sanity/image-url` adds a `rect=` crop when both width and height are set, which cut portrait covers to 16:9. Cards now request width only.
+- The container was widened to match the reference.
+- `next/image` `priority` (deprecated in Next 16) was replaced with `preload`.
+
+⚠️ Found: in production `/[slug]` streams, so an unknown slug returns **200** with the not-found UI, not 404 (see D15 and task 8.0).
 
 ---
 
@@ -3132,6 +3207,10 @@ Temporarily render `/[slug]` without the auth check (hard-code the artist ID loo
 
 ### Phase 8: Access control
 
+- [ ] **8.0** 🧑‍🤝‍🧑 Decide how artist pages return status codes. Under `cacheComponents` the page always responds **200** (it streams), and unknown and denied stay identical (§9.3). Options:
+  1. **Accept streamed 200** (recommended for the prototype). The not-found UI and `noindex` are identical for both cases, which meets the research requirement ("indistinguishable"). Old-slug redirects work, but client-side.
+  2. **Access check in Proxy, after the session check.** Real 404 and 307, but Proxy queries Sanity on every artist-page request, and the access logic moves out of the page.
+  3. **Turn `cacheComponents` off** (revisit D15). The plan's original 404/307 behaviour, but on the older caching model (§7.1/§10 change back).
 - [ ] **8.1** `lib/access.ts`: `normalizeEmail`, `PERMANENT_VIEWERS` from env, `isInternalViewer`, `decideAccess`, `verifiedEmail`, `resolveArtistAccess` (§9.1).
 - [ ] **8.2** `tests/access.test.ts` (§13.1): unknown, unapproved = unknown, case-insensitive + trim, permanent emails, internal viewers from the website, old-slug redirect only when allowed, no verified email.
 - [ ] **8.3** Replace the Phase 6 bypass with the real `[slug]/page.tsx`: `getUser` → `resolveArtistAccess` → `notFound()` / `redirect()` / render (§9.2). **Remove the temporary bypass code.**
@@ -3148,7 +3227,7 @@ Temporarily render `/[slug]` without the auth check (hard-code the artist ID loo
   | Internal viewer from Website list | ✅ page | ↪ redirect | 404 NoAccess |
   | Signed out | → `/login` | → `/login` | → `/login` |
 
-- [ ] **8.8** Diff the HTML of "unapproved on a real artist" against "anyone on a missing artist". It must be byte-identical apart from Next's per-request IDs.
+- [ ] **8.8** Also confirm the status codes match whatever 8.0 decided. Diff the HTML of "unapproved on a real artist" against "anyone on a missing artist". It must be byte-identical apart from Next's per-request IDs.
 - [ ] **8.9** Remove an email from `test-artist` in Studio and confirm that user loses access on the next load (it works once Phase 9 is done; until then, restart dev).
 - [ ] **8.10** Mixed-case test: add `Jane.Doe@Example.com` in Studio, sign in as `jane.doe@example.com` → allowed.
 

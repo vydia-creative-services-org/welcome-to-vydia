@@ -1,0 +1,25 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 96px;
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-ink);
+  background-image: var(--grain);
+  box-shadow: var(--shadow-sm);
+}
+
+.logo {
+  height: 28px;
+  width: auto;
+}
+
+@media (min-width: 640px) {
+  .header {
+    height: 144px;
+  }
+  .logo {
+    height: 40px;
+  }
+}
