@@ -1,17 +1,27 @@
-import Image from 'next/image'
+
 import styles from './Header.module.css'
+import { GalleryHorizontal, LayoutGrid } from 'lucide-react'
 
 export function Header() {
   return (
     <header className={styles.header}>
-      <Image
-        src="/vydia-logo.svg"
-        alt="Vydia, a gamma company"
-        width={1233}
-        height={139}
-        preload
-        className={styles.logo}
-      />
+      <span className={styles.text}>Welcome to Vydia</span>
+
+      <div className={styles.toggleContainer}>
+        <GalleryHorizontal
+          strokeWidth={2}
+          color="#fff"
+          height={18}
+          width={18}
+        />
+
+        <LayoutGrid
+          strokeWidth={2}
+          color="#fff"
+          height={18}
+          width={18}
+        />
+      </div>
     </header>
   )
 }

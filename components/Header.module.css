@@ -1,25 +1,107 @@
+
 .header {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 96px;
-  padding: 0 var(--space-6);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-ink);
-  background-image: var(--grain);
-  box-shadow: var(--shadow-sm);
+  align-items: flex-start;
+  justify-content: space-between;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  padding: 24px 20px;
+  z-index: 50;
+
+  background: transparent;
+  isolation: isolate;
 }
 
-.logo {
-  height: 28px;
+/* Main, strong blur */
+.header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+
+  -webkit-backdrop-filter: blur(40px);
+  backdrop-filter: blur(40px);
+
+  background: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 65%) 0%,
+    rgb(0 0 0 / 40%) 35%,
+    rgb(0 0 0 / 15%) 70%,
+    transparent 100%
+  );
+
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    black 20%,
+    rgb(0 0 0 / 85%) 45%,
+    rgb(0 0 0 / 45%) 70%,
+    transparent 100%
+  );
+
+  mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    black 20%,
+    rgb(0 0 0 / 85%) 45%,
+    rgb(0 0 0 / 45%) 70%,
+    transparent 100%
+  );
+}
+
+/* Additional diffusion layer */
+.header::after {
+  content: "";
+  position: absolute;
+  inset: -20px 0 0;
+  z-index: 0;
+  pointer-events: none;
+
+  -webkit-backdrop-filter: blur(60px);
+  backdrop-filter: blur(60px);
+
+  background: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 25%) 0%,
+    rgb(0 0 0 / 12%) 45%,
+    transparent 85%
+  );
+
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    rgb(0 0 0 / 80%) 30%,
+    transparent 85%
+  );
+
+  mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    rgb(0 0 0 / 80%) 30%,
+    transparent 85%
+  );
+}
+
+/* Keep content crisp and fully opaque */
+.header > * {
+  position: relative;
+  z-index: 1;
+}
+
+.text {
+  font-size: 16px;
   width: auto;
+  font-weight: 600;
+  color: #fff;
+  text-transform: uppercase;
 }
 
-@media (min-width: 640px) {
-  .header {
-    height: 144px;
-  }
-  .logo {
-    height: 40px;
-  }
+.toggleContainer {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
 }

@@ -4,11 +4,11 @@
   gap: var(--space-10);
   max-width: var(--content-width);
   margin: 0 auto;
-  padding: var(--space-6) var(--space-4) var(--space-16);
+  padding: 0;
 }
 
 @media (min-width: 640px) {
   .shell {
-    padding: var(--space-6) var(--space-8) var(--space-16);
+    padding: 0;
   }
 }
