@@ -13,6 +13,11 @@
   --color-badge-link: #f5a524;
   --color-badge-slides: #f4b400;
 
+  /* Gallery ⇄ grid switch: quick off the mark, decelerating into place, no overshoot. */
+  --switch-duration: 800ms;
+  --switch-ease: cubic-bezier(0.32, 0.72, 0, 1); /* iOS-style: most of the way fast, long gentle settle */
+  --switch-fade: 140ms;
+
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
@@ -92,17 +97,19 @@ input {
 }
 
 ::view-transition-group(.resource-morph) {
-  animation-duration: 650ms;
-  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation-duration: var(--switch-duration);
+  animation-timing-function: var(--switch-ease);
+  /* Holds each card at its start until its cascade delay (set per card in ViewMode.tsx) passes. */
+  animation-fill-mode: both;
 }
 
-/* Swap the old and new card images quickly so the two layouts never visibly overlap. */
+/* Swap the old and new card images early so the two layouts never visibly overlap. */
 ::view-transition-old(.resource-morph) {
-  animation: 220ms ease-out both morph-fade-out;
+  animation: var(--switch-fade) ease-out both morph-fade-out;
 }
 
 ::view-transition-new(.resource-morph) {
-  animation: 220ms ease-out both morph-fade-in;
+  animation: var(--switch-fade) ease-out both morph-fade-in;
 }
 
 @keyframes morph-fade-in {
@@ -117,9 +124,13 @@ input {
   }
 }
 
-::view-transition-old(root),
+/* The rest of the page (carousel title, background) gets out of the way quickly. */
+::view-transition-old(root) {
+  animation: 120ms ease-out both morph-fade-out;
+}
+
 ::view-transition-new(root) {
-  animation-duration: 400ms;
+  animation: 200ms ease-out 60ms both morph-fade-in;
 }
 
 /* The fixed header and mobile footer stay put and above the moving cards. */

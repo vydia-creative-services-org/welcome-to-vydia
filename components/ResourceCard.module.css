@@ -6,7 +6,9 @@
   text-align: left;
   text-decoration: none;
   color: inherit;
-  background: var(--color-surface);
+  /* No fill: it matches the page anyway, and during the gallery ⇄ grid switch it would show as a
+     dark box travelling over the carousel's lighter background. The cover has its own fill. */
+  background: none;
 border: none;
   cursor: pointer;
 

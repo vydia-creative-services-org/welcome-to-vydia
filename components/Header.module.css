@@ -108,6 +108,7 @@
   gap: 8px;
 }
 
+
 .toggle {
   display: inline-flex;
   padding: 0;
@@ -116,7 +117,13 @@
   color: #fff;
   opacity: 0.45;
   cursor: pointer;
-  transition: opacity 150ms ease;
+  transition:
+    opacity 150ms ease,
+    transform 120ms ease;
+}
+
+.toggle:active {
+  transform: scale(0.9);
 }
 
 .toggle:hover,
@@ -141,5 +148,11 @@
 
   .mobileIcon {
     display: block;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle {
+    transition: none;
   }
 }

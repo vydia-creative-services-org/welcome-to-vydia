@@ -1,11 +1,12 @@
 'use client'
 import Image from 'next/image'
-import {useEffect, useEffectEvent, useRef, useState} from 'react'
+import {useEffect, useEffectEvent, useLayoutEffect, useRef, useState} from 'react'
 import {coverSource, urlFor} from '@/lib/sanity/image'
 import type {ResourceCardData} from '@/lib/sanity/types'
 import styles from './ResourceCarousel.module.css'
 import {ResourceCard} from './ResourceCard'
 import {useScrollInertia} from './useScrollInertia'
+import {useViewMode} from './ViewMode'
 
 /** Backdrop layers kept mounted so outgoing ones can finish fading while new ones fade in. */
 const MAX_BACKDROP_LAYERS = 4
@@ -47,6 +48,23 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
   }
   useScrollInertia(scroller, draw)
   const redraw = useEffectEvent(() => draw(drawnY.current))
+
+  // Keep the view switch informed of the card being looked at, and open on it when switching back
+  // from the grid. That has to happen in a layout effect, so the carousel is already in place when
+  // the view transition captures it (useScrollInertia then starts from this scroll position too).
+  const viewMode = useViewMode()
+  useEffect(() => {
+    viewMode?.setFocus(resources[current]._id)
+  }, [current, resources, viewMode])
+  const openOnFocus = useEffectEvent(() => {
+    const el = scroller.current
+    const index = resources.findIndex((resource) => resource._id === viewMode?.getFocus())
+    if (!el || index <= 0) return
+    cell.current = el.querySelector<HTMLElement>('[data-snap="1"]')?.offsetTop || 1
+    el.scrollTop = index * cell.current
+    draw(el.scrollTop)
+  })
+  useLayoutEffect(() => openOnFocus(), [])
 
   const scrollToIndex = (index: number) => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches

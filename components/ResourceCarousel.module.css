@@ -215,8 +215,20 @@
 
 /* The shadow lives on the card (not the slide) so it travels with it during the view switch. */
 .card {
-  border-radius: var(--radius-md);
+  /* Matches the cover's rounding (.cover in ResourceCard.module.css) so the shadow hugs its corners. */
+  border-radius: 16px;
   box-shadow: 0 20px 40px rgb(0 0 0 / 0.45);
+  transition: box-shadow 300ms ease;
+}
+
+/*
+ * Cards fly between gallery and grid without their shadow (a big soft shadow captured with the card
+ * reads as a dark halo flickering mid-flight). It drops instantly before the switch captures the
+ * page, and fades back in once the cards have landed. See ViewMode.tsx.
+ */
+:global(html[data-view-switching]) .card {
+  box-shadow: none;
+  transition: none;
 }
 
 .scroller:focus-visible .slide[aria-hidden='false'] {
