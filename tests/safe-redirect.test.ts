@@ -14,7 +14,7 @@ describe('safeNext', () => {
     ['/test-artist', '/test-artist'],
     ['/test-artist?tab=1', '/test-artist?tab=1'],
     ['https://welcometovydia.com/test-artist', '/test-artist'],
-    ['/account/update-password', '/account/update-password'],
+    ['/test-artist/', '/test-artist/'],
   ])('keeps same-site path %s', (raw, expected) => expect(safeNext(raw)).toBe(expected))
 
   it.each([

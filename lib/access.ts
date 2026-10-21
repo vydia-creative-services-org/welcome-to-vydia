@@ -1,13 +1,13 @@
 import 'server-only'
 import type {User} from '@supabase/supabase-js'
 import {sanityFetch} from './sanity/fetch'
-import {ACCESS_QUERY} from './sanity/queries'
-import type {ACCESS_QUERY_RESULT} from './sanity/types.generated'
+import {ACCESS_QUERY, APPROVED_EMAILS_QUERY} from './sanity/queries'
+import type {ACCESS_QUERY_RESULT, APPROVED_EMAILS_QUERY_RESULT} from './sanity/types.generated'
 
 export const normalizeEmail = (email: string) => email.trim().toLowerCase()
 
 const PERMANENT_VIEWERS = new Set(
-  (process.env.PERMANENT_VIEWER_EMAILS ?? 'labelrelationships@vydia.com,creativeservices@vydia.com')
+  (process.env.PERMANENT_VIEWER_EMAILS ?? 'labelservices@vydia.com,creativeservices@vydia.com')
     .split(',')
     .map(normalizeEmail)
     .filter(Boolean),
@@ -52,4 +52,16 @@ export async function resolveArtistAccess(rawSlug: string, user: User | null): P
   const slug = normalizeSlug(rawSlug)
   const lookup = await sanityFetch(ACCESS_QUERY, {slug}, ['artist', 'website'])
   return decideAccess(slug, verifiedEmail(user), lookup)
+}
+
+export function isApprovedAnywhere(email: string, lookup: APPROVED_EMAILS_QUERY_RESULT) {
+  const normalized = normalizeEmail(email)
+  return (
+    isInternalViewer(normalized, lookup.internalViewers) ||
+    lookup.artistEmails.some((allowed) => allowed !== null && normalizeEmail(allowed) === normalized)
+  )
+}
+
+export async function canSignIn(email: string) {
+  return isApprovedAnywhere(email, await sanityFetch(APPROVED_EMAILS_QUERY, {}, ['artist', 'website']))
 }

@@ -31,7 +31,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: echo "E2E_PASSWORD=e2e-$(openssl rand -hex 16)" >> "$GITHUB_ENV"
       - run: npm run e2e:setup
       - run: npm run e2e
       - if: always()

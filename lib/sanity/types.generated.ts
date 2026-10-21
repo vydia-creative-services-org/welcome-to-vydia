@@ -273,6 +273,14 @@ export type ACCESS_QUERY_RESULT = {
 }
 
 // Source: lib/sanity/queries.ts
+// Variable: APPROVED_EMAILS_QUERY
+// Query: {  "artistEmails": *[_type == "artist" && defined(slug.current)].allowedEmails[],  "internalViewers": *[_type == "website" && _id == "website"][0].internalViewerEmails}
+export type APPROVED_EMAILS_QUERY_RESULT = {
+  artistEmails: Array<string | null>
+  internalViewers: Array<string> | null
+}
+
+// Source: lib/sanity/queries.ts
 // Variable: ARTIST_PAGE_QUERY
 // Query: {  "website": *[_type == "website" && _id == "website"][0]{    "resources": resources[defined(@->_id)]->{  _id,  title,  type,  url,  "addedOn": coalesce(addedOn, _createdAt),  "fileUrl": file.asset->url,  "fileName": file.asset->originalFilename,  "cover": coalesce(coverImage, pdfPreview){    alt,    hotspot,    crop,    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}  }}  },  "artist": *[_type == "artist" && _id == $artistId][0]{    name,    additionalInfo,    "resourceOverride": resourceOverride[defined(@->_id)]->{  _id,  title,  type,  url,  "addedOn": coalesce(addedOn, _createdAt),  "fileUrl": file.asset->url,  "fileName": file.asset->originalFilename,  "cover": coalesce(coverImage, pdfPreview){    alt,    hotspot,    crop,    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}  }}  }}
 export type ARTIST_PAGE_QUERY_RESULT = {
@@ -358,6 +366,7 @@ export type ARTIST_PAGE_QUERY_RESULT = {
 declare global {
   interface SanityQueries {
     '{\n  "artist": *[_type == "artist" && (slug.current == $slug || $slug in previousSlugs)][0]{\n    _id,\n    "slug": slug.current,\n    allowedEmails\n  },\n  "internalViewers": *[_type == "website" && _id == "website"][0].internalViewerEmails\n}': ACCESS_QUERY_RESULT
+    '{\n  "artistEmails": *[_type == "artist" && defined(slug.current)].allowedEmails[],\n  "internalViewers": *[_type == "website" && _id == "website"][0].internalViewerEmails\n}': APPROVED_EMAILS_QUERY_RESULT
     '{\n  "website": *[_type == "website" && _id == "website"][0]{\n    "resources": resources[defined(@->_id)]->{\n  _id,\n  title,\n  type,\n  url,\n  "addedOn": coalesce(addedOn, _createdAt),\n  "fileUrl": file.asset->url,\n  "fileName": file.asset->originalFilename,\n  "cover": coalesce(coverImage, pdfPreview){\n    alt,\n    hotspot,\n    crop,\n    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}\n  }\n}\n  },\n  "artist": *[_type == "artist" && _id == $artistId][0]{\n    name,\n    additionalInfo,\n    "resourceOverride": resourceOverride[defined(@->_id)]->{\n  _id,\n  title,\n  type,\n  url,\n  "addedOn": coalesce(addedOn, _createdAt),\n  "fileUrl": file.asset->url,\n  "fileName": file.asset->originalFilename,\n  "cover": coalesce(coverImage, pdfPreview){\n    alt,\n    hotspot,\n    crop,\n    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}\n  }\n}\n  }\n}': ARTIST_PAGE_QUERY_RESULT
   }
 }

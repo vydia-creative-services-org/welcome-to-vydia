@@ -126,7 +126,7 @@ export const APPROVED_EMAILS_QUERY = defineQuery(`{
 }`)
 ```
 
-Run `npm run typegen` to generate `APPROVED_EMAILS_QUERY_RESULT`. The result is a flat list, cached with the `artist` and `website` tags, so the publish webhook keeps it fresh. A few hundred artists × a few emails is a few KB.
+Run `npm run typegen` to generate `APPROVED_EMAILS_QUERY_RESULT` (`artistEmails: Array<string | null>`, `internalViewers: Array<string> | null`). The result is a flat list, cached with the `artist` and `website` tags, so the publish webhook keeps it fresh. A few hundred artists × a few emails is a few KB.
 
 GROQ has no `trim()`, so case and whitespace are normalized in TypeScript, the same way `decideAccess` does it.
 
@@ -145,12 +145,11 @@ const PERMANENT_VIEWERS = new Set(
 
 // …isInternalViewer, decideAccess, verifiedEmail, normalizeSlug, resolveArtistAccess unchanged…
 
-/** Whether an email may sign in at all: on any artist's list, an internal viewer, or a permanent viewer. */
 export function isApprovedAnywhere(email: string, lookup: APPROVED_EMAILS_QUERY_RESULT) {
   const normalized = normalizeEmail(email)
   return (
     isInternalViewer(normalized, lookup.internalViewers) ||
-    (lookup.artistEmails ?? []).some((allowed) => Boolean(allowed) && normalizeEmail(allowed) === normalized)
+    lookup.artistEmails.some((allowed) => allowed !== null && normalizeEmail(allowed) === normalized)
   )
 }
 
@@ -183,10 +182,7 @@ import 'server-only'
 import {createClient} from '@supabase/supabase-js'
 import {SUPABASE_KEY, SUPABASE_URL} from '@/lib/env'
 
-/**
- * No session and no cookies. Used to send magic links from `after()`, when the response (and its cookies) is already
- * gone. Implicit flow, because the link is verified by token hash (D19) and doesn't need a PKCE verifier cookie.
- */
+// No session or cookies: magic links are sent from after(), once the response is gone, and are verified by token hash.
 export const createStatelessClient = () =>
   createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: {persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, flowType: 'implicit'},
@@ -218,8 +214,8 @@ export async function sendMagicLink(_: LinkState, form: FormData): Promise<LinkS
   // The email template puts this into a query string as-is, so drop any query of our own (artist pages have none).
   const redirectTo = `${SITE_URL}${safeNext(field(form, 'next')).split('?')[0]}`
 
-  // Approved or not, everyone gets the same answer at the same speed: the lookup and the send happen after the
-  // response, so this form can't be used to check whether someone is a Vydia client (D17).
+  // The lookup and the send happen after the response, so approved and unknown emails get the same answer at the
+  // same speed and this form can't reveal who is a Vydia client.
   after(async () => {
     try {
       if (!(await canSignIn(email))) return
@@ -243,7 +239,6 @@ export async function signInWithGoogle(form: FormData) {
     provider: 'google',
     options: {
       redirectTo: `${SITE_URL}/auth/callback?next=${encodeURIComponent(next)}`,
-      // People often have a personal and a work Google account. Let them pick instead of silently using the last one.
       queryParams: {prompt: 'select_account'},
     },
   })
@@ -369,7 +364,6 @@ export function LoginForm({next, error}: {next: string; error: string | null}) {
   margin-bottom: var(--space-4);
   font-size: 14px;
   line-height: 1.5;
-  color: var(--color-text-muted);
 }
 ```
 
@@ -384,9 +378,9 @@ const LOGIN_ERRORS = {
   google: 'Google sign-in isn’t available right now. Please use your email instead.',
   'not-approved':
     'That Google account doesn’t have access to any Vydia pages. Sign in with the email your Vydia representative has on file for you.',
-} as const
+}
 
-export const loginErrorMessage = (raw: unknown): string | null =>
+export const loginErrorMessage = (raw: string | string[] | undefined): string | null =>
   Object.entries(LOGIN_ERRORS).find(([key]) => key === raw)?.[1] ?? null
 ```
 
@@ -431,7 +425,7 @@ export async function GET(request: NextRequest) {
     if (!error) {
       const email = verifiedEmail(data.user)
       if (email && (await canSignIn(email))) return NextResponse.redirect(`${origin}${next}`)
-      // Supabase creates a user for any Google account; an unapproved one never keeps a session (D20).
+      // Supabase creates a user for any Google account; an unapproved one never keeps a session.
       await supabase.auth.signOut()
       return NextResponse.redirect(`${origin}/login?error=not-approved&next=${encodeURIComponent(next)}`)
     }
@@ -459,10 +453,7 @@ import {confirmSignIn} from './actions'
 
 export const instant = false
 
-/**
- * Magic links land here instead of signing in on GET: email scanners open every link in a message, and a GET that
- * verified the token would use it up before the person clicks. Scanners don't submit forms.
- */
+// Signing in needs a click: email scanners open every link in a message and would use up the token on a GET.
 export default async function ConfirmPage({searchParams}: PageProps<'/auth/confirm'>) {
   const {token_hash: tokenHash, redirect_to: redirectTo} = await searchParams
   if (typeof tokenHash !== 'string' || !tokenHash) redirect('/login?error=link')
@@ -705,7 +696,7 @@ beforeAll(async () => {
 // "always allows the permanent internal emails": LabelServices@vydia.com instead of LabelRelationships@
 
 describe('isApprovedAnywhere', () => {
-  const approved = {artistEmails: ['Jane@Example.com ', 'sam@example.com'], internalViewers: ['Erica.Johnson@vydia.com']}
+  const approved = {artistEmails: ['Jane@Example.com ', null, 'sam@example.com'], internalViewers: ['Erica.Johnson@vydia.com']}
 
   it('accepts any artist email, internal viewer, or permanent viewer, ignoring case and spaces', () => {
     expect(access.isApprovedAnywhere(' jane@example.COM', approved)).toBe(true)
@@ -719,7 +710,7 @@ describe('isApprovedAnywhere', () => {
   })
 
   it('survives an empty dataset', () => {
-    expect(access.isApprovedAnywhere('jane@example.com', {artistEmails: null, internalViewers: null})).toBe(false)
+    expect(access.isApprovedAnywhere('jane@example.com', {artistEmails: [], internalViewers: null})).toBe(false)
   })
 })
 ```
@@ -729,6 +720,7 @@ describe('isApprovedAnywhere', () => {
 `tests/e2e/global-setup.ts` gets real sessions from the Admin API's `generate_link`. That call returns the link's `hashed_token` **without sending an email**. Setup then goes through the real confirm page:
 
 ```ts
+import {existsSync} from 'node:fs'
 import {chromium, type FullConfig} from '@playwright/test'
 import {E2E_PERSONAS, E2E_USERS, storageStatePath} from './users'
 
@@ -747,6 +739,7 @@ async function hashedToken(email: string) {
 }
 
 export default async function globalSetup(config: FullConfig) {
+  if (existsSync('.env.local')) process.loadEnvFile('.env.local')
   const baseURL = config.projects[0]?.use.baseURL ?? 'http://localhost:3000'
   const extraHTTPHeaders = config.projects[0]?.use.extraHTTPHeaders
   const browser = await chromium.launch()
@@ -792,10 +785,19 @@ test.describe('sign-in page', () => {
       await page.getByPlaceholder('Email').fill(email)
       await page.getByRole('button', {name: 'Email me a sign-in link'}).click()
       const status = page.getByRole('status')
-      await expect(status).toContainText('If')
-      answers.push((await status.textContent())!.replace(email, '<email>'))
+      await expect(status).toContainText(email)
+      answers.push(((await status.textContent()) ?? '').replace(email, '<email>'))
     }
     expect(answers[0]).toBe(answers[1])
+    await expect(page.getByRole('button', {name: /^Resend link in \d+s$/})).toBeDisabled()
+  })
+
+  test('"Use a different email" starts over', async ({page}) => {
+    await page.goto('/login')
+    await page.getByPlaceholder('Email').fill(`nobody-${Date.now()}@example.com`)
+    await page.getByRole('button', {name: 'Email me a sign-in link'}).click()
+    await page.getByRole('button', {name: 'Use a different email'}).click()
+    await expect(page.getByPlaceholder('Email')).toHaveValue('')
   })
 
   test('Google goes to accounts.google.com via Supabase', async ({page}) => {
@@ -809,7 +811,7 @@ test.describe('sign-in page', () => {
     await page.goto('/auth/confirm?token_hash=not-a-real-token&type=email&redirect_to=/test-artist')
     await page.getByRole('button', {name: 'Continue'}).click()
     await expect(page).toHaveURL('/login?error=link&next=%2Ftest-artist')
-    await expect(page.getByRole('alert')).toContainText('invalid, expired, or already used')
+    await expect(page.locator('p[role="alert"]')).toContainText('invalid, expired, or already used')
   })
 
   test('opening a link does not sign in until Continue is pressed', async ({page, request}) => {
@@ -851,31 +853,37 @@ Run on a preview deployment once Resend is set up:
 ## 13. To-do list
 
 ### Phase A: Prep (dashboards, no deploy needed)
-- [ ] **A.1** Paste the new **Magic Link** and **Confirm signup** templates into Supabase (§6). Safe to do before the code ships: the current GET `/auth/confirm` already handles `type=email`.
-- [ ] **A.2** Check Auth → Sessions (§7), especially single session per user = off.
-- [ ] **A.3** Studio → Website → add `erica.johnson@vydia.com` and `mason.omara@vydia.com` to Internal viewers → Publish (or run §8.2 after deploying the schema change).
-- [ ] **A.4** Answer §12 Q1–Q2.
-- [ ] **A.5** Resend + Supabase SMTP (existing U7). This blocks email sign-in for artists, but not the code work.
+- [ ] **A.1** ⏳ *Needs you (Supabase dashboard).* Paste the new **Magic Link** and **Confirm signup** templates into Supabase (§6). Safe to do before the code ships: the current GET `/auth/confirm` already handles `type=email`.
+- [ ] **A.2** ⏳ *Needs you (Supabase dashboard; not exposed by the public settings API).* Check Auth → Sessions (§7), especially single session per user = off.
+- [x] **A.3** Studio → Website → add `erica.johnson@vydia.com` and `mason.omara@vydia.com` to Internal viewers → Publish (or run §8.2 after deploying the schema change).
+  ✅ 2026-10-21: ran `npx sanity exec scripts/seed.ts --with-user-token` against `production` (no `drafts.website` existed). Both emails are on the published Website. A second run added nothing.
+- [ ] **A.4** ⏳ *Needs you.* Answer §12 Q1–Q2.
+- [ ] **A.5** ⏳ *Needs you (Resend approval + DNS).* Resend + Supabase SMTP (existing U7). This blocks email sign-in for artists, but not the code work.
 
 ### Phase B: Code
-- [ ] **B.1** `APPROVED_EMAILS_QUERY` + `npm run typegen` (§4.1).
-- [ ] **B.2** `lib/access.ts`: permanent default, `isApprovedAnywhere`, `canSignIn` + unit tests (§4.2, §11.1).
-- [ ] **B.3** `lib/form.ts`, `lib/supabase/stateless.ts` (§5.1–5.2).
-- [ ] **B.4** Login actions, form, errors, page, CSS (§5.3–5.5).
-- [ ] **B.5** `/auth/callback` rejects unapproved Google accounts (§5.6).
-- [ ] **B.6** `/auth/confirm` page + action, delete `route.ts` (§5.7).
-- [ ] **B.7** Deletions (§5.8).
-- [ ] **B.8** Templates in the repo (§6).
-- [ ] **B.9** Website/artist schema changes + seed script (§8).
-- [ ] **B.10** `.env.example`, README, editor guide, main plan (§9).
-- [ ] **B.11** E2E: global setup, fixtures, workflow, new spec, a11y updates (§11.2–11.3).
-- [ ] **B.12** `npm run lint && npm run typecheck && npm run test && npm run format:check`, then `npm run e2e` locally.
+- [x] **B.1** `APPROVED_EMAILS_QUERY` + `npm run typegen` (§4.1).
+- [x] **B.2** `lib/access.ts`: permanent default, `isApprovedAnywhere`, `canSignIn` + unit tests (§4.2, §11.1).
+- [x] **B.3** `lib/form.ts`, `lib/supabase/stateless.ts` (§5.1–5.2).
+- [x] **B.4** Login actions, form, errors, page, CSS (§5.3–5.5).
+- [x] **B.5** `/auth/callback` rejects unapproved Google accounts (§5.6).
+- [x] **B.6** `/auth/confirm` page + action, delete `route.ts` (§5.7).
+- [x] **B.7** Deletions (§5.8).
+- [x] **B.8** Templates in the repo (§6).
+- [x] **B.9** Website/artist schema changes + seed script (§8).
+- [x] **B.10** `.env.example`, README, editor guide, main plan (§9).
+- [x] **B.11** E2E: global setup, fixtures, workflow, new spec, a11y updates (§11.2–11.3).
+- [x] **B.12** `npm run lint && npm run typecheck && npm run test && npm run format:check`, then `npm run e2e` locally.
+  ✅ 2026-10-21: lint, typecheck, and 70/70 unit tests pass. `format:check` flags only files that already failed before this work (`app/manifest.json`, five component CSS modules, `components/PageShell.tsx`, `TASKS.md`). `npm run build` passes.
+  E2E (production build, local Supabase + Sanity): **17 passed, 6 failed**. All 6 sign-in tests pass, global setup signs in through `generate_link` + the Continue page, and the "Finish signing in" page passes axe. Running the same tests against the unmodified `HEAD` build showed the 6 failures were already there, from the `style` branch's redesign:
+  - `color-contrast` on `/`, the no-access notice, and the sign-in page's `.error` / `.divider`: `--color-text-muted` (#6b7280) and `--color-danger` (#dc2626) are too dim on the new `#1a1a1a` background. (The new `.lede` uses the base text color and passes.)
+  - "sees the resource cards" and "keyboard only": `getByRole('region', {name: 'Resources'})` isn't found with the carousel view. Fails on the baseline too.
+  - "the video dialog … returns focus": flaky on both builds (1–3 of 4 runs fail).
 
 ### Phase C: Ship
-- [ ] **C.1** Vercel: `PERMANENT_VIEWER_EMAILS=labelservices@vydia.com,creativeservices@vydia.com` for Preview + Production.
-- [ ] **C.2** Open the PR. CI passes, and e2e passes against the preview.
-- [ ] **C.3** Manual QA on the preview (§11.4).
-- [ ] **C.4** Merge → production. Repeat the Google and link checks on `welcometovydia.com`.
-- [ ] **C.5** Record a short Loom addendum for L&A: "clients no longer create a password", and how to add a colleague as an internal viewer.
+- [ ] **C.1** ⏳ *Needs your go-ahead: changes production access the moment it's saved.* Vercel: `PERMANENT_VIEWER_EMAILS=labelservices@vydia.com,creativeservices@vydia.com` for Preview + Production.
+- [ ] **C.2** ⏳ *Needs your go-ahead.* The work is uncommitted on `style`, which also holds unrelated in-progress UI commits. Decide whether it ships with them or on its own branch. Open the PR. CI passes, and e2e passes against the preview.
+- [ ] **C.3** ⏳ *Needs a person with real inboxes (after A.1 and A.5).* Manual QA on the preview (§11.4).
+- [ ] **C.4** ⏳ *Needs your go-ahead (production deploy).* Merge → production. Repeat the Google and link checks on `welcometovydia.com`.
+- [ ] **C.5** ⏳ *Needs you.* Record a short Loom addendum for L&A: "clients no longer create a password", and how to add a colleague as an internal viewer.
 
 **Done when:** an approved artist can open their page via Google or one email link without ever choosing a password; an unapproved email or Google account never ends up with a session; the four Vydia addresses can open every page; and a returning visitor is never asked to sign in again unless they cleared their cookies.

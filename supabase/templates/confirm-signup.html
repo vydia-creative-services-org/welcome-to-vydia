@@ -1,4 +1,4 @@
-<!-- Subject: Confirm your email for Welcome to Vydia -->
+<!-- Subject: Your Welcome to Vydia sign-in link -->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 16px;font-family:'Public Sans',Helvetica,Arial,sans-serif;color:#262626;">
   <tr>
     <td align="center">
@@ -10,18 +10,19 @@
         </tr>
         <tr>
           <td style="padding:32px 24px;">
-            <h1 style="margin:0 0 12px;font-size:20px;font-weight:600;">Confirm your email</h1>
+            <h1 style="margin:0 0 12px;font-size:20px;font-weight:600;">Sign in to Welcome to Vydia</h1>
             <p style="margin:0 0 24px;font-size:16px;line-height:1.5;color:#404040;">
-              Confirm {{ .Email }} to finish setting up your login and open your Vydia resources.
+              Use this button to sign in as {{ .Email }}. It works once and expires in 1 hour. Open it in the browser you
+              want to stay signed in on.
             </p>
             <p style="margin:0 0 24px;">
               <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&redirect_to={{ .RedirectTo }}"
                  style="display:inline-block;padding:12px 20px;background:#121212;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;">
-                Confirm email
+                Sign in
               </a>
             </p>
             <p style="margin:0;font-size:14px;line-height:1.5;color:#6b7280;">
-              If you didn’t request this, you can ignore this email.
+              If you didn’t ask to sign in, you can ignore this email.
             </p>
           </td>
         </tr>

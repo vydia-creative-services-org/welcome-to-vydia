@@ -42,6 +42,13 @@ The security rule that drives most of the design: an unknown slug and a known sl
 | D13 | **`/` is an instructions-only page, not an artist index.** It's public, reads nothing from Sanity, and tells the visitor to open the link their Vydia rep sent | Plan-review decision. Assume the visitor is an artist looking for their page. Internal viewers reach artist pages by direct URL or with Studio's "Open site" action. |
 | D14 | **Videos are uploaded to Sanity** (no YouTube/Vimeo/Mux link option for the `video` type) | Plan-review decision, matches the research ("Sanity will store all … videos"). Storage and bandwidth still get measured (§15). |
 | D15 | **Keep Next 16's `cacheComponents`.** Sanity data is cached with `'use cache'` + `cacheLife('max')` + `cacheTag` (§7.1) and expired by the webhook (§10). Pages that read the request (`/[slug]`, `/login`) set `export const instant = false` | Decided in task 2.0. It's the Next 16 default. **Correction (found in Phase 6):** `instant = false` only relaxes navigation validation. It does **not** stop prerendering. In a production build `/[slug]` is a partial prerender: the static shell (layout and header) streams first, so `notFound()` comes back as **200** with the not-found UI and a `noindex` tag, and `redirect()` becomes a streamed client-side redirect. A dynamic root layout (`await connection()`) didn't change this. Unknown and denied still get identical responses, so the security requirement holds. Real 404/307 status codes need a Proxy check or turning `cacheComponents` off; see task 8.0. |
+| D16 | **Passwordless sign-in: Google + email magic link** (supersedes the email/password parts of §4.3, §8.4, §8.5) | TASKS "Email and sign in": approved people get in without creating an account. Details and code in [`sign-in-plan.md`](./sign-in-plan.md). |
+| D17 | **Magic links are only sent to approved emails; the response never says which** (lookup + send run in `after()`) | Strangers never become Supabase users, and the form can't be used to probe the client roster. |
+| D18 | **Email links open a "Finish signing in" page with a Continue button** (`/auth/confirm` is a page, verification is a server action) | Email scanners open links on GET and would spend the single-use token. |
+| D19 | **Links are verified by `token_hash`, not PKCE code exchange** | Works in whichever browser opens the email (e.g. the Gmail in-app browser). |
+| D20 | **Unapproved Google accounts are signed out in `/auth/callback`** | Supabase creates a user for any Google account; an unapproved one never keeps a session. |
+| D21 | **All auth is server-side; no browser Supabase client** | Every auth cookie is written by `Set-Cookie`, so Safari's 7-day cap on script-written cookies never applies (keeps D11). |
+| D22 | **Permanent viewers: `creativeservices@` and `labelservices@`** (`labelrelationships@` dropped). Named people go on Website → Access → Internal viewers | Owner decision, 2026-10-21. |
 
 ---
 
@@ -174,7 +181,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 
 # Comma-separated, always allowed on every artist page (D6)
-PERMANENT_VIEWER_EMAILS=labelrelationships@vydia.com,creativeservices@vydia.com
+PERMANENT_VIEWER_EMAILS=labelservices@vydia.com,creativeservices@vydia.com
 ```
 
 ```ts
@@ -219,8 +226,8 @@ export const apiVersion = '2025-02-19'
 | Auth → URL Configuration → Redirect URLs | `http://localhost:3000/**`, `https://welcometovydia.com/**`, Vercel preview pattern |
 | Auth → Sessions | Time-box user sessions: **never**. Inactivity timeout: **never** (D11) |
 | Auth → SMTP | **Custom SMTP** (Resend, SendGrid, or Vydia's provider). The built-in sender is heavily rate-limited and will drop confirmation emails in production. |
-| Auth → Email templates → Confirm signup | Link to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&redirect_to={{ .RedirectTo }}` |
-| Auth → Email templates → Reset password | Link to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&redirect_to={{ .SiteURL }}/account/update-password` |
+| Auth → Email templates → Magic Link **and** Confirm signup | Both use `supabase/templates/magic-link.html` / `confirm-signup.html`: link to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&redirect_to={{ .RedirectTo }}` (D16, see [`sign-in-plan.md`](./sign-in-plan.md) §6 and §10) |
+| Auth → Email templates → Reset password | No longer sent (no passwords, D16) |
 
 ---
 
@@ -1402,6 +1409,8 @@ export function safeNext(raw: string | null | undefined): string {
 
 ### 8.4 Login page
 
+> **Superseded by [`sign-in-plan.md`](./sign-in-plan.md) §5 (D16).** Kept for history: the email/password flow below no longer exists.
+
 ```ts
 // app/(site)/login/actions.ts
 'use server'
@@ -1640,6 +1649,8 @@ export default async function LoginPage({searchParams}: PageProps<'/login'>) {
 ```
 
 ### 8.5 Auth route handlers
+
+> **Superseded by [`sign-in-plan.md`](./sign-in-plan.md) §5.6–5.7 (D18–D20).** `/auth/confirm` is now a page with a Continue button, and `/auth/callback` rejects unapproved Google accounts.
 
 ```ts
 // app/(site)/auth/callback/route.ts   (Google OAuth, PKCE)

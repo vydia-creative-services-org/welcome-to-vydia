@@ -1,6 +1,6 @@
 import {encodeSignatureHeader, SIGNATURE_HEADER_NAME} from '@sanity/webhook'
 import {getCliClient} from 'sanity/cli'
-import {E2E_PERSONAS, E2E_USERS, e2ePassword} from '../tests/e2e/users'
+import {E2E_PERSONAS, E2E_USERS} from '../tests/e2e/users'
 
 type AdminUser = {id: string; email?: string}
 type AdminUserList = {users: AdminUser[]}
@@ -20,18 +20,18 @@ async function findUser(email: string): Promise<AdminUser | undefined> {
   return list.users.find((user) => user.email === email)
 }
 
-async function upsertUser(email: string, password: string) {
+async function upsertUser(email: string) {
   const existing = await findUser(email)
   const response = existing
     ? await fetch(`${supabaseUrl}/auth/v1/admin/users/${existing.id}`, {
         method: 'PUT',
         headers,
-        body: JSON.stringify({password, email_confirm: true}),
+        body: JSON.stringify({email_confirm: true}),
       })
     : await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({email, password, email_confirm: true}),
+        body: JSON.stringify({email, email_confirm: true}),
       })
   if (!response.ok) throw new Error(`Could not create ${email}: ${response.status} ${await response.text()}`)
   console.log(`${existing ? 'updated' : 'created'} ${email}`)
@@ -69,8 +69,7 @@ async function artistIds() {
 }
 
 async function setup() {
-  const password = e2ePassword()
-  for (const persona of E2E_PERSONAS) await upsertUser(E2E_USERS[persona], password)
+  for (const persona of E2E_PERSONAS) await upsertUser(E2E_USERS[persona])
   for (const id of await artistIds()) {
     const emails = await sanity.fetch<string[] | null>('*[_id == $id][0].allowedEmails', {id})
     if ((emails ?? []).some((email) => email.toLowerCase() === approvedEmail)) continue

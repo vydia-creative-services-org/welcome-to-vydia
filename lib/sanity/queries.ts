@@ -9,6 +9,11 @@ export const ACCESS_QUERY = defineQuery(`{
   "internalViewers": *[_type == "website" && _id == "website"][0].internalViewerEmails
 }`)
 
+export const APPROVED_EMAILS_QUERY = defineQuery(`{
+  "artistEmails": *[_type == "artist" && defined(slug.current)].allowedEmails[],
+  "internalViewers": *[_type == "website" && _id == "website"][0].internalViewerEmails
+}`)
+
 const RESOURCE_PROJECTION = `{
   _id,
   title,

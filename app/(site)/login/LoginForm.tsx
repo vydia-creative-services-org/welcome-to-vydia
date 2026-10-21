@@ -1,43 +1,83 @@
 'use client'
-import {useActionState, useState} from 'react'
+import {useActionState, useEffect, useState} from 'react'
 import ui from '@/components/ui/controls.module.css'
 import {cx} from '@/lib/cx'
-import {createClient} from '@/lib/supabase/client'
-import {requestPasswordReset, signIn, signUp, type AuthState} from './actions'
+import {sendMagicLink, signInWithGoogle, type LinkState} from './actions'
 import styles from './LoginForm.module.css'
 
-type Mode = 'signin' | 'signup' | 'reset'
+// Supabase sends at most one link per email every 60 seconds.
+const RESEND_AFTER_MS = 60_000
 
-const TITLES: Record<Mode, string> = {signin: 'Sign in', signup: 'Create your login', reset: 'Reset password'}
-const SUBMIT: Record<Mode, string> = {signin: 'Sign in', signup: 'Sign up', reset: 'Send reset link'}
-const ACTIONS = {signin: signIn, signup: signUp, reset: requestPasswordReset}
+type SentState = LinkState & {sentAt?: number}
 
-function ModeForm({mode, next}: {mode: Mode; next: string}) {
-  const [state, formAction, pending] = useActionState<AuthState, FormData>(ACTIONS[mode], {})
+async function send(previous: SentState, form: FormData): Promise<SentState> {
+  const result = await sendMagicLink(previous, form)
+  return result.sentTo ? {...result, sentAt: Date.now()} : result
+}
+
+function useSecondsUntil(deadline: number) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  return Math.max(0, Math.ceil((deadline - now) / 1000))
+}
+
+function SignInSteps({next, error, onReset}: {next: string; error: string | null; onReset: () => void}) {
+  const [state, formAction, pending] = useActionState<SentState, FormData>(send, {})
+  const secondsLeft = useSecondsUntil((state.sentAt ?? 0) + RESEND_AFTER_MS)
+
+  if (state.sentTo) {
+    return (
+      <>
+        <h1 className={styles.title}>Check your email</h1>
+        <p role="status" className={styles.lede}>
+          If <strong>{state.sentTo}</strong> has access, a sign-in link is on its way. It works once and expires in 1
+          hour. Open it in the browser you want to stay signed in on.
+        </p>
+        <form action={formAction} className={styles.form}>
+          <input type="hidden" name="email" value={state.sentTo} />
+          <input type="hidden" name="next" value={next} />
+          <button disabled={pending || secondsLeft > 0} className={ui.button}>
+            {secondsLeft > 0 ? `Resend link in ${secondsLeft}s` : 'Resend link'}
+          </button>
+        </form>
+        <div className={styles.footer}>
+          <button type="button" className={ui.textButton} onClick={onReset}>
+            Use a different email
+          </button>
+        </div>
+      </>
+    )
+  }
+
   return (
     <>
+      <h1 className={styles.title}>Sign in</h1>
+      <p className={styles.lede}>Use the email your Vydia representative has on file for you.</p>
+
+      {error && (
+        <p role="alert" className={cx(ui.error, styles.notice)}>
+          {error}
+        </p>
+      )}
+
+      <form action={signInWithGoogle}>
+        <input type="hidden" name="next" value={next} />
+        <button className={ui.button}>Continue with Google</button>
+      </form>
+
+      <div className={styles.divider}>or</div>
+
       <form action={formAction} className={styles.form}>
         <input type="hidden" name="next" value={next} />
         <label className={styles.field}>
           <span className="visually-hidden">Email</span>
           <input name="email" type="email" required autoComplete="email" placeholder="Email" className={ui.input} />
         </label>
-        {mode !== 'reset' && (
-          <label className={styles.field}>
-            <span className="visually-hidden">Password</span>
-            <input
-              name="password"
-              type="password"
-              required
-              minLength={8}
-              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-              placeholder="Password"
-              className={ui.input}
-            />
-          </label>
-        )}
         <button disabled={pending} className={cx(ui.button, ui.primary)}>
-          {SUBMIT[mode]}
+          Email me a sign-in link
         </button>
       </form>
       {state.error && (
@@ -45,69 +85,21 @@ function ModeForm({mode, next}: {mode: Mode; next: string}) {
           {state.error}
         </p>
       )}
-      {state.message && (
-        <p role="status" className={cx(ui.success, styles.feedback)}>
-          {state.message}
-        </p>
-      )}
     </>
   )
 }
 
-export function LoginForm({next, linkError}: {next: string; linkError: boolean}) {
-  const [mode, setMode] = useState<Mode>('signin')
-  const [googleError, setGoogleError] = useState(false)
-
-  async function google() {
-    const {error} = await createClient().auth.signInWithOAuth({
-      provider: 'google',
-      options: {redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`},
-    })
-    setGoogleError(Boolean(error))
-  }
-
+export function LoginForm({next, error}: {next: string; error: string | null}) {
+  // A new key throws away the "sent" state, so "Use a different email" starts over.
+  const [attempt, setAttempt] = useState(0)
   return (
     <div className={styles.card}>
-      <h1 className={styles.title}>{TITLES[mode]}</h1>
-
-      {linkError && mode === 'signin' && (
-        <p role="alert" className={cx(ui.error, styles.notice)}>
-          That link is invalid or expired. Please try again.
-        </p>
-      )}
-
-      {mode !== 'reset' && (
-        <>
-          <button type="button" onClick={google} className={ui.button}>
-            Continue with Google
-          </button>
-          {googleError && (
-            <p role="alert" className={cx(ui.error, styles.feedback)}>
-              Google sign-in isn’t available right now. Please use your email instead.
-            </p>
-          )}
-          <div className={styles.divider}>or</div>
-        </>
-      )}
-
-      <ModeForm key={mode} mode={mode} next={next} />
-
-      <div className={styles.footer}>
-        {mode === 'signin' ? (
-          <>
-            <button type="button" className={ui.textButton} onClick={() => setMode('signup')}>
-              First time? Sign up
-            </button>
-            <button type="button" className={ui.textButton} onClick={() => setMode('reset')}>
-              Forgot password?
-            </button>
-          </>
-        ) : (
-          <button type="button" className={ui.textButton} onClick={() => setMode('signin')}>
-            Back to sign in
-          </button>
-        )}
-      </div>
+      <SignInSteps
+        key={attempt}
+        next={next}
+        error={attempt === 0 ? error : null}
+        onReset={() => setAttempt((n) => n + 1)}
+      />
     </div>
   )
 }
