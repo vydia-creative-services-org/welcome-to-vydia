@@ -130,6 +130,29 @@
   display: none;
 }
 
+/* A sideways swipe or drag is moving the cards; it lands on a card itself (see ResourceCarousel.tsx). */
+.scroller[data-free] {
+  scroll-snap-type: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .scroller {
+    cursor: grab;
+    user-select: none;
+  }
+
+  .scroller[data-dragging],
+  .scroller[data-dragging] * {
+    cursor: grabbing;
+  }
+
+  /* The video dialog sits inside the scroller in the DOM, so it would inherit the above. */
+  .scroller dialog {
+    cursor: auto;
+    user-select: auto;
+  }
+}
+
 .stage {
   --pos: 0;
 
@@ -159,6 +182,8 @@
 
 .track {
   height: calc((var(--count) - 1) * var(--cell));
+  /* Not visible: the carousel reads this width to keep swiped and dragged cards under the pointer. */
+  width: var(--first);
 }
 
 .snap {

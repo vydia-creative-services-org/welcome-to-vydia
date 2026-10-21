@@ -21,21 +21,29 @@ function backdropSrc(resource: ResourceCardData): {full: string; placeholder?: s
   return {full: urlFor(source).width(2000).fit('max').url(), placeholder: resource.cover?.asset?.lqip ?? undefined}
 }
 
-/** Accumulated horizontal wheel distance that counts as one sideways swipe. */
-const SWIPE_THRESHOLD = 30
 /** Quiet time after which a horizontal wheel gesture (incl. trackpad momentum) is over. */
-const GESTURE_END_MS = 200
+const GESTURE_END_MS = 150
+/** Mouse travel (px) before a press becomes a drag, so a plain click still opens the card. */
+const DRAG_THRESHOLD = 6
+/** How far ahead (ms) a released drag's speed carries it when picking the card to land on. */
+const FLING_MS = 150
+/** Fallback for browsers without `scrollend`: how long a landing scroll may take. */
+const LANDING_MS = 800
+/** Matches the stacked (vertical) layout's breakpoint in ResourceCarousel.module.css. */
+const STACKED_QUERY = '(max-width: 768px)'
 
 /*
  * The carousel is a real vertical scroll container with scroll-snap, so wheel, trackpad momentum,
  * touch flicks and keyboard scrolling are all the browser's own. One snap "cell" of scroll moves
  * the carousel one resource; the scroll position is fed to CSS as a fractional --pos and the
  * cover-flow transforms are derived from it, so cards track the user's scroll continuously.
+ * Sideways trackpad swipes and mouse drags drive the same scroll position from script.
  */
 export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
   const [current, setCurrent] = useState(0)
   const scroller = useRef<HTMLDivElement>(null)
   const stage = useRef<HTMLDivElement>(null)
+  const track = useRef<HTMLDivElement>(null)
   const cell = useRef(1)
   // The eased scrollTop the visuals are currently drawn at (see useScrollInertia).
   const drawnY = useRef(0)
@@ -74,43 +82,133 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
   useEffect(() => {
     const el = scroller.current
     if (!el) return
-    const last = resources.length - 1
+    const max = () => (resources.length - 1) * cell.current
+    const clampTop = (top: number) => Math.min(max(), Math.max(0, top))
+    const stacked = window.matchMedia(STACKED_QUERY)
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    // Scroll distance per pixel a card moves, so swiped and dragged cards stay under the pointer.
+    let ratio = 1
 
     const measure = () => {
       const second = el.querySelector<HTMLElement>('[data-snap="1"]')
       cell.current = second?.offsetTop || 1
+      ratio = cell.current / (track.current?.offsetWidth || cell.current)
       redraw()
     }
 
-    // Vertical scrolling is native. Sideways trackpad swipes have no native axis to scroll, so each
-    // swipe gesture steps one resource (momentum events are absorbed until the gesture goes quiet).
-    let accumulated = 0
-    let stepped = false
-    let gestureTimer: ReturnType<typeof setTimeout> | undefined
+    // Snapping would pull every scripted nudge straight back to the nearest card, so it's off while a
+    // swipe or drag moves the carousel. On release we glide to a card ourselves, then turn it back on.
+    // `top` is tracked here because some browsers round scrollTop, which would swallow small nudges.
+    let top = el.scrollTop
+    let landing = 0
+    const settle = () => {
+      clearTimeout(landing)
+      el.removeEventListener('scrollend', settle)
+      delete el.dataset.free
+    }
+    const free = () => {
+      clearTimeout(landing)
+      el.removeEventListener('scrollend', settle)
+      if (!('free' in el.dataset) || Math.abs(el.scrollTop - top) > 1) top = el.scrollTop
+      el.dataset.free = ''
+    }
+    const moveTo = (next: number) => {
+      top = clampTop(next)
+      el.scrollTop = top
+    }
+    const land = (index: number) => {
+      const target = clampTop(Math.round(index) * cell.current)
+      if (Math.abs(el.scrollTop - target) < 1) return settle()
+      el.addEventListener('scrollend', settle)
+      landing = window.setTimeout(settle, LANDING_MS)
+      el.scrollTo({top: target, behavior: reduceMotion.matches ? 'auto' : 'smooth'})
+    }
+
+    // Vertical scrolling is native. Sideways trackpad swipes (and their momentum) move the cards with
+    // the fingers, then land on the nearest card once the gesture goes quiet.
+    let gestureEnd = 0
     const onWheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return
+      if (event.ctrlKey || Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return
       if (event.target instanceof Element && event.target.closest('dialog')) return
       event.preventDefault()
-      clearTimeout(gestureTimer)
-      gestureTimer = setTimeout(() => {
-        accumulated = 0
-        stepped = false
-      }, GESTURE_END_MS)
-      if (stepped) return
-      accumulated += event.deltaX
-      if (Math.abs(accumulated) < SWIPE_THRESHOLD) return
-      stepped = true
-      const target = Math.round(el.scrollTop / cell.current) + Math.sign(accumulated)
-      el.scrollTo({top: Math.min(last, Math.max(0, target)) * cell.current, behavior: 'smooth'})
+      free()
+      moveTo(top + event.deltaX * ratio)
+      clearTimeout(gestureEnd)
+      gestureEnd = window.setTimeout(() => land(top / cell.current), GESTURE_END_MS)
     }
+
+    // Mouse drag along the cards' axis. Touch already scrolls natively, so it's left alone.
+    let drag: {
+      id: number
+      x: number
+      y: number
+      top: number
+      moved: boolean
+      samples: {t: number; top: number}[]
+    } | null = null
+    let swallowClick = false
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.pointerType !== 'mouse' || event.button !== 0) return
+      if (event.target instanceof Element && event.target.closest('dialog')) return
+      drag = {id: event.pointerId, x: event.clientX, y: event.clientY, top: el.scrollTop, moved: false, samples: []}
+    }
+    const onPointerMove = (event: PointerEvent) => {
+      if (!drag || event.pointerId !== drag.id) return
+      const distance = stacked.matches ? event.clientY - drag.y : event.clientX - drag.x
+      if (!drag.moved) {
+        if (Math.abs(distance) < DRAG_THRESHOLD) return
+        drag.moved = true
+        el.setPointerCapture(event.pointerId)
+        el.dataset.dragging = ''
+        free()
+      }
+      moveTo(drag.top - distance * ratio)
+      drag.samples = [...drag.samples.filter((s) => event.timeStamp - s.t < 100), {t: event.timeStamp, top}]
+    }
+    const onPointerUp = (event: PointerEvent) => {
+      if (!drag || event.pointerId !== drag.id) return
+      const {moved, samples} = drag
+      drag = null
+      if (!moved) return
+      delete el.dataset.dragging
+      // The card under the pointer was let go of: its click shouldn't open it.
+      swallowClick = event.type === 'pointerup'
+      setTimeout(() => (swallowClick = false))
+      const first = samples[0]
+      const latest = samples[samples.length - 1]
+      const speed = latest && latest.t > first.t ? (latest.top - first.top) / (latest.t - first.t) : 0
+      land((top + speed * FLING_MS) / cell.current)
+    }
+    const onClick = (event: MouseEvent) => {
+      if (!swallowClick) return
+      swallowClick = false
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    // Links and cover images are natively draggable, which would steal the gesture.
+    const onDragStart = (event: DragEvent) => event.preventDefault()
 
     const observer = new ResizeObserver(measure)
     observer.observe(el)
     el.addEventListener('wheel', onWheel, {passive: false})
+    el.addEventListener('pointerdown', onPointerDown)
+    el.addEventListener('pointermove', onPointerMove)
+    el.addEventListener('pointerup', onPointerUp)
+    el.addEventListener('pointercancel', onPointerUp)
+    el.addEventListener('click', onClick, true)
+    el.addEventListener('dragstart', onDragStart)
     return () => {
-      clearTimeout(gestureTimer)
+      clearTimeout(gestureEnd)
+      settle()
+      delete el.dataset.dragging
       observer.disconnect()
       el.removeEventListener('wheel', onWheel)
+      el.removeEventListener('pointerdown', onPointerDown)
+      el.removeEventListener('pointermove', onPointerMove)
+      el.removeEventListener('pointerup', onPointerUp)
+      el.removeEventListener('pointercancel', onPointerUp)
+      el.removeEventListener('click', onClick, true)
+      el.removeEventListener('dragstart', onDragStart)
     }
   }, [resources.length])
 
@@ -209,7 +307,7 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
         </div>
 
         {/* Scroll length and snap points: one cell of scrolling per resource. */}
-        <div className={styles.track} aria-hidden>
+        <div ref={track} className={styles.track} aria-hidden>
           {resources.map((resource, index) => (
             <span
               key={resource._id}
