@@ -102,33 +102,34 @@
   text-transform: uppercase;
 }
 
-.toggleContainer {
-  display: flex;
-  flex-direction: row;
-  gap: 8px;
-}
-
-
 .toggle {
   display: inline-flex;
+  gap: 8px;
   padding: 0;
   background: none;
   border: 0;
   color: #fff;
-  opacity: 0.45;
   cursor: pointer;
-  transition:
-    opacity 150ms ease,
-    transform 120ms ease;
 }
 
-.toggle:active {
-  transform: scale(0.9);
+/* The current view's icon is white, the other dimmed; either brightens on hover. */
+.toggleIcon {
+  display: inline-flex;
+  opacity: 0.45;
+  transition: opacity 150ms ease;
 }
 
-.toggle:hover,
-.toggle[aria-pressed='true'] {
+.toggleIcon:hover,
+.toggleIcon[data-current] {
   opacity: 1;
+}
+
+/*
+ * While the gallery ⇄ grid switch animates, the browser hit-tests the whole page as <html> (so the
+ * pointer would drop to an arrow over the toggle you just clicked). Keep it a pointer meanwhile.
+ */
+:global(html[data-view-switching]) {
+  cursor: pointer;
 }
 
 .toggle:focus-visible {
@@ -148,11 +149,5 @@
 
   .mobileIcon {
     display: block;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .toggle {
-    transition: none;
   }
 }

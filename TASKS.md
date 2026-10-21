@@ -1,9 +1,8 @@
 - [ ] add a search bar where documents that dont fit the search have a dark filter go over them and they become moved to the back
 - [x] the toggle betweeen gallery and grid needs some easing
-- [ ] the background needs to be more liek the original, i liek the ease between them but needs to be a bit more like the orginal
+- [ ] the background needs to be more liek the original, i liek the ease between them but needs to be a bit more like the orginal. add a bit of grain to the backgroudn as well. 
 - [ ] the vertical and horizontal gallerys need to feel mroe "skatey"
-- [ ] pointer events nine or passthrough with the scroll for the ahder
+- [ ] pointer events none or passthrough with the scroll for the header
 - [ ] for accessibility purposes make the toggle one button
 - [ ] on desktop you should be able to sccroll left and right like if someone has an apple trackpad
 - [ ] add a sort of mouse tracking follow the mouse effect for the "hovered" or "selected" resource
-- [ ] background has to be done a lot better
