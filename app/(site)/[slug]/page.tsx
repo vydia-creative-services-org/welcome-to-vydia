@@ -1,13 +1,13 @@
 import type {Metadata} from 'next'
 import {notFound, redirect} from 'next/navigation'
-import {Intro} from '@/components/Intro'
 import {PageShell} from '@/components/PageShell'
-import {ResourceSection} from '@/components/ResourceSection'
+import {hasTarget} from '@/components/ResourceCard'
+import {ResourceViews} from '@/components/ResourceViews'
 import {RichText} from '@/components/RichText'
+import {ViewModeProvider} from '@/components/ViewMode'
 import {resolveArtistAccess} from '@/lib/access'
 import {getArtistPage} from '@/lib/sanity/page'
 import {createClient} from '@/lib/supabase/server'
-import styles from './page.module.css'
 
 export const metadata: Metadata = {title: 'Welcome to Vydia', robots: {index: false, follow: false}}
 
@@ -27,18 +27,16 @@ export default async function ArtistPage({params}: PageProps<'/[slug]'>) {
   if (access.status === 'redirect') redirect(`/${access.canonicalSlug}`)
 
   const page = await getArtistPage(access.artistId)
+  const resources = page.resources.filter(hasTarget)
 
   return (
-    <PageShell>
-      <Intro value={page.intro} />
-      {page.additionalInfo && (
-        <section aria-label="Additional information" className={styles.additionalInfo}>
-          <RichText value={page.additionalInfo} />
-        </section>
-      )}
-      {page.sections.map((section) => (
-        <ResourceSection key={section._id} section={section} />
-      ))}
-    </PageShell>
+    <ViewModeProvider>
+      <PageShell fullscreen artistName={page.artistName}>
+        <ResourceViews
+          resources={resources}
+          additionalInfo={page.additionalInfo && <RichText value={page.additionalInfo} />}
+        />
+      </PageShell>
+    </ViewModeProvider>
   )
 }

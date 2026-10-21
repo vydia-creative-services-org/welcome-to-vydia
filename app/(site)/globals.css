@@ -1,8 +1,8 @@
 :root {
-  --color-page: #f3f4f6;
-  --color-surface: #ffffff;
+  --color-page: #1a1a1a;
+  --color-surface: #1a1a1a;
   --color-border: #e5e7eb;
-  --color-text: #262626;
+  --color-text: #ffffff;
   --color-heading: #404040;
   --color-text-muted: #6b7280;
   --color-ink: #121212;
@@ -12,6 +12,11 @@
   --color-badge-video: #8e1b5a;
   --color-badge-link: #f5a524;
   --color-badge-slides: #f4b400;
+
+  /* Gallery ⇄ grid switch: quick off the mark, decelerating into place, no overshoot. */
+  --switch-duration: 800ms;
+  --switch-ease: cubic-bezier(0.32, 0.72, 0, 1); /* iOS-style: most of the way fast, long gentle settle */
+  --switch-fade: 140ms;
 
   --radius-sm: 6px;
   --radius-md: 8px;
@@ -84,4 +89,73 @@ input {
   clip: rect(0 0 0 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Gallery ⇄ grid switch: each resource card morphs from its old position to its new one. */
+::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-group(.resource-morph) {
+  animation-duration: var(--switch-duration);
+  animation-timing-function: var(--switch-ease);
+  /* Holds each card at its start until its cascade delay (set per card in ViewMode.tsx) passes. */
+  animation-fill-mode: both;
+}
+
+/* Swap the old and new card images early so the two layouts never visibly overlap. */
+::view-transition-old(.resource-morph) {
+  animation: var(--switch-fade) ease-out both morph-fade-out;
+}
+
+::view-transition-new(.resource-morph) {
+  animation: var(--switch-fade) ease-out both morph-fade-in;
+}
+
+@keyframes morph-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes morph-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* The rest of the page (carousel title, background) gets out of the way quickly. */
+::view-transition-old(root) {
+  animation: 120ms ease-out both morph-fade-out;
+}
+
+::view-transition-new(root) {
+  animation: 200ms ease-out 60ms both morph-fade-in;
+}
+
+/* The fixed header and mobile footer stay put and above the moving cards. */
+::view-transition-group(site-header),
+::view-transition-group(site-footer) {
+  z-index: 100;
+  animation: none;
+}
+
+::view-transition-old(site-header),
+::view-transition-old(site-footer) {
+  display: none;
+}
+
+::view-transition-new(site-header),
+::view-transition-new(site-footer) {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-image-pair(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
 }

@@ -1,25 +1,153 @@
+
 .header {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 96px;
-  padding: 0 var(--space-6);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-ink);
-  background-image: var(--grain);
-  box-shadow: var(--shadow-sm);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  padding: 20px 20px;
+  z-index: 50;
+
+  background: transparent;
+  isolation: isolate;
 }
 
-.logo {
-  height: 28px;
+/* Main, strong blur */
+.header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+
+  -webkit-backdrop-filter: blur(40px);
+  backdrop-filter: blur(40px);
+
+  background: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 65%) 0%,
+    rgb(0 0 0 / 40%) 35%,
+    rgb(0 0 0 / 15%) 70%,
+    transparent 100%
+  );
+
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    black 20%,
+    rgb(0 0 0 / 85%) 45%,
+    rgb(0 0 0 / 45%) 70%,
+    transparent 100%
+  );
+
+  mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    black 20%,
+    rgb(0 0 0 / 85%) 45%,
+    rgb(0 0 0 / 45%) 70%,
+    transparent 100%
+  );
+}
+
+/* Additional diffusion layer */
+.header::after {
+  content: "";
+  position: absolute;
+  inset: -20px 0 0;
+  z-index: 0;
+  pointer-events: none;
+
+  -webkit-backdrop-filter: blur(60px);
+  backdrop-filter: blur(60px);
+
+  background: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 25%) 0%,
+    rgb(0 0 0 / 12%) 45%,
+    transparent 85%
+  );
+
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    rgb(0 0 0 / 80%) 30%,
+    transparent 85%
+  );
+
+  mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    rgb(0 0 0 / 80%) 30%,
+    transparent 85%
+  );
+}
+
+/* Keep content crisp and fully opaque */
+.header > * {
+  position: relative;
+  z-index: 1;
+}
+
+.text {
+  font-size: 14px;
+  line-height: 18px;
   width: auto;
+  font-weight: 600;
+  color: #fff;
+  text-transform: uppercase;
 }
 
-@media (min-width: 640px) {
-  .header {
-    height: 144px;
+.toggle {
+  display: inline-flex;
+  gap: 8px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: #fff;
+  cursor: pointer;
+}
+
+/* The current view's icon is white, the other dimmed; either brightens on hover. */
+.toggleIcon {
+  display: inline-flex;
+  opacity: 0.45;
+  transition: opacity 150ms ease;
+}
+
+.toggleIcon:hover,
+.toggleIcon[data-current] {
+  opacity: 1;
+}
+
+/*
+ * While the gallery ⇄ grid switch animates, the browser hit-tests the whole page as <html> (so the
+ * pointer would drop to an arrow over the toggle you just clicked). Keep it a pointer meanwhile.
+ */
+:global(html[data-view-switching]) {
+  cursor: pointer;
+}
+
+.toggle:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.mobileIcon {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .desktopIcon {
+    display: none;
   }
-  .logo {
-    height: 40px;
+
+  .mobileIcon {
+    display: block;
   }
 }

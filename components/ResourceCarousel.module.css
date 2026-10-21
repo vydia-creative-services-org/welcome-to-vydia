@@ -1,0 +1,314 @@
+/*
+ * Cover-flow layout driven by scroll. The scroller sets --pos (fractional index of the resource in
+ * the middle) and each slide has its --i; every transform is derived from --o = --i - --pos, so the
+ * cards follow the scroll continuously and the axis can flip on mobile.
+ */
+.carousel {
+  /* Room the header takes above the cards and the title takes below them. */
+  --pad-top: 120px;
+  --pad-bottom: 150px;
+  /*
+   * Sized from the carousel's own box (cq units), so the card fits short laptop screens as well as
+   * wide monitors: a share of the width, capped by the height left between header and title.
+   */
+  --card: clamp(180px, min(30cqw, 100cqh - var(--pad-top) - var(--pad-bottom) - 40px), 520px);
+  /* Scroll distance per resource: under two mouse-wheel ticks' worth, so every tick advances one. */
+  --cell: 160px;
+  --first: calc(var(--card) * 0.7);
+  --step: calc(var(--card) * 0.38);
+  --tilt: 30deg;
+  --side-scale: 0.78;
+  --visible: 6;
+
+  /* Background treatment: how soft the cover is behind the cards, and how strong the grain is. */
+  --backdrop-blur: 18px;
+  --grain-opacity: 0.09;
+  /* Pause before a new cover starts fading in, and how long the fade takes. */
+  --backdrop-delay: 200ms;
+  --backdrop-fade: 700ms;
+
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  container-type: size;
+}
+
+.backdrop {
+  /*
+   * Eased falloff (several stops) so the glow fades without a visible edge. Full strength across
+   * the middle, still faintly there in the corners, so the cover's colour fills most of the screen.
+   */
+  --falloff: radial-gradient(
+    ellipse at center,
+    black 0%,
+    black 40%,
+    rgb(0 0 0 / 82%) 55%,
+    rgb(0 0 0 / 58%) 70%,
+    rgb(0 0 0 / 38%) 85%,
+    rgb(0 0 0 / 25%) 100%
+  );
+
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  /* How strongly the cover shows through over the page colour (lower = darker). */
+  opacity: 0.4;
+  pointer-events: none;
+  -webkit-mask-image: var(--falloff);
+  mask-image: var(--falloff);
+}
+
+/*
+ * Film grain over the whole background (above the cover, beneath the cards and title). Monochrome
+ * noise at low opacity; it also dithers the dark falloff so it doesn't band into rings.
+ */
+.carousel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  opacity: var(--grain-opacity);
+}
+
+/*
+ * Layers dissolve into each other: the new cover fades in on top while the previous one stays fully
+ * shown underneath, then drops out once it's covered (so there's no darker dip mid-fade). Layers are
+ * opaque (a cover-less resource fades to the page colour); the dimming is on .backdrop as a whole.
+ * A small zoom (1 → 1.02) eases the arriving cover in; covers stay at 1.02 once settled, so the one
+ * underneath doesn't move while it's being covered.
+ */
+.backdropLayer {
+  position: absolute;
+  inset: -10%;
+  background: var(--color-page) center / cover no-repeat;
+  filter: blur(var(--backdrop-blur)) saturate(1.4);
+  opacity: 0;
+  transform: scale(1.02);
+  /* Dropped only once the newer cover (after its delay) has fully faded in over it. */
+  transition: opacity 0s linear calc(var(--backdrop-delay) + var(--backdrop-fade));
+}
+
+.backdropLayer[data-active] {
+  opacity: 1;
+  transition:
+    opacity var(--backdrop-fade) cubic-bezier(0.4, 0, 0.2, 1) var(--backdrop-delay),
+    transform 1000ms cubic-bezier(0.2, 0.7, 0.2, 1) var(--backdrop-delay);
+}
+
+@starting-style {
+  .backdropLayer[data-active] {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* The full-size cover fades in over its tiny placeholder (the layer's background) once loaded. */
+.backdropImage {
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+
+.backdropImage[data-loaded] {
+  opacity: 1;
+}
+
+.scroller {
+  position: absolute;
+  inset: 0;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  outline: none;
+}
+
+.scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.stage {
+  --pos: 0;
+
+  position: sticky;
+  top: 0;
+  height: 100%;
+  padding: var(--pad-top) 0 var(--pad-bottom);
+  overflow: clip;
+}
+
+/*
+ * One shared 3D space for the cards (the stage's overflow clip would flatten it, hence this layer),
+ * so the browser depth-sorts them. With the eased layout (see .slide) cards never cross in depth, so
+ * this agrees with the slides' z-index, which takes over wherever an engine flattens 3D instead.
+ *
+ * TODO(revisit): headless WebKit flattened this layer (painting cards in DOM order), so whether real
+ * Safari depth-sorts it is unconfirmed. If every engine we care about ends up relying on the z-index,
+ * drop preserve-3d and keep only the z-index; if they all depth-sort, the z-index can go instead.
+ */
+.slides {
+  position: absolute;
+  inset: 0;
+  /* Scales with the card, so small (mobile) cards get the same depth of tilt as large ones. */
+  perspective: calc(var(--card) * 3.2);
+  transform-style: preserve-3d;
+}
+
+.track {
+  height: calc((var(--count) - 1) * var(--cell));
+}
+
+.snap {
+  position: absolute;
+  top: calc(var(--i) * var(--cell));
+  left: 0;
+  width: 1px;
+  height: 1px;
+  scroll-snap-align: start;
+  pointer-events: none;
+}
+
+.slide {
+  /* Offset from the middle, that offset clamped to the nearest neighbour, and their magnitudes. */
+  --o: calc(var(--i) - var(--pos));
+  --c: clamp(-1, var(--o), 1);
+  --a: max(var(--o), calc(var(--o) * -1));
+  --ac: max(var(--c), calc(var(--c) * -1));
+  /*
+   * A gentle ease-out on the slide into/out of the middle: c·(1 + k·(1 − |c|)), k = --ease. A card
+   * leaving the centre moves aside a little early, so neighbours never overlap at the same depth and
+   * pass through each other mid-scroll. Resting positions (c = 0, ±1) are unchanged. 0 is linear;
+   * below ~0.55 the cards start to intersect again (and the halfway z-index swap becomes visible).
+   *
+   * TODO(revisit): 0.6 came from a geometry simulation of these exact values (spacing 0.7/0.38, tilt
+   * 30°, side scale 0.78, perspective 3.2 cards), checked in headless Chromium/WebKit with placeholder
+   * covers only. Changing any of those changes the safe range, so re-check after tweaking the layout,
+   * and try it on real devices with real covers. Alternatives if it still feels off: more spacing
+   * (--first) or more tilt instead of easing.
+   */
+  --ease: 0.6;
+  --e: calc(var(--c) * (1 + var(--ease) * (1 - var(--ac))));
+  --shift: calc(var(--e) * var(--first) + (var(--o) - var(--c)) * var(--step));
+
+  position: absolute;
+  /* Centred in the stage's padded area. */
+  top: calc(50% + (var(--pad-top) - var(--pad-bottom)) / 2);
+  left: 50%;
+  width: var(--card);
+  transform: translate(-50%, -50%) translateX(var(--shift)) rotateY(calc(var(--c) * var(--tilt) * -1))
+    scale(calc(1 - var(--ac) * (1 - var(--side-scale))));
+  opacity: clamp(0, calc(var(--visible) + 1 - var(--a)), 1);
+  border-radius: 16px;
+  will-change: transform;
+  /*
+   * Avoids Safari's flicker on tilted 3D layers; cards never turn far enough to show their back.
+   * TODO(revisit): speculative fix, not reproducible in headless browsers. Remove if it makes no
+   * difference on a real Safari / iOS device.
+   */
+  -webkit-backface-visibility: hidden;
+  overflow: hidden;
+  backface-visibility: hidden;
+}
+
+/* The shadow lives on the card (not the slide) so it travels with it during the view switch. */
+.card {
+  /* Matches the cover's rounding (.cover in ResourceCard.module.css) so the shadow hugs its corners. */
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgb(0 0 0 / 0.45);
+  transition: box-shadow 300ms ease;
+}
+
+/*
+ * Cards fly between gallery and grid without their shadow (a big soft shadow captured with the card
+ * reads as a dark halo flickering mid-flight). It drops instantly before the switch captures the
+ * page, and fades back in once the cards have landed. See ViewMode.tsx.
+ */
+:global(html[data-view-switching]) .card {
+  box-shadow: none;
+  transition: none;
+}
+
+.scroller:focus-visible .slide[aria-hidden='false'] {
+  outline: 2px solid #fff;
+  outline-offset: 4px;
+}
+
+.hit {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+/* The focused card is the real link/button, so its click target steps aside. */
+.slide[aria-hidden='false'] .hit {
+  pointer-events: none;
+}
+
+.title {
+  /* An overlay so wheel/touch over it still reach the scroller, and above the mobile footer's blur. */
+  position: absolute;
+  right: 0;
+  bottom: var(--space-16);
+  left: 0;
+  z-index: 51;
+  padding: 0 var(--space-6);
+  font-size: clamp(26px, 3cqw, 44px);
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+  color: #fff;
+  pointer-events: none;
+}
+
+.titleText {
+  display: inline-block;
+  animation: title-in 320ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@media (max-width: 768px) {
+  .carousel {
+    --pad-top: 72px;
+    --pad-bottom: 100px;
+    /*
+     * Same spacing and tilt as desktop, turned on its side. Stacked vertically, so the card leaves
+     * room for the first neighbours above and below (each 0.7 of a card away).
+     */
+    --card: clamp(150px, min(64cqw, (100cqh - var(--pad-top) - var(--pad-bottom)) / 2.2), 340px);
+    /* Match the card's movement so it stays under the finger. */
+    --cell: var(--first);
+  }
+
+  .slide {
+    transform: translate(-50%, -50%) translateY(var(--shift)) rotateX(calc(var(--c) * var(--tilt)))
+      scale(calc(1 - var(--ac) * (1 - var(--side-scale))));
+  }
+
+  .title {
+    bottom: var(--space-10);
+  }
+}
+
+@keyframes title-in {
+  from {
+    opacity: 0;
+
+    /* Always rises from below, whichever way we're moving. */
+    transform: translateY(10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .titleText {
+    animation: none;
+  }
+
+  .backdropLayer {
+    transition: none;
+  }
+}

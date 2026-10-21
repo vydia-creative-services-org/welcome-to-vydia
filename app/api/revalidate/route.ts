@@ -3,7 +3,7 @@ import {NextResponse, type NextRequest} from 'next/server'
 import {parseBody} from 'next-sanity/webhook'
 import type {SanityTag} from '@/lib/sanity/fetch'
 
-const TAGS: readonly SanityTag[] = ['artist', 'resource', 'section', 'website']
+const TAGS: readonly SanityTag[] = ['artist', 'resource', 'website']
 
 export async function POST(request: NextRequest) {
   const secret = process.env.SANITY_REVALIDATE_SECRET

@@ -44,20 +44,20 @@ test.describe('accessibility, approved user', () => {
 
   test('artist page with every card type', async ({page}) => {
     await page.goto('/test-artist')
-    await expect(page.getByRole('heading', {name: 'Vydia Platform Resources'})).toBeVisible()
+    await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
     await expectNoViolations(page)
   })
 
   test('open video dialog', async ({page}) => {
     await page.goto('/test-artist')
-    await page.locator('section[aria-labelledby] button[aria-haspopup="dialog"]').first().click()
+    await page.locator('section[aria-label="Resources"] button[aria-haspopup="dialog"]').first().click()
     await expect(page.locator('dialog[open]')).toBeVisible()
     await expectNoViolations(page)
   })
 
   test('keyboard only: cards are reachable and open with Enter', async ({page, context}) => {
     await page.goto('/test-artist')
-    const firstLink = page.locator('section[aria-labelledby] a').first()
+    const firstLink = page.locator('section[aria-label="Resources"] a').first()
     for (let i = 0; i < 40 && !(await firstLink.evaluate((el) => el === document.activeElement)); i++) {
       await page.keyboard.press('Tab')
     }
@@ -65,7 +65,7 @@ test.describe('accessibility, approved user', () => {
     const popup = context.waitForEvent('page')
     await page.keyboard.press('Enter')
     await (await popup).close()
-    const videoCard = page.locator('section[aria-labelledby] button[aria-haspopup="dialog"]').first()
+    const videoCard = page.locator('section[aria-label="Resources"] button[aria-haspopup="dialog"]').first()
     await videoCard.focus()
     await page.keyboard.press('Enter')
     await expect(page.locator('dialog[open]')).toBeVisible()

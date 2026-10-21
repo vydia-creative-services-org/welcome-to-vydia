@@ -9,18 +9,11 @@ export const website = defineType({
   icon: HomeIcon,
   fields: [
     defineField({
-      name: 'intro',
-      title: 'Intro text',
-      type: 'blockContent',
-      description: 'Shown on every artist page unless the artist has an intro override.',
-      validation: (rule) => rule.required(),
-    }),
-    defineField({
-      name: 'sections',
+      name: 'resources',
       type: 'array',
       description:
-        'Default sections, in display order. Artists with a section override show their own sections instead.',
-      of: [defineArrayMember({type: 'reference', to: [{type: 'section'}]})],
+        'Shown on every artist page, in this order. Drag to reorder. Artists with a resource override show their own list instead. A resource only shows up on the site once it’s added here (or to an artist’s override).',
+      of: [defineArrayMember({type: 'reference', to: [{type: 'resource'}]})],
       validation: (rule) => rule.required().min(1).unique(),
     }),
     defineField({

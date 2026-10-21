@@ -25,22 +25,13 @@ const RESOURCE_PROJECTION = `{
   }
 }`
 
-const SECTION_PROJECTION = `{
-  _id,
-  title,
-  subtitle,
-  "resources": resources[defined(@->_id)]->${RESOURCE_PROJECTION}
-}`
-
 export const ARTIST_PAGE_QUERY = defineQuery(`{
   "website": *[_type == "website" && _id == "website"][0]{
-    intro,
-    "sections": sections[defined(@->_id)]->${SECTION_PROJECTION}
+    "resources": resources[defined(@->_id)]->${RESOURCE_PROJECTION}
   },
   "artist": *[_type == "artist" && _id == $artistId][0]{
     name,
-    introOverride,
     additionalInfo,
-    "sectionOverride": sectionOverride[defined(@->_id)]->${SECTION_PROJECTION}
+    "resourceOverride": resourceOverride[defined(@->_id)]->${RESOURCE_PROJECTION}
   }
 }`)

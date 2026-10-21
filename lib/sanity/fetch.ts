@@ -3,7 +3,7 @@ import {cacheLife, cacheTag} from 'next/cache'
 import type {ClientReturn, QueryParams} from 'next-sanity'
 import {sanity} from './client'
 
-export type SanityTag = 'artist' | 'resource' | 'section' | 'website'
+export type SanityTag = 'artist' | 'resource' | 'website'
 
 export async function sanityFetch<const Q extends string>(
   query: Q,

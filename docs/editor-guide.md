@@ -9,17 +9,16 @@ A quick reference for the Label & Artist Relations and Creative Services teams. 
 Every artist page is built from the same pieces:
 
 ```
-Resources  →  go into  →  Sections  →  go onto  →  the Website (shown on every artist page)
+Resources  →  go onto  →  the Website (shown on every artist page)
 ```
 
 - A **Resource** is one card: a PDF, a video, a link (pitch forms), or a slide deck.
-- A **Section** is a titled row of cards, such as "Vydia Platform Resources".
-- The **Website** holds the intro text and which sections show, in order. Every artist sees it unless their artist record says otherwise.
+- The **Website** holds which resources show, in order. Every artist sees it unless their artist record says otherwise.
 - An **Artist** is one client. Creating an artist creates their page at `welcometovydia.com/their-url`.
 
-> **A resource only shows up on the site once it's in a section.** A new resource you haven't added to any section won't appear anywhere.
+> **A resource only shows up on the site once it's on the Website (or an artist's resource override).** A new resource you haven't added anywhere won't appear.
 
-The sidebar on the left matches this: **Artists**, then **Resources**, **Sections**, and **Website**.
+The sidebar on the left matches this: **Artists**, then **Resources** and **Website**.
 
 ## Create a page for a new artist
 
@@ -29,9 +28,8 @@ The sidebar on the left matches this: **Artists**, then **Resources**, **Section
 4. Open the **Access** tab and add each client email under **Allowed emails** (click **Add item** for each one). Upper/lower case doesn't matter.
    - You don't need to add `labelrelationships@` or `creativeservices@`. They can always see every page.
 5. Optional, on the **Page content** tab:
-   - **Intro override:** replaces the standard intro for this artist only.
-   - **Additional info:** a box shown right under the intro (for example, who their rep is).
-   - **Section override:** see "Give one artist different sections" below.
+   - **Additional info:** a box shown below the resources in grid view (for example, who their rep is).
+   - **Resource override:** see "Give one artist different resources" below.
 6. Click **Publish** (bottom right).
 7. To see the page, open the **…** menu next to Publish and choose **Open site**.
 
@@ -48,33 +46,27 @@ Send the client their link: `https://welcometovydia.com/<the URL>`. The first ti
    - **Added on**: the date on the card. It's set automatically when you create the resource, and editing the resource later doesn't change it. When copying something over from Seismic, set it to the original date.
 3. For PDFs, wait a few seconds after uploading: the **PDF first-page preview** fills in by itself. Password-protected PDFs can't be previewed (you'll see a message), so they use the Vydia tile.
 4. Click **Publish**.
-5. Now add it to a section (next step), or it won't appear on the site.
+5. Now add it to the Website (next step), or it won't appear on the site.
 
 Videos: export as MP4 at 1080p or smaller to keep file sizes down.
 
 ## Put resources on the page
 
-1. Click **Sections** and open the section you want (or **+** to make a new one).
+1. Click **Website**.
 2. Under **Resources**, click **Add item** and search for the resource by title.
 3. Drag the handles to change the order. Cards appear on the site in this order.
-4. Click **Publish**.
+4. Under **Internal viewers**, add any other `@vydia.com` people who should be able to see every artist page.
+5. Click **Publish**.
 
-## Change the intro or the section order for everyone
+Changes to the Website or to a resource show up on **every** artist page that uses them, within a few seconds of publishing. You don't need to do anything else.
 
-1. Click **Website**.
-2. Edit the **Intro text**, or drag the **Sections** into a new order.
-3. Under **Internal viewers**, add any other `@vydia.com` people who should be able to see every artist page.
-4. Click **Publish**.
+## Give one artist different resources
 
-Changes to the Website, to a section, or to a resource show up on **every** artist page that uses them, within a few seconds of publishing. You don't need to do anything else.
+On the artist's **Page content** tab, add resources under **Resource override**.
 
-## Give one artist different sections
-
-On the artist's **Page content** tab, add sections under **Section override**.
-
-- If you add **any** sections there, they **replace** the standard sections on that artist's page. They aren't added on.
-- To make a section just for one artist, create it under **Sections** first, then add it here.
-- To go back to the standard sections, remove everything from **Section override** and publish.
+- If you add **any** resources there, they **replace** the Website resources on that artist's page. They aren't added on.
+- To show a resource to just one artist, create it under **Resources** first, then add it here (and not to the Website).
+- To go back to the Website resources, remove everything from **Resource override** and publish.
 
 ## Changing an artist's web address
 
@@ -90,8 +82,8 @@ Some web addresses are reserved (like `studio` or `login`), and an address anoth
 
 ## Things to know
 
-- **Edits to a shared resource or section change every artist page that uses it.** If one artist needs something different, make a separate resource or section for them.
-- You can't delete a resource that's still in a section, or a section that's still on the Website or an artist. Remove it from those first. Studio shows where it's used.
+- **Edits to a shared resource change every artist page that uses it.** If one artist needs something different, make a separate resource for them.
+- You can't delete a resource that's still on the Website or an artist's resource override. Remove it from those first. Studio shows where it's used.
 - Red messages under a field must be fixed before **Publish** will work. They explain what's wrong (for example, "Upload a PDF.").
 - Unpublished changes don't appear on the site. If something isn't showing, check for a **Draft** label at the top of the document and publish.
 

@@ -104,28 +104,6 @@ export type ResourceReference = {
   [internalGroqTypeReferenceTo]?: 'resource'
 }
 
-export type Section = {
-  _id: string
-  _type: 'section'
-  _createdAt: string
-  _updatedAt: string
-  _rev: string
-  title?: string
-  subtitle?: string
-  resources?: Array<
-    {
-      _key: string
-    } & ResourceReference
-  >
-}
-
-export type SectionReference = {
-  _ref: string
-  _type: 'reference'
-  _weak?: boolean
-  [internalGroqTypeReferenceTo]?: 'section'
-}
-
 export type Artist = {
   _id: string
   _type: 'artist'
@@ -136,16 +114,12 @@ export type Artist = {
   slug?: Slug
   slugLocked?: boolean
   allowedEmails?: Array<string>
-  introOverride?: BlockContent
   additionalInfo?: BlockContent
-  sectionOverride?: Array<
+  resourceOverride?: Array<
     {
       _key: string
-    } & SectionReference
+    } & ResourceReference
   >
-  customization?: {
-    placeholder?: string
-  }
   previousSlugs?: Array<string>
 }
 
@@ -161,11 +135,10 @@ export type Website = {
   _createdAt: string
   _updatedAt: string
   _rev: string
-  intro?: BlockContent
-  sections?: Array<
+  resources?: Array<
     {
       _key: string
-    } & SectionReference
+    } & ResourceReference
   >
   internalViewerEmails?: Array<string>
 }
@@ -275,8 +248,6 @@ export type AllSanitySchemaTypes =
   | SanityImageCrop
   | SanityImageHotspot
   | ResourceReference
-  | Section
-  | SectionReference
   | Artist
   | Slug
   | Website
@@ -303,94 +274,82 @@ export type ACCESS_QUERY_RESULT = {
 
 // Source: lib/sanity/queries.ts
 // Variable: ARTIST_PAGE_QUERY
-// Query: {  "website": *[_type == "website" && _id == "website"][0]{    intro,    "sections": sections[defined(@->_id)]->{  _id,  title,  subtitle,  "resources": resources[defined(@->_id)]->{  _id,  title,  type,  url,  "addedOn": coalesce(addedOn, _createdAt),  "fileUrl": file.asset->url,  "fileName": file.asset->originalFilename,  "cover": coalesce(coverImage, pdfPreview){    alt,    hotspot,    crop,    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}  }}}  },  "artist": *[_type == "artist" && _id == $artistId][0]{    name,    introOverride,    additionalInfo,    "sectionOverride": sectionOverride[defined(@->_id)]->{  _id,  title,  subtitle,  "resources": resources[defined(@->_id)]->{  _id,  title,  type,  url,  "addedOn": coalesce(addedOn, _createdAt),  "fileUrl": file.asset->url,  "fileName": file.asset->originalFilename,  "cover": coalesce(coverImage, pdfPreview){    alt,    hotspot,    crop,    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}  }}}  }}
+// Query: {  "website": *[_type == "website" && _id == "website"][0]{    "resources": resources[defined(@->_id)]->{  _id,  title,  type,  url,  "addedOn": coalesce(addedOn, _createdAt),  "fileUrl": file.asset->url,  "fileName": file.asset->originalFilename,  "cover": coalesce(coverImage, pdfPreview){    alt,    hotspot,    crop,    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}  }}  },  "artist": *[_type == "artist" && _id == $artistId][0]{    name,    additionalInfo,    "resourceOverride": resourceOverride[defined(@->_id)]->{  _id,  title,  type,  url,  "addedOn": coalesce(addedOn, _createdAt),  "fileUrl": file.asset->url,  "fileName": file.asset->originalFilename,  "cover": coalesce(coverImage, pdfPreview){    alt,    hotspot,    crop,    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}  }}  }}
 export type ARTIST_PAGE_QUERY_RESULT = {
   website: {
-    intro: BlockContent | null
-    sections: Array<{
+    resources: Array<{
       _id: string
       title: string | null
-      subtitle: string | null
-      resources: Array<{
-        _id: string
-        title: string | null
-        type: 'link' | 'pdf' | 'slides' | 'video' | null
-        url: string | null
-        addedOn: string
-        fileUrl: string | null
-        fileName: string | null
-        cover:
-          | {
-              alt: null
-              hotspot: SanityImageHotspot | null
-              crop: SanityImageCrop | null
-              asset: {
-                _id: string
-                url: string | null
-                lqip: string | null
-                width: number | null
-                height: number | null
-              } | null
-            }
-          | {
-              alt: string | null
-              hotspot: SanityImageHotspot | null
-              crop: SanityImageCrop | null
-              asset: {
-                _id: string
-                url: string | null
-                lqip: string | null
-                width: number | null
-                height: number | null
-              } | null
-            }
-          | null
-      }> | null
+      type: 'link' | 'pdf' | 'slides' | 'video' | null
+      url: string | null
+      addedOn: string
+      fileUrl: string | null
+      fileName: string | null
+      cover:
+        | {
+            alt: null
+            hotspot: SanityImageHotspot | null
+            crop: SanityImageCrop | null
+            asset: {
+              _id: string
+              url: string | null
+              lqip: string | null
+              width: number | null
+              height: number | null
+            } | null
+          }
+        | {
+            alt: string | null
+            hotspot: SanityImageHotspot | null
+            crop: SanityImageCrop | null
+            asset: {
+              _id: string
+              url: string | null
+              lqip: string | null
+              width: number | null
+              height: number | null
+            } | null
+          }
+        | null
     }> | null
   } | null
   artist: {
     name: string | null
-    introOverride: BlockContent | null
     additionalInfo: BlockContent | null
-    sectionOverride: Array<{
+    resourceOverride: Array<{
       _id: string
       title: string | null
-      subtitle: string | null
-      resources: Array<{
-        _id: string
-        title: string | null
-        type: 'link' | 'pdf' | 'slides' | 'video' | null
-        url: string | null
-        addedOn: string
-        fileUrl: string | null
-        fileName: string | null
-        cover:
-          | {
-              alt: null
-              hotspot: SanityImageHotspot | null
-              crop: SanityImageCrop | null
-              asset: {
-                _id: string
-                url: string | null
-                lqip: string | null
-                width: number | null
-                height: number | null
-              } | null
-            }
-          | {
-              alt: string | null
-              hotspot: SanityImageHotspot | null
-              crop: SanityImageCrop | null
-              asset: {
-                _id: string
-                url: string | null
-                lqip: string | null
-                width: number | null
-                height: number | null
-              } | null
-            }
-          | null
-      }> | null
+      type: 'link' | 'pdf' | 'slides' | 'video' | null
+      url: string | null
+      addedOn: string
+      fileUrl: string | null
+      fileName: string | null
+      cover:
+        | {
+            alt: null
+            hotspot: SanityImageHotspot | null
+            crop: SanityImageCrop | null
+            asset: {
+              _id: string
+              url: string | null
+              lqip: string | null
+              width: number | null
+              height: number | null
+            } | null
+          }
+        | {
+            alt: string | null
+            hotspot: SanityImageHotspot | null
+            crop: SanityImageCrop | null
+            asset: {
+              _id: string
+              url: string | null
+              lqip: string | null
+              width: number | null
+              height: number | null
+            } | null
+          }
+        | null
     }> | null
   } | null
 }
@@ -399,7 +358,7 @@ export type ARTIST_PAGE_QUERY_RESULT = {
 declare global {
   interface SanityQueries {
     '{\n  "artist": *[_type == "artist" && (slug.current == $slug || $slug in previousSlugs)][0]{\n    _id,\n    "slug": slug.current,\n    allowedEmails\n  },\n  "internalViewers": *[_type == "website" && _id == "website"][0].internalViewerEmails\n}': ACCESS_QUERY_RESULT
-    '{\n  "website": *[_type == "website" && _id == "website"][0]{\n    intro,\n    "sections": sections[defined(@->_id)]->{\n  _id,\n  title,\n  subtitle,\n  "resources": resources[defined(@->_id)]->{\n  _id,\n  title,\n  type,\n  url,\n  "addedOn": coalesce(addedOn, _createdAt),\n  "fileUrl": file.asset->url,\n  "fileName": file.asset->originalFilename,\n  "cover": coalesce(coverImage, pdfPreview){\n    alt,\n    hotspot,\n    crop,\n    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}\n  }\n}\n}\n  },\n  "artist": *[_type == "artist" && _id == $artistId][0]{\n    name,\n    introOverride,\n    additionalInfo,\n    "sectionOverride": sectionOverride[defined(@->_id)]->{\n  _id,\n  title,\n  subtitle,\n  "resources": resources[defined(@->_id)]->{\n  _id,\n  title,\n  type,\n  url,\n  "addedOn": coalesce(addedOn, _createdAt),\n  "fileUrl": file.asset->url,\n  "fileName": file.asset->originalFilename,\n  "cover": coalesce(coverImage, pdfPreview){\n    alt,\n    hotspot,\n    crop,\n    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}\n  }\n}\n}\n  }\n}': ARTIST_PAGE_QUERY_RESULT
+    '{\n  "website": *[_type == "website" && _id == "website"][0]{\n    "resources": resources[defined(@->_id)]->{\n  _id,\n  title,\n  type,\n  url,\n  "addedOn": coalesce(addedOn, _createdAt),\n  "fileUrl": file.asset->url,\n  "fileName": file.asset->originalFilename,\n  "cover": coalesce(coverImage, pdfPreview){\n    alt,\n    hotspot,\n    crop,\n    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}\n  }\n}\n  },\n  "artist": *[_type == "artist" && _id == $artistId][0]{\n    name,\n    additionalInfo,\n    "resourceOverride": resourceOverride[defined(@->_id)]->{\n  _id,\n  title,\n  type,\n  url,\n  "addedOn": coalesce(addedOn, _createdAt),\n  "fileUrl": file.asset->url,\n  "fileName": file.asset->originalFilename,\n  "cover": coalesce(coverImage, pdfPreview){\n    alt,\n    hotspot,\n    crop,\n    "asset": asset->{_id, url, "lqip": metadata.lqip, "width": metadata.dimensions.width, "height": metadata.dimensions.height}\n  }\n}\n  }\n}': ARTIST_PAGE_QUERY_RESULT
   }
 }
 // Lets @sanity/client releases that predate the global registry read it too
