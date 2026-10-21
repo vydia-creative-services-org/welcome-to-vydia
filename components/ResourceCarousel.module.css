@@ -4,7 +4,14 @@
  * cards follow the scroll continuously and the axis can flip on mobile.
  */
 .carousel {
-  --card: clamp(220px, 28vw, 400px);
+  /* Room the header takes above the cards and the title takes below them. */
+  --pad-top: 120px;
+  --pad-bottom: 150px;
+  /*
+   * Sized from the carousel's own box (cq units), so the card fits short laptop screens as well as
+   * wide monitors: a share of the width, capped by the height left between header and title.
+   */
+  --card: clamp(180px, min(30cqw, 100cqh - var(--pad-top) - var(--pad-bottom) - 40px), 520px);
   /* Scroll distance per resource: under two mouse-wheel ticks' worth, so every tick advances one. */
   --cell: 160px;
   --first: calc(var(--card) * 0.7);
@@ -16,6 +23,7 @@
   position: relative;
   flex: 1;
   min-height: 0;
+  container-type: size;
 }
 
 .backdrop {
@@ -95,9 +103,10 @@
   position: sticky;
   top: 0;
   height: 100%;
-  padding: 120px 0 150px;
+  padding: var(--pad-top) 0 var(--pad-bottom);
   overflow: clip;
-  perspective: 1200px;
+  /* Scales with the card, so small (mobile) cards get the same depth of tilt as large ones. */
+  perspective: calc(var(--card) * 3.2);
 }
 
 .track {
@@ -124,7 +133,7 @@
 
   position: absolute;
   /* Centred in the stage's padded area. */
-  top: calc(50% + (120px - 150px) / 2);
+  top: calc(50% + (var(--pad-top) - var(--pad-bottom)) / 2);
   left: 50%;
   width: var(--card);
   transform: translate(-50%, -50%) translateX(var(--shift)) rotateY(calc(var(--c) * var(--tilt) * -1))
@@ -162,7 +171,7 @@
   left: 0;
   z-index: 51;
   padding: 0 var(--space-6);
-  font-size: clamp(26px, 3vw, 40px);
+  font-size: clamp(26px, 3cqw, 44px);
   font-weight: 500;
   line-height: 1.2;
   text-align: center;
@@ -177,19 +186,18 @@
 
 @media (max-width: 768px) {
   .carousel {
-    --card: min(62vw, 300px);
-    --first: calc(var(--card) * 0.5);
+    --pad-top: 72px;
+    --pad-bottom: 100px;
+    /*
+     * Same spacing and tilt as desktop, turned on its side. Stacked vertically, so the card leaves
+     * room for the first neighbours above and below (each 0.7 of a card away).
+     */
+    --card: clamp(150px, min(64cqw, (100cqh - var(--pad-top) - var(--pad-bottom)) / 2.2), 340px);
     /* Match the card's movement so it stays under the finger. */
     --cell: var(--first);
-    --step: calc(var(--card) * 0.34);
-  }
-
-  .stage {
-    padding: 72px 0 100px;
   }
 
   .slide {
-    top: calc(50% + (72px - 100px) / 2);
     transform: translate(-50%, -50%) translateY(var(--shift)) rotateX(calc(var(--c) * var(--tilt)))
       scale(calc(1 - var(--ac) * (1 - var(--side-scale))));
   }
