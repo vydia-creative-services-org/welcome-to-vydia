@@ -8,3 +8,4 @@
 - for accessibility purposes maek the toggle one button
 -  on desktop you should be able to sccroll left and right liek for an apple trackpad
 - add a sort of mouse tracking follow the mouse effect for the "hovered" or "se;ected" resource
+- background has to be done a lot better

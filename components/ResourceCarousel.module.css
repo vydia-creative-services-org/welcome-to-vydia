@@ -20,6 +20,13 @@
   --side-scale: 0.78;
   --visible: 6;
 
+  /* Background treatment: how soft the cover is behind the cards, and how strong the grain is. */
+  --backdrop-blur: 18px;
+  --grain-opacity: 0.09;
+  /* Pause before a new cover starts fading in, and how long the fade takes. */
+  --backdrop-delay: 200ms;
+  --backdrop-fade: 700ms;
+
   position: relative;
   flex: 1;
   min-height: 0;
@@ -27,60 +34,86 @@
 }
 
 .backdrop {
-  /* Eased falloff (several stops) so the glow fades out without a visible edge. */
+  /*
+   * Eased falloff (several stops) so the glow fades without a visible edge. Full strength across
+   * the middle, still faintly there in the corners, so the cover's colour fills most of the screen.
+   */
   --falloff: radial-gradient(
     ellipse at center,
     black 0%,
-    rgb(0 0 0 / 85%) 20%,
-    rgb(0 0 0 / 60%) 38%,
-    rgb(0 0 0 / 35%) 54%,
-    rgb(0 0 0 / 15%) 68%,
-    rgb(0 0 0 / 4%) 80%,
-    transparent 90%
+    black 40%,
+    rgb(0 0 0 / 82%) 55%,
+    rgb(0 0 0 / 58%) 70%,
+    rgb(0 0 0 / 38%) 85%,
+    rgb(0 0 0 / 25%) 100%
   );
 
   position: absolute;
   inset: 0;
   z-index: -1;
   overflow: hidden;
+  /* How strongly the cover shows through over the page colour (lower = darker). */
+  opacity: 0.4;
   pointer-events: none;
   -webkit-mask-image: var(--falloff);
   mask-image: var(--falloff);
 }
 
-/* A whisper of grain dithers the dark gradient so it doesn't band into rings. */
-.backdrop::after {
+/*
+ * Film grain over the whole background (above the cover, beneath the cards and title). Monochrome
+ * noise at low opacity; it also dithers the dark falloff so it doesn't band into rings.
+ */
+.carousel::after {
   content: '';
   position: absolute;
   inset: 0;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='.5'/></svg>");
-  opacity: 0.08;
-  mix-blend-mode: overlay;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  opacity: var(--grain-opacity);
 }
 
-/* Layers crossfade: the active one eases in (with a slow settle in scale) as the rest fade out. */
+/*
+ * Layers dissolve into each other: the new cover fades in on top while the previous one stays fully
+ * shown underneath, then drops out once it's covered (so there's no darker dip mid-fade). Layers are
+ * opaque (a cover-less resource fades to the page colour); the dimming is on .backdrop as a whole.
+ * A small zoom (1 → 1.02) eases the arriving cover in; covers stay at 1.02 once settled, so the one
+ * underneath doesn't move while it's being covered.
+ */
 .backdropLayer {
   position: absolute;
   inset: -10%;
-  background: center / cover no-repeat;
-  filter: blur(90px) saturate(1.4);
+  background: var(--color-page) center / cover no-repeat;
+  filter: blur(var(--backdrop-blur)) saturate(1.4);
   opacity: 0;
-  transform: scale(1.1);
-  transition:
-    opacity 1200ms cubic-bezier(0.4, 0, 0.2, 1),
-    transform 2400ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  transform: scale(1.02);
+  /* Dropped only once the newer cover (after its delay) has fully faded in over it. */
+  transition: opacity 0s linear calc(var(--backdrop-delay) + var(--backdrop-fade));
 }
 
 .backdropLayer[data-active] {
-  opacity: 0.55;
-  transform: scale(1.25);
+  opacity: 1;
+  transition:
+    opacity var(--backdrop-fade) cubic-bezier(0.4, 0, 0.2, 1) var(--backdrop-delay),
+    transform 1000ms cubic-bezier(0.2, 0.7, 0.2, 1) var(--backdrop-delay);
 }
 
 @starting-style {
   .backdropLayer[data-active] {
     opacity: 0;
-    transform: scale(1.1);
+    transform: scale(1);
   }
+}
+
+/* The full-size cover fades in over its tiny placeholder (the layer's background) once loaded. */
+.backdropImage {
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+
+.backdropImage[data-loaded] {
+  opacity: 1;
 }
 
 .scroller {
@@ -168,7 +201,7 @@
   transform: translate(-50%, -50%) translateX(var(--shift)) rotateY(calc(var(--c) * var(--tilt) * -1))
     scale(calc(1 - var(--ac) * (1 - var(--side-scale))));
   opacity: clamp(0, calc(var(--visible) + 1 - var(--a)), 1);
-  border-radius: var(--radius-md);
+  border-radius: 16px;
   will-change: transform;
   /*
    * Avoids Safari's flicker on tilted 3D layers; cards never turn far enough to show their back.
@@ -176,6 +209,7 @@
    * difference on a real Safari / iOS device.
    */
   -webkit-backface-visibility: hidden;
+  overflow: hidden;
   backface-visibility: hidden;
 }
 
@@ -251,7 +285,7 @@
 @keyframes title-in {
   from {
     opacity: 0;
-    filter: blur(4px);
+
     /* Always rises from below, whichever way we're moving. */
     transform: translateY(10px);
   }

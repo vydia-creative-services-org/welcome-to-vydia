@@ -1,4 +1,5 @@
 'use client'
+import Image from 'next/image'
 import {useEffect, useEffectEvent, useRef, useState} from 'react'
 import {coverSource, urlFor} from '@/lib/sanity/image'
 import type {ResourceCardData} from '@/lib/sanity/types'
@@ -9,11 +10,14 @@ import {useScrollInertia} from './useScrollInertia'
 /** Backdrop layers kept mounted so outgoing ones can finish fading while new ones fade in. */
 const MAX_BACKDROP_LAYERS = 4
 
-/** The cover's tiny blurred placeholder ships with the page, so the backdrop never waits on a download. */
-function backdropSrc(resource: ResourceCardData): string | null {
+/**
+ * The cover shown behind the carousel: the full image, plus its tiny blurred placeholder (shipped with
+ * the page) to show instantly while the full one loads.
+ */
+function backdropSrc(resource: ResourceCardData): {full: string; placeholder?: string} | null {
   const source = resource.cover && coverSource(resource.cover)
   if (!source) return null
-  return resource.cover?.asset?.lqip ?? urlFor(source).width(64).height(64).fit('crop').url()
+  return {full: urlFor(source).width(2000).fit('max').url(), placeholder: resource.cover?.asset?.lqip ?? undefined}
 }
 
 /** Accumulated horizontal wheel distance that counts as one sideways swipe. */
@@ -122,8 +126,19 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
             key={layer.n}
             className={styles.backdropLayer}
             data-active={index === backdrops.length - 1 || undefined}
-            style={layer.src ? {backgroundImage: `url("${layer.src}")`} : undefined}
-          />
+            style={layer.src?.placeholder ? {backgroundImage: `url("${layer.src.placeholder}")`} : undefined}
+          >
+            {layer.src && (
+              <Image
+                src={layer.src.full}
+                alt=""
+                fill
+                sizes="100vw"
+                className={styles.backdropImage}
+                onLoad={(event) => (event.currentTarget.dataset.loaded = '')}
+              />
+            )}
+          </div>
         ))}
       </div>
 

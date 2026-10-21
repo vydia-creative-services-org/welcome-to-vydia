@@ -7,7 +7,6 @@
   text-decoration: none;
   color: inherit;
   background: var(--color-surface);
-
 border: none;
   cursor: pointer;
 
@@ -18,13 +17,15 @@ border: none;
 .card:focus-visible {
   outline: 2px solid var(--color-ink);
   outline-offset: 2px;
+
+
 }
 
 .cover {
   position: relative;
   aspect-ratio: 1/1;
   overflow: hidden;
-  border-radius: var(--radius-md);
+border-radius: 16px;
   background: var(--color-surface);
 }
 
