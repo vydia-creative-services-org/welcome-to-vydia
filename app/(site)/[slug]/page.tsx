@@ -34,7 +34,7 @@ export default async function ArtistPage({params}: PageProps<'/[slug]'>) {
 
   return (
     <ViewModeProvider>
-      <PageShell fullscreen>
+      <PageShell fullscreen artistName={page.artistName}>
         <ResourceViews
           resources={resources}
           additionalInfo={page.additionalInfo && <RichText value={page.additionalInfo} />}

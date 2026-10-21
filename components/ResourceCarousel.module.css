@@ -105,8 +105,23 @@
   height: 100%;
   padding: var(--pad-top) 0 var(--pad-bottom);
   overflow: clip;
+}
+
+/*
+ * One shared 3D space for the cards (the stage's overflow clip would flatten it, hence this layer),
+ * so the browser depth-sorts them. With the eased layout (see .slide) cards never cross in depth, so
+ * this agrees with the slides' z-index, which takes over wherever an engine flattens 3D instead.
+ *
+ * TODO(revisit): headless WebKit flattened this layer (painting cards in DOM order), so whether real
+ * Safari depth-sorts it is unconfirmed. If every engine we care about ends up relying on the z-index,
+ * drop preserve-3d and keep only the z-index; if they all depth-sort, the z-index can go instead.
+ */
+.slides {
+  position: absolute;
+  inset: 0;
   /* Scales with the card, so small (mobile) cards get the same depth of tilt as large ones. */
   perspective: calc(var(--card) * 3.2);
+  transform-style: preserve-3d;
 }
 
 .track {
@@ -129,7 +144,21 @@
   --c: clamp(-1, var(--o), 1);
   --a: max(var(--o), calc(var(--o) * -1));
   --ac: max(var(--c), calc(var(--c) * -1));
-  --shift: calc(var(--c) * var(--first) + (var(--o) - var(--c)) * var(--step));
+  /*
+   * A gentle ease-out on the slide into/out of the middle: c·(1 + k·(1 − |c|)), k = --ease. A card
+   * leaving the centre moves aside a little early, so neighbours never overlap at the same depth and
+   * pass through each other mid-scroll. Resting positions (c = 0, ±1) are unchanged. 0 is linear;
+   * below ~0.55 the cards start to intersect again (and the halfway z-index swap becomes visible).
+   *
+   * TODO(revisit): 0.6 came from a geometry simulation of these exact values (spacing 0.7/0.38, tilt
+   * 30°, side scale 0.78, perspective 3.2 cards), checked in headless Chromium/WebKit with placeholder
+   * covers only. Changing any of those changes the safe range, so re-check after tweaking the layout,
+   * and try it on real devices with real covers. Alternatives if it still feels off: more spacing
+   * (--first) or more tilt instead of easing.
+   */
+  --ease: 0.6;
+  --e: calc(var(--c) * (1 + var(--ease) * (1 - var(--ac))));
+  --shift: calc(var(--e) * var(--first) + (var(--o) - var(--c)) * var(--step));
 
   position: absolute;
   /* Centred in the stage's padded area. */
@@ -141,6 +170,13 @@
   opacity: clamp(0, calc(var(--visible) + 1 - var(--a)), 1);
   border-radius: var(--radius-md);
   will-change: transform;
+  /*
+   * Avoids Safari's flicker on tilted 3D layers; cards never turn far enough to show their back.
+   * TODO(revisit): speculative fix, not reproducible in headless browsers. Remove if it makes no
+   * difference on a real Safari / iOS device.
+   */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 /* The shadow lives on the card (not the slide) so it travels with it during the view switch. */
@@ -161,6 +197,11 @@
   background: none;
   border: 0;
   cursor: pointer;
+}
+
+/* The focused card is the real link/button, so its click target steps aside. */
+.slide[aria-hidden='false'] .hit {
+  pointer-events: none;
 }
 
 .title {

@@ -3,13 +3,15 @@ import {GalleryHorizontal, GalleryVertical, LayoutGrid} from 'lucide-react'
 import styles from './Header.module.css'
 import {useViewMode} from './ViewMode'
 
-export function Header() {
+/** `artistName` greets the artist by name; pages without one show the plain welcome. */
+export function Header({artistName}: {artistName?: string}) {
   const viewMode = useViewMode()
 
   return (
     // Named so view transitions keep it pinned above the moving cards (see globals.css).
     <header className={styles.header} style={{viewTransitionName: 'site-header'}}>
-      <span className={styles.text}>Welcome to Vydia</span>
+      <span className={styles.text}>{artistName ? `Mason O'Mara
+       Welcome to Vydia` : 'Welcome to Vydia'}</span>
 
       {viewMode && (
         <div className={styles.toggleContainer} role="group" aria-label="View">

@@ -136,31 +136,43 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
         onKeyDown={onKeyDown}
       >
         <div ref={stage} className={styles.stage}>
-          {resources.map((resource, index) => {
-            const isActive = index === current
-            return (
-              <div
-                key={resource._id}
-                className={styles.slide}
-                aria-roledescription="slide"
-                aria-label={`${index + 1} of ${resources.length}`}
-                aria-hidden={!isActive}
-                style={{'--i': index, zIndex: resources.length - Math.abs(index - current)} as React.CSSProperties}
-              >
+          <div className={styles.slides}>
+            {resources.map((resource, index) => {
+              const isActive = index === current
+              return (
                 <div
-                  inert={!isActive}
-                  className={styles.card}
-                  data-morph-id={resource._id}
-                  data-morph-depth={Math.abs(index - current)}
+                  key={resource._id}
+                  className={styles.slide}
+                  aria-roledescription="slide"
+                  aria-label={`${index + 1} of ${resources.length}`}
+                  aria-hidden={!isActive}
+                  // Fallback stacking for engines that flatten the 3D layer. It swaps at the halfway
+                  // point, where the eased layout keeps the two swapping cards apart, so it can't flick.
+                  // TODO(revisit): only safe while --ease keeps that gap; see .slides/.slide in the CSS.
+                  style={{'--i': index, zIndex: resources.length - Math.abs(index - current)} as React.CSSProperties}
                 >
-                  <ResourceCard resource={resource} hideTitle />
+                  <div
+                    inert={!isActive}
+                    className={styles.card}
+                    data-morph-id={resource._id}
+                    data-morph-depth={Math.abs(index - current)}
+                  >
+                    <ResourceCard resource={resource} hideTitle />
+                  </div>
+                  {/* Always mounted (the focused card switches it off in CSS): adding/removing it as the
+                      focus changes mid-scroll can make browsers rebuild the card's 3D layer and flash.
+                      TODO(revisit): speculative GPU-only fix, unverified on real devices. */}
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    aria-hidden
+                    className={styles.hit}
+                    onClick={() => scrollToIndex(index)}
+                  />
                 </div>
-                {!isActive && (
-                  <button type="button" tabIndex={-1} className={styles.hit} onClick={() => scrollToIndex(index)} />
-                )}
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
 
         {/* Scroll length and snap points: one cell of scrolling per resource. */}

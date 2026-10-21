@@ -1,0 +1,10 @@
+- add a search bar where documents that dont fit the search and filter criteria get grayed out and moved to the back
+- add the name of the artist somewhere
+- the toggle betweeen gallery and grid needs some easing
+- playw itht eh font sizing a bit
+- the background needs to be more liek the original, i liek the ease between them but needs to be a bit more like the orginal
+- the vertical and horizontal gallerys need to feel mroe "skatey"
+- pointer events nine or passthrough with the scroll for the ahder
+- for accessibility purposes maek the toggle one button
+-  on desktop you should be able to sccroll left and right liek for an apple trackpad
+- add a sort of mouse tracking follow the mouse effect for the "hovered" or "se;ected" resource
