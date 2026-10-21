@@ -36,7 +36,7 @@ export function Header({artistName}: {artistName?: string}) {
   return (
     // Named so view transitions keep it pinned above the moving cards (see globals.css).
     <header className={styles.header} style={{viewTransitionName: 'site-header'}}>
-      <span className={styles.text}>{greeting(artistName)}</span>
+      <span className={styles.text}>{greeting(artistName, {spaced: true})}</span>
 
       {viewMode && (
         // One button that swaps between the views; its label says what pressing it will do. The
