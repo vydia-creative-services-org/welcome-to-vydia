@@ -54,22 +54,21 @@ test.describe('signed in as an unapproved user', () => {
 test.describe('signed in as an approved user', () => {
   test.use({storageState: storageStatePath('approved')})
 
-  test('sees the intro and resource cards', async ({page}) => {
+  test('sees the resource cards', async ({page}) => {
     await page.goto('/test-artist')
-    await expect(page.getByText('Welcome to Vydia!')).toBeVisible()
-    await expect(page.getByRole('heading', {name: 'Vydia Platform Resources'})).toBeVisible()
+    await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
     await expect(page.getByText(/^Added on /).first()).toBeVisible()
   })
 
   test('an old URL redirects to the current one', async ({page}) => {
     await page.goto('/test-renamed-original')
     await expect(page).toHaveURL('/test-renamed')
-    await expect(page.getByRole('heading', {name: 'Vydia Platform Resources'})).toBeVisible()
+    await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
   })
 
   test('link cards open in a new tab without leaking the opener', async ({page}) => {
     await page.goto('/test-artist')
-    const cards = page.locator('section[aria-labelledby] a')
+    const cards = page.locator('section[aria-label="Resources"] a')
     expect(await cards.count()).toBeGreaterThan(0)
     for (const card of await cards.all()) {
       await expect(card).toHaveAttribute('target', '_blank')
@@ -79,7 +78,7 @@ test.describe('signed in as an approved user', () => {
 
   test('the video dialog opens, plays, closes on Escape, and returns focus', async ({page}) => {
     await page.goto('/test-artist')
-    const card = page.locator('section[aria-labelledby] button[aria-haspopup="dialog"]').first()
+    const card = page.locator('section[aria-label="Resources"] button[aria-haspopup="dialog"]').first()
     await card.click()
     const dialog = page.locator('dialog[open]')
     await expect(dialog).toBeVisible()

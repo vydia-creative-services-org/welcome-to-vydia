@@ -1,5 +1,5 @@
 import {beforeEach, describe, expect, it, vi} from 'vitest'
-import type {RawResource, RawSection} from '@/lib/sanity/types'
+import type {RawResource} from '@/lib/sanity/types'
 import type {ARTIST_PAGE_QUERY_RESULT, BlockContent} from '@/lib/sanity/types.generated'
 
 const state = vi.hoisted((): {data: ARTIST_PAGE_QUERY_RESULT | undefined} => ({data: undefined}))
@@ -27,70 +27,49 @@ const resource = (id: string, overrides: Partial<RawResource> = {}): RawResource
   ...overrides,
 })
 
-const section = (id: string, resources: RawResource[] | null): RawSection => ({
-  _id: id,
-  title: `Section ${id}`,
-  subtitle: null,
-  resources,
-})
-
-const globalSections = [section('g1', [resource('r1'), resource('r2')]), section('g2', [resource('r3')])]
+const globalResources = [resource('r1'), resource('r2'), resource('r3')]
 
 const data = (artist: Partial<NonNullable<ARTIST_PAGE_QUERY_RESULT['artist']>> | null): ARTIST_PAGE_QUERY_RESULT => ({
-  website: {intro: text('global', 'Global intro'), sections: globalSections},
-  artist:
-    artist === null
-      ? null
-      : {name: 'Test Artist', introOverride: null, additionalInfo: null, sectionOverride: null, ...artist},
+  website: {resources: globalResources},
+  artist: artist === null ? null : {name: 'Test Artist', additionalInfo: null, resourceOverride: null, ...artist},
 })
 
 const firstText = (blocks: BlockContent) => blocks[0]?.children?.[0]?.text
+const ids = (resources: {_id: string}[]) => resources.map((r) => r._id)
 
 describe('getArtistPage', () => {
   beforeEach(() => {
     vi.mocked(sanityFetch).mockClear()
   })
 
-  it('queries the page with the artist id and all four cache tags', async () => {
+  it('queries the page with the artist id and all three cache tags', async () => {
     state.data = data({})
     await getArtistPage('artist-1')
     expect(sanityFetch).toHaveBeenCalledWith(ARTIST_PAGE_QUERY, {artistId: 'artist-1'}, [
       'website',
-      'section',
       'resource',
       'artist',
     ])
   })
 
-  it('uses the global intro and sections when there are no overrides', async () => {
+  it('uses the website resources, in order, when there is no override', async () => {
     state.data = data({})
     const page = await getArtistPage('a')
     expect(page.artistName).toBe('Test Artist')
-    expect(firstText(page.intro)).toBe('Global intro')
-    expect(page.sections.map((s) => s._id)).toEqual(['g1', 'g2'])
-    expect(page.sections[0].resources.map((r) => r._id)).toEqual(['r1', 'r2'])
+    expect(ids(page.resources)).toEqual(['r1', 'r2', 'r3'])
     expect(page.additionalInfo).toBeNull()
   })
 
-  it('replaces only the intro when the artist has an intro override', async () => {
-    state.data = data({introOverride: text('o', 'Artist intro')})
+  it('replaces (never appends to) the website resources when the artist has an override', async () => {
+    state.data = data({resourceOverride: [resource('own'), globalResources[1]]})
     const page = await getArtistPage('a')
-    expect(firstText(page.intro)).toBe('Artist intro')
-    expect(page.sections.map((s) => s._id)).toEqual(['g1', 'g2'])
-  })
-
-  it('replaces (never appends to) the global sections when the artist has a section override', async () => {
-    state.data = data({sectionOverride: [section('own', [resource('x')]), globalSections[1]]})
-    const page = await getArtistPage('a')
-    expect(page.sections.map((s) => s._id)).toEqual(['own', 'g2'])
-    expect(firstText(page.intro)).toBe('Global intro')
+    expect(ids(page.resources)).toEqual(['own', 'r2'])
   })
 
   it('treats empty override arrays as "no override"', async () => {
-    state.data = data({introOverride: [], sectionOverride: [], additionalInfo: []})
+    state.data = data({resourceOverride: [], additionalInfo: []})
     const page = await getArtistPage('a')
-    expect(firstText(page.intro)).toBe('Global intro')
-    expect(page.sections.map((s) => s._id)).toEqual(['g1', 'g2'])
+    expect(ids(page.resources)).toEqual(['r1', 'r2', 'r3'])
     expect(page.additionalInfo).toBeNull()
   })
 
@@ -100,21 +79,17 @@ describe('getArtistPage', () => {
     expect(page.additionalInfo && firstText(page.additionalInfo)).toBe('Your rep is Jane')
   })
 
-  it('drops resources missing a title or type, and handles sections with no resources', async () => {
+  it('drops resources missing a title or type', async () => {
     state.data = data({
-      sectionOverride: [
-        section('s', [resource('ok'), resource('untitled', {title: null}), resource('untyped', {type: null})]),
-        section('empty', null),
-      ],
+      resourceOverride: [resource('ok'), resource('untitled', {title: null}), resource('untyped', {type: null})],
     })
     const page = await getArtistPage('a')
-    expect(page.sections[0].resources.map((r) => r._id)).toEqual(['ok'])
-    expect(page.sections[1].resources).toEqual([])
+    expect(ids(page.resources)).toEqual(['ok'])
   })
 
   it('falls back safely when the website or artist is missing', async () => {
     state.data = {website: null, artist: null}
     const page = await getArtistPage('missing')
-    expect(page).toEqual({artistName: '', intro: [], additionalInfo: null, sections: []})
+    expect(page).toEqual({artistName: '', additionalInfo: null, resources: []})
   })
 })

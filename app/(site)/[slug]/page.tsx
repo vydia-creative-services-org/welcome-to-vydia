@@ -27,10 +27,7 @@ export default async function ArtistPage({params}: PageProps<'/[slug]'>) {
   if (access.status === 'redirect') redirect(`/${access.canonicalSlug}`)
 
   const page = await getArtistPage(access.artistId)
-  // Both views show every resource in one list; a resource shared by two sections appears once.
-  const resources = [
-    ...new Map(page.sections.flatMap((section) => section.resources.filter(hasTarget)).map((r) => [r._id, r])).values(),
-  ]
+  const resources = page.resources.filter(hasTarget)
 
   return (
     <ViewModeProvider>

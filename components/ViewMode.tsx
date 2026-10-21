@@ -7,6 +7,8 @@ export type ViewMode = 'carousel' | 'grid'
 type ViewModeContext = {
   view: ViewMode
   setView: (view: ViewMode) => void
+  /** Switch to the other view (relative to any switch already queued). */
+  toggleView: () => void
   /** The resource the user is looking at; the incoming view opens on it. */
   getFocus: () => string | null
   setFocus: (id: string) => void
@@ -124,7 +126,12 @@ export function ViewModeProvider({children}: {children: React.ReactNode}) {
     focusId.current = id
   }
 
-  return <Context value={{view, setView: switchView, getFocus, setFocus}}>{children}</Context>
+  const toggleView = () => {
+    const target = queued.current ?? viewRef.current
+    switchView(target === 'grid' ? 'carousel' : 'grid')
+  }
+
+  return <Context value={{view, setView: switchView, toggleView, getFocus, setFocus}}>{children}</Context>
 }
 
 /** Null outside a ViewModeProvider, so pages without resources render no toggle. */
