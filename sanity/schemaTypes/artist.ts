@@ -63,7 +63,7 @@ export const artist = defineType({
       type: 'array',
       group: 'access',
       description:
-        'People who can view this page. Matching ignores upper/lower case. labelrelationships@vydia.com, creativeservices@vydia.com, and internal viewers (Website settings) always have access.',
+        'People who can view this page. They sign in with Google or an email link, no password. Matching ignores upper/lower case. creativeservices@vydia.com, labelservices@vydia.com, and internal viewers (Website → Access) always have access.',
       of: [
         defineArrayMember({
           type: 'string',

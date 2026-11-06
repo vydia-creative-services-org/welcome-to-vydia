@@ -9,7 +9,7 @@ type AccessModule = typeof import('@/lib/access')
 let access: AccessModule
 
 beforeAll(async () => {
-  process.env.PERMANENT_VIEWER_EMAILS = 'labelrelationships@vydia.com, CreativeServices@vydia.com'
+  process.env.PERMANENT_VIEWER_EMAILS = 'labelservices@vydia.com, CreativeServices@vydia.com'
   access = await import('@/lib/access')
 })
 
@@ -39,7 +39,7 @@ describe('decideAccess', () => {
   })
 
   it('always allows the permanent internal emails, in any case', () => {
-    expect(access.decideAccess('jane-doe', 'LabelRelationships@vydia.com', lookup()).status).toBe('granted')
+    expect(access.decideAccess('jane-doe', 'LabelServices@vydia.com', lookup()).status).toBe('granted')
     expect(access.decideAccess('jane-doe', 'creativeservices@VYDIA.com', lookup()).status).toBe('granted')
   })
 
@@ -63,6 +63,28 @@ describe('decideAccess', () => {
   it('denies an artist with no allowed emails to everyone except internal viewers', () => {
     expect(access.decideAccess('jane-doe', 'jane@example.com', lookup({allowedEmails: null})).status).toBe('denied')
     expect(access.decideAccess('jane-doe', 'ops@vydia.com', lookup({allowedEmails: null})).status).toBe('granted')
+  })
+})
+
+describe('isApprovedAnywhere', () => {
+  const approved = {
+    artistEmails: ['Jane@Example.com ', null, 'sam@example.com'],
+    internalViewers: ['Erica.Johnson@vydia.com'],
+  }
+
+  it('accepts any artist email, internal viewer, or permanent viewer, ignoring case and spaces', () => {
+    expect(access.isApprovedAnywhere(' jane@example.COM', approved)).toBe(true)
+    expect(access.isApprovedAnywhere('erica.johnson@vydia.com', approved)).toBe(true)
+    expect(access.isApprovedAnywhere('labelservices@VYDIA.com', approved)).toBe(true)
+  })
+
+  it('rejects everyone else, including the old shared inbox', () => {
+    expect(access.isApprovedAnywhere('eve@example.com', approved)).toBe(false)
+    expect(access.isApprovedAnywhere('labelrelationships@vydia.com', approved)).toBe(false)
+  })
+
+  it('survives an empty dataset', () => {
+    expect(access.isApprovedAnywhere('jane@example.com', {artistEmails: [], internalViewers: null})).toBe(false)
   })
 })
 

@@ -26,14 +26,14 @@ The sidebar on the left matches this: **Artists**, then **Resources** and **Webs
 2. Type the **Artist name**.
 3. Under **URL**, click **Generate**. This makes the web address, for example `jane-doe`.
 4. Open the **Access** tab and add each client email under **Allowed emails** (click **Add item** for each one). Upper/lower case doesn't matter.
-   - You don't need to add `labelrelationships@` or `creativeservices@`. They can always see every page.
+   - You don't need to add `labelservices@` or `creativeservices@`. They can always see every page.
 5. Optional, on the **Page content** tab:
    - **Additional info:** a box shown below the resources in grid view (for example, who their rep is).
    - **Resource override:** see "Give one artist different resources" below.
 6. Click **Publish** (bottom right).
 7. To see the page, open the **…** menu next to Publish and choose **Open site**.
 
-Send the client their link: `https://welcometovydia.com/<the URL>`. The first time, they'll create a login with that email (or use Google) and confirm it from their inbox.
+Send the client their link: `https://welcometovydia.com/<the URL>`. The first time, they enter their email and click the sign-in link we send them (or use Google). There's no password, and they stay signed in on that browser.
 
 ## Add or update a resource
 
@@ -92,14 +92,17 @@ Some web addresses are reserved (like `studio` or `login`), and an address anoth
 **"My client says they can't see their page."**
 1. Check the spelling of their email under the artist's **Allowed emails**.
 2. Make sure they signed in with that same email. On the "This page isn't available" screen, they can click **Sign in with a different email**.
-3. If they created a login with a password, they need to click the confirmation link in their inbox first. Google sign-in doesn't need this.
+3. Ask them to check spam for an email from Vydia. Sign-in links expire after an hour, and they can request a new one on the sign-in page.
 4. Check the artist is **published**.
 
 **"My client went to welcometovydia.com and sees instructions."**
 The home page doesn't list artists (on purpose). Resend their personal link.
 
 **"I want to see an artist's page myself."**
-Open the artist in Studio and choose **Open site** from the **…** menu. Your team login can see every page.
+Open the artist in Studio and choose **Open site** from the **…** menu. Sign in to the site as `labelservices@` or `creativeservices@` (or as an internal viewer) to see every page.
+
+**"A Vydia colleague needs to see every artist's page."**
+Open **Website**, go to the **Access** tab, add their @vydia.com email under **Internal viewers**, and publish. Remove it the same way when they no longer need access.
 
 **"Someone left; remove their access."**
 Delete their email from **Allowed emails** and publish. They lose access the next time they load the page.

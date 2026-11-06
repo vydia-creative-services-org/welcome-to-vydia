@@ -18,13 +18,18 @@ test.describe('accessibility, signed out', () => {
     await expectNoViolations(page)
   })
 
-  test('login page, all three modes', async ({page}) => {
+  test('sign-in page, with an error and after sending a link', async ({page}) => {
     await page.goto('/login?next=%2Ftest-artist&error=link')
     await expectNoViolations(page)
-    await page.getByRole('button', {name: 'First time? Sign up'}).click()
+    await page.getByPlaceholder('Email').fill(`nobody-${Date.now()}@example.com`)
+    await page.getByRole('button', {name: 'Email me a sign-in link'}).click()
+    await expect(page.getByRole('heading', {name: 'Check your email'})).toBeVisible()
     await expectNoViolations(page)
-    await page.getByRole('button', {name: 'Back to sign in'}).click()
-    await page.getByRole('button', {name: 'Forgot password?'}).click()
+  })
+
+  test('finish signing in page', async ({page}) => {
+    await page.goto('/auth/confirm?token_hash=x&type=email')
+    await expect(page.getByRole('heading', {name: 'Finish signing in'})).toBeVisible()
     await expectNoViolations(page)
   })
 })

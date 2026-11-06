@@ -1,6 +1,7 @@
 'use client'
 import {GalleryHorizontal, GalleryVertical, LayoutGrid} from 'lucide-react'
 import {useEffect, useRef} from 'react'
+import {greeting} from '@/lib/greeting'
 import styles from './Header.module.css'
 import {useViewMode} from './ViewMode'
 
@@ -35,11 +36,7 @@ export function Header({artistName}: {artistName?: string}) {
   return (
     // Named so view transitions keep it pinned above the moving cards (see globals.css).
     <header className={styles.header} style={{viewTransitionName: 'site-header'}}>
-      <span className={styles.text}>
-        {artistName
-          ? `${artistName} \u00A0 | \u00A0 Welcome to Vydia`
-          : 'Welcome to Vydia'}
-      </span>
+      <span className={styles.text}>{greeting(artistName, {spaced: true})}</span>
 
       {viewMode && (
         // One button that swaps between the views; its label says what pressing it will do. The

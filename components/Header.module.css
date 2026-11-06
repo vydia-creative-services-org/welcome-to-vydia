@@ -14,6 +14,8 @@
 
   background: transparent;
   isolation: isolate;
+  /* Wheel, touch and clicks fall through to the content scrolling underneath; only the toggle catches them. */
+  pointer-events: none;
 }
 
 /* Main, strong blur */
@@ -110,6 +112,7 @@
   border: 0;
   color: #fff;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 /* The current view's icon is white, the other dimmed; either brightens on hover. */

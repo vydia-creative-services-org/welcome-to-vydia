@@ -1,21 +1,20 @@
 import type {Metadata} from 'next'
 import {notFound, redirect} from 'next/navigation'
+import {cache} from 'react'
 import {PageShell} from '@/components/PageShell'
 import {hasTarget} from '@/components/ResourceCard'
 import {ResourceViews} from '@/components/ResourceViews'
 import {RichText} from '@/components/RichText'
 import {ViewModeProvider} from '@/components/ViewMode'
 import {resolveArtistAccess} from '@/lib/access'
+import {greeting} from '@/lib/greeting'
 import {getArtistPage} from '@/lib/sanity/page'
 import {createClient} from '@/lib/supabase/server'
 
-export const metadata: Metadata = {title: 'Welcome to Vydia', robots: {index: false, follow: false}}
-
 export const instant = false
 
-export default async function ArtistPage({params}: PageProps<'/[slug]'>) {
-  const {slug} = await params
-
+// Shared by the page and its metadata, so each request checks sign-in and access once.
+const loadArtistPage = cache(async (slug: string) => {
   const supabase = await createClient()
   const {
     data: {user},
@@ -26,7 +25,18 @@ export default async function ArtistPage({params}: PageProps<'/[slug]'>) {
   if (access.status === 'denied') notFound()
   if (access.status === 'redirect') redirect(`/${access.canonicalSlug}`)
 
-  const page = await getArtistPage(access.artistId)
+  return getArtistPage(access.artistId)
+})
+
+export async function generateMetadata({params}: PageProps<'/[slug]'>): Promise<Metadata> {
+  const {slug} = await params
+  const page = await loadArtistPage(slug)
+  return {title: greeting(page.artistName), robots: {index: false, follow: false}}
+}
+
+export default async function ArtistPage({params}: PageProps<'/[slug]'>) {
+  const {slug} = await params
+  const page = await loadArtistPage(slug)
   const resources = page.resources.filter(hasTarget)
 
   return (

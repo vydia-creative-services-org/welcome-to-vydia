@@ -7,10 +7,15 @@ export const website = defineType({
   title: 'Website (global layout)',
   type: 'document',
   icon: HomeIcon,
+  groups: [
+    {name: 'resources', title: 'Resources', default: true},
+    {name: 'access', title: 'Access'},
+  ],
   fields: [
     defineField({
       name: 'resources',
       type: 'array',
+      group: 'resources',
       description:
         'Shown on every artist page, in this order. Drag to reorder. Artists with a resource override show their own list instead. A resource only shows up on the site once it’s added here (or to an artist’s override).',
       of: [defineArrayMember({type: 'reference', to: [{type: 'resource'}]})],
@@ -20,8 +25,10 @@ export const website = defineType({
       name: 'internalViewerEmails',
       title: 'Internal viewers',
       type: 'array',
+      group: 'access',
       description:
-        'Vydia emails that can view EVERY artist page. labelrelationships@ and creativeservices@ always have access and don’t need to be listed.',
+        'Vydia people who can view EVERY artist page and sign in with Google or an email link. creativeservices@ and labelservices@ always have access and don’t need to be listed. Removing someone takes effect on their next page load.',
+      initialValue: ['erica.johnson@vydia.com', 'mason.omara@vydia.com'],
       of: [
         defineArrayMember({
           type: 'string',

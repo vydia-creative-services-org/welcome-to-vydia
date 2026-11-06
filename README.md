@@ -12,7 +12,7 @@ Branded, per-artist welcome microsites at `welcometovydia.com/[artist-name]`. Ea
 | ------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Site    | Next.js 16 App Router on Vercel                        | `/[slug]` artist pages, `/` instructions, `/login`, `/auth/*`                                                                                                                                                                                                         |
 | Content | Sanity (private dataset), Studio embedded at `/studio` | Artists, resources, and the global Website layout                                                                                                                                                                                                                     |
-| Sign-in | Supabase Auth                                          | Email/password (with email confirmation) and Google                                                                                                                                                                                                                   |
+| Sign-in | Supabase Auth                                          | Google and email magic link, no passwords. Links are only sent to approved emails, and unapproved Google accounts are signed back out (see [`docs/sign-in-plan.md`](docs/sign-in-plan.md))                                                                            |
 | Gate    | `proxy.ts` + `lib/access.ts`                           | Signed-out visitors go to `/login` for every path. After sign-in, the page checks the email against the artist's allowed list (case-insensitive) plus the permanent and internal viewers. Unknown artists and denied visitors get the identical "not available" page. |
 | Cache   | `'use cache'` + `cacheTag` in `lib/sanity/fetch.ts`    | Sanity data is cached until Sanity's publish webhook calls `/api/revalidate`                                                                                                                                                                                          |
 
@@ -45,7 +45,7 @@ npm run dev                  # http://localhost:3000, Studio at http://localhost
 | `SANITY_REVALIDATE_SECRET`             | `openssl rand -hex 32`. Must match the Sanity webhook's secret              | `/api/revalidate`                                                                          |
 | `NEXT_PUBLIC_SUPABASE_URL`             | Supabase → Project Settings → API                                           | Auth                                                                                       |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase → API Keys (`sb_publishable_…`)                                    | Auth                                                                                       |
-| `PERMANENT_VIEWER_EMAILS`              | `labelrelationships@vydia.com,creativeservices@vydia.com`                   | Access check (always allowed on every artist page)                                         |
+| `PERMANENT_VIEWER_EMAILS`              | `labelservices@vydia.com,creativeservices@vydia.com`                        | Access check (always allowed on every artist page)                                         |
 | `SUPABASE_SERVICE_ROLE_KEY`            | Supabase → API Keys. **Local only, optional**                               | `npm run e2e:setup` / `e2e:teardown` only. The app never reads it. Don't add it to Vercel. |
 
 `.env.local` is gitignored; `.env.example` lists every variable.
@@ -67,11 +67,10 @@ npm run dev                  # http://localhost:3000, Studio at http://localhost
 
 ### End-to-end tests
 
-The e2e suite signs in as two throwaway users: one approved on `test-artist`/`test-renamed`, one not approved anywhere.
+The e2e suite signs in as two throwaway users: one approved on `test-artist`/`test-renamed`, one not approved anywhere. Global setup gets each session from a Supabase admin `generate_link` call (no email is sent) and the real `/auth/confirm` page, so `npm run e2e` needs `SUPABASE_SERVICE_ROLE_KEY` too.
 
 ```bash
 npm run build && npm run start &              # or point E2E_BASE_URL at a deployment
-export E2E_PASSWORD="e2e-$(openssl rand -hex 12)"
 npm run e2e:setup                             # needs SUPABASE_SERVICE_ROLE_KEY and a `sanity login`
 npm run e2e
 npm run e2e:teardown
