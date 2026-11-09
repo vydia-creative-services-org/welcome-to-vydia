@@ -159,7 +159,7 @@ The Sanity schema at `/sanity/schema.json` is the source of truth for resource f
 
 - Artist: `{ name: "Lil Example", slug: "lil-example" }`
 - Artist emails: `{ email: "lil@example.com", label: "Artist", is_primary: true }`, `{ email: "manager@mgmt.com", label: "Manager", is_primary: false }`
-- Main resource: `{ title: "Vydia Dashboard Walkthrough", type: "video", url: "https://...", category: "Getting Started", cover_image: "walkthrough.jpg", sort_order: 1 }`
+- Main resource: `{ title: "Vydia Dashboard Walkthrough", type: "video", file: "walkthrough.mp4", category: "Getting Started", coverImage: "walkthrough.jpg", sortOrder: 1 }`
 - Exclusive resource: `{ artist: "lil-example", title: "Q1 Release Plan", type: "pdf", file: "q1-plan.pdf", category: "Your Releases" }`
 
 ## Out of Scope (v1)

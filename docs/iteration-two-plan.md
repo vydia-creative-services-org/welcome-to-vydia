@@ -2650,7 +2650,7 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 
 ---
 
-### Phase 0: Accounts and environment (2026-11-09: everything doable now is done; 0.6 is deferred to the Pro upgrade, 0.9/0.10 to the domain purchase, and 0.13 needs the branch pushed, see notes)
+### Phase 0: Accounts and environment (2026-11-09: everything doable now is done; 0.6 is deferred to the Pro upgrade, and 0.9/0.10 to the domain purchase, see notes)
 
 - [x] **0.1** `[dev]` Install the Supabase CLI (`brew install supabase/tap/supabase`) and Docker Desktop for the local stack. — *Done when:* `supabase --version` works and `supabase start` boots a local stack.
   - CLI 3.1.0 and Docker are installed. `supabase start` boots cleanly.
@@ -2679,24 +2679,42 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
   - Confirmed by the owner. Still re-check with V1 (§12.3) that a real link's `redirect_to` keeps `/{slug}`.
 - [x] **0.12** `[ops]` Auth → Providers → Email enabled, OTP expiry 3600 (E6). "Allow new users to sign up" on (E7). Rate limits: emails per hour raised, 60 s per-user OTP interval kept (E5).
   - Confirmed by the owner. `/auth/v1/settings` also shows the email provider enabled and `disable_signup: false`.
-- [ ] **0.13** `[ops]` Vercel → Environment Variables → **Preview, branch `iteration-two` only**: the new project's `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY`. Production and other previews are unchanged. — *Done when:* an `iteration-two` preview build logs the new project URL.
-  - **Partially done.** The Vercel CLI is now logged in as the Vydia account (team `vydia-creative-services-vercel-org`), and the local repo is linked to project `welcome-to-vydia` (`.vercel/` is gitignored; `vercel link` also appended a `VERCEL_OIDC_TOKEN` to `.env.local`, which is gitignored).
-  - **Blocked on pushing the branch:** `vercel env add … preview iteration-two` fails with `branch_not_found`, because `iteration-two` exists only locally. Vercel can only scope a variable to a branch that is on GitHub. Push the branch (this starts a preview build), then add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY` (sensitive) for Preview + `iteration-two`.
-  - Findings for cutover (12.6): the project's Preview and Production environments currently share `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SERVICE_ROLE_KEY` (set 19d ago, so almost certainly the old project). Production also already has Supabase integration variables added 2h ago (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `POSTGRES_*`, `SUPABASE_JWT_SECRET`, …). Their values are hidden, so check which project they point at. The app doesn't read any of them yet.
+- [x] **0.13** `[ops]` Vercel → Environment Variables → **Preview, branch `iteration-two` only**: the new project's `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY`. Production and other previews are unchanged. — *Done when:* an `iteration-two` preview build logs the new project URL.
+  - Done: the branch is on GitHub, and `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY` (sensitive) now exist for Preview + `iteration-two` only. The repo is linked to the Vydia project `welcome-to-vydia` (`.vercel/` and `.env.local` are gitignored; `vercel link` appended a `VERCEL_OIDC_TOKEN` to `.env.local`).
+  - **Done-check not yet observable:** the preview deployment for the push is **Blocked** by Vercel (earlier previews were too), so no build has run with the new variables. Approve or unblock it in the Vercel dashboard (usually a commit author who isn't a member of the Vydia team), then check that the build uses the new project.
+  - Findings for cutover (12.6): the project's Preview and Production environments otherwise share `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SERVICE_ROLE_KEY` (set 19d ago, so almost certainly the old project). Production also has Supabase integration variables added the same day as Phase 0 (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `POSTGRES_*`, `SUPABASE_JWT_SECRET`, …) with hidden values, so check which project they point at. The app doesn't read them yet.
 - [x] **0.14** `[ops]` GitHub Actions: add the `SUPABASE_SECRET_KEY` secret (new project). Keep the old secrets until 12.7. Until Phase 10 lands, expect `e2e-preview.yml` failures on `iteration-two` previews (they run the old suite), or skip that workflow for the branch.
   - Done: `SUPABASE_SECRET_KEY` is stored as a GitHub Actions secret on `vydia-creative-services-org/welcome-to-vydia`. No other secrets or variables existed. `e2e-preview.yml` reads `vars.NEXT_PUBLIC_SUPABASE_URL`, which doesn't exist yet, so that workflow stays broken for this branch until Phase 10 (or until cutover task 12.7 creates the variable).
 - [x] **0.15** `[dev]` On `iteration-two`: `npm install zod @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities` and `npm install -D tsx`. — *Done when:* `npm run build` still passes.
   - Installed `zod` 4.6, `@dnd-kit/core` 6.3, `@dnd-kit/sortable` 10, `@dnd-kit/utilities` 3.2, and dev `tsx`. `tsc --noEmit` and `npm run build` pass. npm also pruned lockfile entries for an npm copy of the Supabase CLI that weren't in `package.json` (the Homebrew CLI is used).
 
-### Phase 1: Sanity contract (ships on `main`)
+### Phase 1: Sanity contract (ships on `main`) (2026-11-09: code done and PR #3 green; waiting on the merge, then label services)
 
-- [ ] **1.1** `[dev]` Add `category` (required string) and `sortOrder` (integer ≥ 0) to `sanity/schemaTypes/resource.ts` (§5.1).
-- [ ] **1.2** `[dev]` `npm run typegen`. Commit the updated `sanity/schema.json` and `lib/sanity/types.generated.ts`. — *Done when:* `npm run typecheck && npm run test` pass on `main`.
+- [x] **1.1** `[dev]` Add `category` (required string) and `sortOrder` (integer ≥ 0) to `sanity/schemaTypes/resource.ts` (§5.1).
+  - Done on branch `sanity-category-fields`, built in a separate git worktree (`../welcome-to-vydia-sanity`) off `origin/main`, so the Sanity change doesn't mix with `iteration-two`. `category` is required; `sortOrder` is an integer ≥ 0.
+
+- [x] **1.2** `[dev]` `npm run typegen`. Commit the updated `sanity/schema.json` and `lib/sanity/types.generated.ts`. — *Done when:* `npm run typecheck && npm run test` pass on `main`.
+  - `npm run typegen` regenerated `sanity/schema.json` (adds optional `category` string and `sortOrder` number) and `lib/sanity/types.generated.ts`. typecheck, lint, 70 unit tests, and prettier all pass.
+  - Two things surfaced along the way:
+    - **Local `main` was stale** (`524aced`; `origin/main` was 20 commits ahead after PR #2), so the branch was rebased onto `origin/main`.
+    - **`main`'s own `format:check` was failing** on 8 files (`app/manifest.json`, five `components/*` files, `TASKS.md`). A separate formatting-only commit fixes them.
+  - **Git identity:** Vercel rejects commits whose email maps to a GitHub user outside the Vydia team (`mason.omara@vydia.com` maps to `masonomara-vydia`). This repo's *local* git config now uses `vydia-creative-services <337009099+vydia-creative-services@users.noreply.github.com>`. Your global git config is unchanged. No history was rewritten except this one feature branch.
+
 - [ ] **1.3** `[dev]` PR → merge → deploy to production. — *Done when:* the live Studio shows a required Category field on resources.
+  - **Waiting on the merge.** PR #3 (https://github.com/vydia-creative-services-org/welcome-to-vydia/pull/3) is open with all checks passing (CI `check`, Vercel preview). Merging it to `main` deploys to production, and that step was blocked by the permission classifier, so it's left for you: click **Merge** on the PR (or tell me to retry).
+  - After the merge: confirm the production deployment is Ready and the live Studio shows a required **Category** field on a resource.
+
 - [ ] **1.4** `[LS]` Fill in **Category** for every resource listed under Website → Resources. Use the existing section names as a starting point: "Vydia Platform Resources", "Playlisting and Sync Pitch Forms", "Additional Services". — *Done when:* in Vision, `count(*[_id == "website"][0].resources[]->[!defined(category)])` returns `0`.
+  - **Waiting on label services**, and on 1.3. Existing resources will show "Category is required" in Studio until filled.
+
 - [ ] **1.5** `[LS]` Agree a soft content freeze in Studio from 8.5 until cutover (12.5). Edits are allowed, but they need a migration re-run.
+  - **Waiting on label services.**
+
 - [ ] **1.6** `[dev]` Merge `main` into `iteration-two`, so the branch has the new `schema.json`.
-- [ ] **1.7** `[dev]` Update the sample data in `docs/iteration-two.md` to match the schema (§5.3: video uses `file`, plus `coverImage` / `sortOrder` naming).
+  - **Blocked on 1.3.** Once PR #3 is merged: `git fetch && git merge origin/main` on `iteration-two`. Expect conflicts in the 8 formatted files only if `iteration-two` changed them.
+
+- [x] **1.7** `[dev]` Update the sample data in `docs/iteration-two.md` to match the schema (§5.3: video uses `file`, plus `coverImage` / `sortOrder` naming).
+  - Done: the main-resource sample in `docs/iteration-two.md` is now `{ title, type: "video", file: "walkthrough.mp4", category, coverImage: "walkthrough.jpg", sortOrder: 1 }`. The exclusive-resource sample already matched.
 
 ### Phase 2: Database (`supabase/migrations/…_iteration_two.sql`)
 
