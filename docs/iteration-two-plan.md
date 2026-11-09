@@ -205,7 +205,15 @@ Email → GET /auth/confirm?token_hash…&redirect_to=https://welcometovydia.com
 
 ## 4. Database (one migration)
 
-`supabase/migrations/20261110000000_iteration_two.sql`. The schema is managed with the Supabase CLI (`supabase link`, `supabase db push`). Local dev runs `supabase start`.
+`supabase/migrations/20261109212557_iteration_two.sql` is the source of truth. The SQL in this section was the design; building and testing it found the following changes, which the migration has and the snippets below don't:
+
+- `resources_read` calls a new `security definer` function, `can_view_main_resource(id)`. The inline `artist_emails` subquery shown in §4.4 would have hidden every main resource from artist users.
+- `private.queue_resource_garbage` is `security definer` (§4.2).
+- `save_artist` deletes with `not exists` instead of `not in`, and rejects a payload with a missing email or resource id (§4.6).
+- Every function is explicitly revoked from `public` and `anon` before it is granted to the roles that need it, and `is_admin()` coalesces a null email to false.
+- Config changes (like the auth hook) need `supabase stop && supabase start`, not `db reset`.
+
+The schema is managed with the Supabase CLI. Local dev runs `supabase start`. `supabase db push` needs `--remote` to touch the hosted project.
 
 ### 4.1 Types, domains, tables
 
@@ -886,7 +894,7 @@ export function toCard(resource: Resource): ResourceCardData | null {
 }
 ```
 
-Generate DB types with `supabase gen types typescript --project-id "$SUPABASE_PROJECT_ID" > lib/supabase/database.types.ts` (new `npm run db:types`), and type every client as `createServerClient<Database>(…)`.
+Generate DB types with `npm run db:types` (`supabase gen types typescript --local`, then prettier), and type every client as `createServerClient<Database>(…)`.
 
 ---
 
@@ -2716,32 +2724,60 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [x] **1.7** `[dev]` Update the sample data in `docs/iteration-two.md` to match the schema (§5.3: video uses `file`, plus `coverImage` / `sortOrder` naming).
   - Done: the main-resource sample in `docs/iteration-two.md` is now `{ title, type: "video", file: "walkthrough.mp4", category, coverImage: "walkthrough.jpg", sortOrder: 1 }`. The exclusive-resource sample already matched.
 
-### Phase 2: Database (`supabase/migrations/…_iteration_two.sql`)
+### Phase 2: Database (`supabase/migrations/…_iteration_two.sql`) (2026-11-09: built, tested, and pushed; 2.15 and 2.16 are dashboard steps for you)
 
-- [ ] **2.1** `[dev]` `supabase migration new iteration_two`.
-- [ ] **2.2** `[dev]` Domain `email_address`, enum `resource_type`, tables `admins`, `artists`, `artist_emails`, `resources` (including the `*_lqip` columns), `artist_hidden_resources`, plus indexes and the `admins` seed for the two shared inboxes (§4.1, D44).
-- [ ] **2.3** `[dev]` `private` schema and triggers: `touch_updated_at`, `normalize_category`, `default_sort_order`, `check_hide_target`, `storage_garbage` + `queue_resource_garbage` (§4.2).
-- [ ] **2.4** `[dev]` `jwt_email()`, `is_admin()` (Google `amr` + listed + `@vydia.com`), `can_view_artist()` (§4.3).
-- [ ] **2.5** `[dev]` Enable RLS on all five tables, `revoke all … from anon`, and every policy from §4.4.
-- [ ] **2.6** `[dev]` RPCs and their grants: `get_artist_page`, `email_can_access_slug` (`service_role` only), `hit_rate_limit`, `claim_link_send` (+ `private.rate_limits`, `private.link_sends`), `claim_admin_profile`, `reorder_main_resources`, `take_storage_garbage` (§4.5).
-- [ ] **2.7** `[dev]` `save_artist(payload jsonb)` (§4.6), including the lqip columns.
-- [ ] **2.8** `[dev]` `hook_before_user_created`, its grants to `supabase_auth_admin`, the two `supabase_auth_admin` select policies, and the `[auth.hook.before_user_created]` block in `config.toml` (§4.7).
-- [ ] **2.9** `[dev]` Storage buckets `resource-files` (private, 1 GB, file MIME allow-list) and `resource-images` (public, 5 MB, JPG/PNG/WebP), plus the two `storage.objects` policies (§4.8).
-- [ ] **2.10** `[dev]` `supabase db reset` from scratch, then `supabase db lint`. — *Done when:* both are clean.
-- [ ] **2.11** `[dev]` `supabase/tests/rls.test.sql` (§13.2, 13 assertions). — *Done when:* `supabase test db` passes.
-- [ ] **2.12** `[dev]` `supabase/tests/functions.test.sql`. Cover:
-  - `hook_before_user_created`: email on an artist allowed; unknown email rejected; admin email via the email provider rejected; Google admin allowed; Google non-admin rejected.
-  - `email_can_access_slug`: linked pair true; wrong email, unknown slug, and admin email all false.
-  - `claim_link_send`: true, then false within 60 s.
-  - `hit_rate_limit`: the 21st hit in the window is false.
-  - `save_artist`: create; edit; primary swap; duplicate email rolls back **everything**; zero primaries rejected; a payload with a main resource's id never overwrites it; hiding an exclusive raises.
-  - The garbage trigger queues paths on delete, on cascade, and on file replacement.
-  - `reorder_main_resources` reorders main resources only.
-  - *Done when:* `supabase test db` passes.
-- [ ] **2.13** `[dev]` Add the `db:types`, `db:test`, `db:push` scripts. Run `npm run db:types` and commit `lib/supabase/database.types.ts`.
-- [ ] **2.14** `[dev]` `supabase db push` to `lsihwkbnrheczirlkswo`. — *Done when:* the tables, buckets, and seeded admins are visible in the dashboard.
+- [x] **2.1** `[dev]` `supabase migration new iteration_two`.
+  - Created `supabase/migrations/20261109212557_iteration_two.sql` (the CLI's timestamp, not the `20261110…` in §4).
+
+- [x] **2.2** `[dev]` Domain `email_address`, enum `resource_type`, tables `admins`, `artists`, `artist_emails`, `resources` (including the `*_lqip` columns), `artist_hidden_resources`, plus indexes and the `admins` seed for the two shared inboxes (§4.1, D44).
+  - Done as §4.1, plus the two admin seeds.
+
+- [x] **2.3** `[dev]` `private` schema and triggers: `touch_updated_at`, `normalize_category`, `default_sort_order`, `check_hide_target`, `storage_garbage` + `queue_resource_garbage` (§4.2).
+  - Done as §4.2, with one fix: `private.queue_resource_garbage` is now `security definer`. As written in §4.2 it would fail for admins, because the `authenticated` role has no access to the `private` schema.
+
+- [x] **2.4** `[dev]` `jwt_email()`, `is_admin()` (Google `amr` + listed + `@vydia.com`), `can_view_artist()` (§4.3).
+  - Done as §4.3. `is_admin()` also coalesces a null email to false. New helper `can_view_main_resource(uuid)` (see 2.5). All four helper functions are revoked from `public`/`anon` and granted to `authenticated` and `service_role`.
+
+- [x] **2.5** `[dev]` Enable RLS on all five tables, `revoke all … from anon`, and every policy from §4.4.
+  - Done as §4.4 with one fix that matters: the plan's `resources_read` policy checked `artist_emails` inside the policy, but that subquery runs under the *artist's* RLS and artists can't read `artist_emails`, so artist users would have seen **no main resources**. The policy now calls the new `security definer` function `can_view_main_resource(id)`. The RLS test covers it ("artist users can read the main resources their artist does not hide").
+
+- [x] **2.6** `[dev]` RPCs and their grants: `get_artist_page`, `email_can_access_slug` (`service_role` only), `hit_rate_limit`, `claim_link_send` (+ `private.rate_limits`, `private.link_sends`), `claim_admin_profile`, `reorder_main_resources`, `take_storage_garbage` (§4.5).
+  - Done as §4.5. Every function is revoked from `public` and `anon` first, then granted to exactly the roles in §4.5 (the platform's default privileges would otherwise leave `anon` able to call them).
+
+- [x] **2.7** `[dev]` `save_artist(payload jsonb)` (§4.6), including the lqip columns.
+  - Done as §4.6, with the email and exclusive-resource deletes rewritten with `not exists`. As written (`not in (select …)`) a null id or email in the payload made the delete remove nothing, silently. A payload with a missing email or resource id is now rejected (`23502`).
+
+- [x] **2.8** `[dev]` `hook_before_user_created`, its grants to `supabase_auth_admin`, the two `supabase_auth_admin` select policies, and the `[auth.hook.before_user_created]` block in `config.toml` (§4.7).
+  - Done as §4.7. The `[auth.hook.before_user_created]` block is in `supabase/config.toml`.
+  - **Config changes need `supabase stop && supabase start`.** `supabase db reset` only restarts the existing containers, so the first end-to-end check found the hook not enforced at all (an unknown email and an admin address both got users). After a full restart, verified against the running local Auth service: an artist email → 200 and a user; an unknown email → 403 `Not approved`, no user; `labelservices@vydia.com` through the email provider → 403, no user.
+
+- [x] **2.9** `[dev]` Storage buckets `resource-files` (private, 1 GB, file MIME allow-list) and `resource-images` (public, 5 MB, JPG/PNG/WebP), plus the two `storage.objects` policies (§4.8).
+  - Done as §4.8. Both buckets and both policies are created by the migration.
+
+- [x] **2.10** `[dev]` `supabase db reset` from scratch, then `supabase db lint`. — *Done when:* both are clean.
+  - `supabase db reset` applies the migration from scratch, and `supabase db lint --schema public,private` reports no schema errors.
+
+- [x] **2.11** `[dev]` `supabase/tests/rls.test.sql` (§13.2, 13 assertions). — *Done when:* `supabase test db` passes.
+  - `supabase/tests/rls.test.sql`: 15 assertions (the plan's 13, plus main-resource visibility and "a magic-link session for an admin address is not admin"). `supabase test db` passes.
+
+- [x] **2.12** `[dev]` `supabase/tests/functions.test.sql`. Cover:
+  - `supabase/tests/functions.test.sql`: 32 assertions covering the hook (5), `email_can_access_slug` (4), `claim_link_send` (3), `hit_rate_limit` (3), `save_artist` create/edit/rollback/primary/overwrite (13), hiding an exclusive, reorder (2), and the garbage trigger (2). 47 assertions pass across both files.
+
+- [x] **2.13** `[dev]` Add the `db:types`, `db:test`, `db:push` scripts. Run `npm run db:types` and commit `lib/supabase/database.types.ts`.
+  - Added `db:types`, `db:test`, `db:push` to `package.json`. `db:types` generates from the **local** database (`--local`, no login needed; the schema is identical to the hosted one) and runs prettier on the output so `format:check` stays green. `lib/supabase/database.types.ts` is generated. `tsc`, lint, and the unit tests pass.
+
+- [x] **2.14** `[dev]` `supabase db push` to `lsihwkbnrheczirlkswo`. — *Done when:* the tables, buckets, and seeded admins are visible in the dashboard.
+  - Pushed with `supabase db push --remote --yes` after your go-ahead. `supabase migration list --remote` shows `20261109212557` on both sides.
+  - Verified on the hosted project: both admins are seeded; buckets `resource-files` (private, 1 GB) and `resource-images` (public, 5 MB) exist; the publishable key gets `permission denied` on `artists`, `email_can_access_slug`, and `get_artist_page`.
+  - **Gotcha:** `supabase db push` with no flag targets the **local** stack. The hosted project needs `--remote`, and in agent mode it also needs `--yes`, which I only used after you approved it.
+
 - [ ] **2.15** `[ops]` Auth → Hooks → Before User Created → Postgres → `public.hook_before_user_created` (E8).
+  - **For you (dashboard):** the CLI can't set this safely (`supabase config push` would overwrite the hosted auth settings with the local `config.toml`). The function `public.hook_before_user_created` now exists on the hosted project. Until you enable it, the hook is **off** on the hosted project and anyone can self-sign-up there. The first check after enabling it is V2 (§12.3).
+
 - [ ] **2.16** `[ops]` Table editor → `admins`: add individual admins by hand (e.g. `mason.omara@vydia.com`, `erica.johnson@vydia.com`, the label services and creative services people).
+  - **For you:** `labelservices@` and `creativeservices@` are already seeded. Add individuals in the table editor, or with this in the SQL editor:
+    `insert into public.admins (email) values ('mason.omara@vydia.com'), ('erica.johnson@vydia.com') on conflict do nothing;`
+    Each must be a real `@vydia.com` Google account (the table rejects other domains).
 
 ### Phase 3: Shared libraries
 
