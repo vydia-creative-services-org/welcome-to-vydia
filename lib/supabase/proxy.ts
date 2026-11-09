@@ -3,11 +3,10 @@ import {NextResponse, type NextRequest} from 'next/server'
 import {SUPABASE_KEY, SUPABASE_URL} from '@/lib/env'
 import type {Database} from './database.types'
 
-const PUBLIC_EXACT = ['/']
-const PUBLIC_PREFIXES = ['/login', '/auth']
+const ADMIN_PUBLIC_PATHS = ['/admin/login', '/admin/auth/callback']
 
-export const isPublicPath = (path: string) =>
-  PUBLIC_EXACT.includes(path) || PUBLIC_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
+export const needsAdminSession = (path: string) =>
+  (path === '/admin' || path.startsWith('/admin/')) && !ADMIN_PUBLIC_PATHS.includes(path)
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({request})
@@ -26,11 +25,10 @@ export async function updateSession(request: NextRequest) {
   const {data} = await supabase.auth.getClaims()
   const path = request.nextUrl.pathname
 
-  if (!data?.claims && !isPublicPath(path)) {
+  if (!data?.claims && needsAdminSession(path)) {
     const url = request.nextUrl.clone()
-    url.pathname = '/login'
+    url.pathname = '/admin/login'
     url.search = ''
-    url.searchParams.set('next', path)
     const redirect = NextResponse.redirect(url)
     response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie))
     return redirect

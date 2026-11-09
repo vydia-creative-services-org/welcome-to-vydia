@@ -1,0 +1,35 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 384px;
+  margin: max(var(--space-16), 14vh) auto 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.input {
+  min-height: 44px;
+  font-size: 16px;
+}
+
+.form button {
+  min-height: 44px;
+}
+
+.sent {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.panel .message {
+  text-align: center;
+  line-height: 1.5;
+  color: #ff7b7b;
+}

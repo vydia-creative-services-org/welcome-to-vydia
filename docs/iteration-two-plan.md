@@ -687,6 +687,8 @@ uri = "pg-functions://postgres/public/hook_before_user_created"
 
 On the hosted project, enable it under **Auth → Hooks → Before User Created → Postgres → `public.hook_before_user_created`** (§12).
 
+**Results (2026-11-09, hosted project):** the hook is enforced for `signInWithOtp` with the email provider (V2); `signInWithOtp` sessions carry `amr` method **`otp`** (V5). Which other paths fire the hook (admin `generate_link`/`createUser`, Google OAuth) and the Google rejection redirect (V3, V4, V6) are still to check.
+
 The docs leave three things unspecified, so they're verified on the new project before building on them (§12.3):
 1. Which sign-up paths fire the hook: `signInWithOtp` with `shouldCreateUser`, Google OAuth, and admin `createUser`/`generate_link`. The plan assumes the first two do. The e2e fixtures attach emails to artists *before* creating users, so they pass either way.
 2. How a rejected Google sign-in reaches our redirect URL. `/admin/auth/callback` treats any request without a `code` as "You don't have access.", so the exact query parameters don't matter.
@@ -2477,11 +2479,11 @@ The new project was set up to match the old one. Several settings that magic lin
 
 Run these once with the migration applied and E1–E8 done, then write the results back into §4.7:
 
-- [ ] V1 `signInWithOtp` for an email on an artist → user created, email arrives from Resend with the Vydia template, link → `/auth/confirm` → lands on `/{slug}` signed in.
-- [ ] V2 `signInWithOtp` called **directly** (curl with the publishable key) for an unknown email → hook rejects, **no row in `auth.users`**, no email.
+- [x] V1 (API level; email delivery and template pending 0.9/0.10 and 4.7) `signInWithOtp` for an email on an artist → user created, email arrives from Resend with the Vydia template, link → `/auth/confirm` → lands on `/{slug}` signed in.
+- [x] V2 `signInWithOtp` called **directly** (curl with the publishable key) for an unknown email → hook rejects, **no row in `auth.users`**, no email.
 - [ ] V3 Google sign-in with a non-admin account → no `auth.users` row. Note what Supabase appends to `/admin/auth/callback` (it should end at "You don't have access." either way).
 - [ ] V4 Google sign-in with a seeded admin → `/admin`, `admins.user_id`/`display_name`/`avatar_url` filled in.
-- [ ] V5 Decode an artist access token: record whether `amr` is `otp` or `magiclink` (both are accepted).
+- [x] V5 (`otp`) Decode an artist access token: record whether `amr` is `otp` or `magiclink` (both are accepted).
 - [ ] V6 Admin API `generate_link` / `createUser` for an unattached email: does the hook fire? This only affects the e2e fixtures, which attach emails first either way.
 
 ### 12.4 Cutover from the old project
@@ -2772,8 +2774,8 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
   - Verified on the hosted project: both admins are seeded; buckets `resource-files` (private, 1 GB) and `resource-images` (public, 5 MB) exist; the publishable key gets `permission denied` on `artists`, `email_can_access_slug`, and `get_artist_page`.
   - **Gotcha:** `supabase db push` with no flag targets the **local** stack. The hosted project needs `--remote`, and in agent mode it also needs `--yes`, which I only used after you approved it.
 
-- [ ] **2.15** `[ops]` Auth → Hooks → Before User Created → Postgres → `public.hook_before_user_created` (E8).
-  - **For you (dashboard):** the CLI can't set this safely (`supabase config push` would overwrite the hosted auth settings with the local `config.toml`). The function `public.hook_before_user_created` now exists on the hosted project. Until you enable it, the hook is **off** on the hosted project and anyone can self-sign-up there. The first check after enabling it is V2 (§12.3).
+- [x] **2.15** `[ops]` Auth → Hooks → Before User Created → Postgres → `public.hook_before_user_created` (E8).
+  - Observed enabled on the hosted project: a direct sign-up for an unknown email and for `labelservices@vydia.com` both get 403 and create no user (V2, see 4.16).
 
 - [ ] **2.16** `[ops]` Table editor → `admins`: add individual admins by hand (e.g. `mason.omara@vydia.com`, `erica.johnson@vydia.com`, the label services and creative services people).
   - **For you:** `labelservices@` and `creativeservices@` are already seeded. Add individuals in the table editor, or with this in the SQL editor:
@@ -2813,24 +2815,64 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [x] **3.9** `[dev]` `.env.example`: add `SUPABASE_SECRET_KEY` and `SUPABASE_PROJECT_ID`. The Sanity variables stay until Phase 9.
   - `.env.example` has `SUPABASE_SECRET_KEY` and `SUPABASE_PROJECT_ID`. The Sanity variables stay until Phase 9.
 
-### Phase 4: Artist side
+### Phase 4: Artist side (2026-11-09: built and verified live against the hosted project; 4.7's hosted half is a dashboard step for you)
 
-- [ ] **4.1** `[dev]` `lib/artist-page.ts` (`getArtistPage`, `cache()`d, null for every no-access case, fails closed on RPC error).
-- [ ] **4.2** `[dev]` Rewrite `app/(site)/[slug]/page.tsx` and its `generateMetadata` (§7.2). Delete `app/(site)/[slug]/not-found.tsx` and `components/NoAccess.tsx`. — *Done when:* signed out, a real slug and a made-up slug produce identical `<main>` HTML, a status of 200, and the title "Welcome to Vydia".
-- [ ] **4.3** `[dev]` `app/(site)/[slug]/actions.ts` `sendLink` (§7.3) + `tests/send-link.test.ts`. The test checks that an unknown slug and a wrong email give the same result with no send, a cooldown returns `sent` with no send, `over_email_send_rate_limit` counts as sent, and a rate limit returns `rate-limited`.
-- [ ] **4.4** `[dev]` `EnterEmail.tsx` + `EnterEmail.module.css` (§7.4): the "Enter your email" placeholder, **Send link**, the not-approved message under a still-filled input, "Email sent, check your inbox", and a 60 s **Resend email** countdown. Centered and mobile-first. — *Done when:* it works at 375 px wide and passes axe.
-- [ ] **4.5** `[dev]` `app/(site)/auth/confirm/route.ts` (GET, D33). Delete `auth/confirm/page.tsx` and `actions.ts`.
-- [ ] **4.6** `[dev]` `app/(site)/auth/expired/page.tsx` ("This link has expired" + a button back to the slug).
+- [x] **4.1** `[dev]` `lib/artist-page.ts` (`getArtistPage`, `cache()`d, null for every no-access case, fails closed on RPC error).
+  - `lib/artist-page.ts`: returns null for an invalid slug, no session, an RPC error, a null result, or an unexpected shape (it fails closed). The RPC result is parsed with zod rather than cast. The shared `cache()` means the page and its metadata make one RPC per request.
+
+- [x] **4.2** `[dev]` Rewrite `app/(site)/[slug]/page.tsx` and its `generateMetadata` (§7.2). Delete `app/(site)/[slug]/not-found.tsx` and `components/NoAccess.tsx`. — *Done when:* signed out, a real slug and a made-up slug produce identical `<main>` HTML, a status of 200, and the title "Welcome to Vydia".
+  - Old `not-found.tsx` and `components/NoAccess.tsx` are deleted. Added a visually hidden `<h1>` on the resources page (axe `page-has-heading-one`).
+  - Checked against the running dev server, signed out: a real slug and a made-up slug both return **200** with the title "Welcome to Vydia", and their `<main>` HTML is identical once the visitor's own requested slug (echoed into the form's hidden input) is normalized. The artist name never appears.
+
+- [x] **4.3** `[dev]` `app/(site)/[slug]/actions.ts` `sendLink` (§7.3) + `tests/send-link.test.ts`. The test checks that an unknown slug and a wrong email give the same result with no send, a cooldown returns `sent` with no send, `over_email_send_rate_limit` counts as sent, and a rate limit returns `rate-limited`.
+  - `tests/send-link.test.ts` (9 tests): a wrong email and an unknown slug return the same `not-approved` and send nothing; reserved or malformed slugs are never approved; the cooldown returns `sent` without sending; `over_email_send_rate_limit` counts as sent and any other error is `error`; a rate limit returns `rate-limited` after one call; the limit keys on the first forwarded address; an RPC error fails closed.
+
+- [x] **4.4** `[dev]` `EnterEmail.tsx` + `EnterEmail.module.css` (§7.4): the "Enter your email" placeholder, **Send link**, the not-approved message under a still-filled input, "Email sent, check your inbox", and a 60 s **Resend email** countdown. Centered and mobile-first. — *Done when:* it works at 375 px wide and passes axe.
+  - Verified in a real browser against the hosted project, at **375 px and 1280 px**: idle, not-approved (input stays filled, message shown), and sent ("Email sent, check your inbox", **Resend email (60s)** disabled, ticking down, enabled at 0, a resend click restarts it). axe is clean in all three states at both sizes, and nothing overflows horizontally.
+  - Fixes found while testing: a visually hidden `<h1>` per state (axe), a lighter error red scoped to this screen (the shared danger red failed contrast on the dark page), and the countdown clamped to 60 (it showed 63 on first render because the clock state was stale until the first tick).
+
+- [x] **4.5** `[dev]` `app/(site)/auth/confirm/route.ts` (GET, D33). Delete `auth/confirm/page.tsx` and `actions.ts`.
+  - `app/(site)/auth/confirm/route.ts` replaces the page and server action. Verified end to end on the hosted project: first use → 307 to `/{slug}` with an `sb-…-auth-token` cookie that lasts **400 days**; the same link again in the same browser (double click) → forgiven; the used link in a fresh browser, a bogus token, and a missing token → 307 to `/auth/expired?next=…`.
+  - The old Playwright sign-in tests that expect a Continue button are now stale; Phase 10 (10.5) replaces them.
+
+- [x] **4.6** `[dev]` `app/(site)/auth/expired/page.tsx` ("This link has expired" + a button back to the slug).
+  - `/auth/expired` returns 200 with "This link has expired" and a **Send a new link** button back to the slug.
+
 - [ ] **4.7** `[dev]` Email templates: export `public/vydia-logo.png` (white logo on a dark band), update the copy in `supabase/templates/magic-link.html` and `confirm-signup.html` (§11), and keep the `/auth/confirm?token_hash…` link. `[ops]` Paste both into the new project (E3). — *Done when:* a local (Mailpit) and a hosted (Resend) email both render the logo and the right link.
-- [ ] **4.8** `[dev]` `app/api/resources/[id]/file/route.ts` (RLS check → 1 h signed URL → 302, otherwise a `no-store` 404).
-- [ ] **4.9** `[dev]` Rename `_id` → `id` in `ResourceCarousel`, `ResourceGrid`, and every `data-morph-id`. Switch the type imports from `lib/sanity/types` to `lib/resources/types`. — *Done when:* the view switch morph still pairs cards correctly.
-- [ ] **4.10** `[dev]` `ResourceCard` (uses `href`; `hasTarget` removed), `VideoCard` (`src = href`), `CardCover` (Supabase URL, `objectPosition` from the hotspot, `placeholder="blur"` + lqip), `CardBody` (+ type label using `--color-badge-*`).
-- [ ] **4.11** `[dev]` `ResourceCarousel`: `backdropSrc` from `cover.src` + `cover.lqip` (§7.8), and a type subline under the big title.
-- [ ] **4.12** `[dev]` `ResourceViews({groups})` and the grouped `ResourceGrid` with category `<h2>`s and id-safe keys (§7.7). Remove the `additionalInfo` prop. Add CSS for the category headings and the spacing between groups.
-- [ ] **4.13** `[dev]` `lib/supabase/proxy.ts`: no redirects for artist paths; `/admin/*` (except login and callback) redirects to `/admin/login` without a session. Update the `proxy.ts` matcher. — *Done when:* signed out, `/x` returns 200 and `/admin` returns 307 to `/admin/login`.
-- [ ] **4.14** `[dev]` `next.config.ts`: replace the Sanity CDN `remotePatterns` with the Supabase public `resource-images` path.
-- [ ] **4.15** `[dev]` `app/(site)/page.tsx`: copy for the new flow ("open the link label services sent you, then enter your email").
-- [ ] **4.16** `[dev]` `[ops]` On the new project, insert a throwaway artist and email in the SQL editor, then run **V1, V2, V5** (§12.3). Record the results in §4.7 and delete the throwaway rows.
+  - **Dev half done:** `public/vydia-logo.png` (640×72, white on transparent, rendered from `docs/logo/gamma-vydia-white.svg`; the template's dark band shows through). Both templates are updated and identical: logo image at `{{ .SiteURL }}/vydia-logo.png`, "Open your Welcome to Vydia page", "Open my page", and the unchanged `/auth/confirm?token_hash=…` link. The subject in `supabase/config.toml` matches.
+  - **Verified locally** (after `supabase stop && supabase start`, which template and subject changes need): the Mailpit email has the right subject, the logo `<img>` URL (served by the dev server as `image/png`), and the direct confirm link with the `redirect_to` slug intact.
+  - **For you (hosted):** paste both templates and the subject `Open your Welcome to Vydia page` into Auth → Email Templates → **Magic Link** and **Confirm signup** on `lsihwkbnrheczirlkswo` (E3), and set `NEXT_PUBLIC_SITE_URL`/Site URL to the real domain so the logo URL resolves in a received email. The hosted email render can only be confirmed once Resend sending works (0.9/0.10).
+
+- [x] **4.8** `[dev]` `app/api/resources/[id]/file/route.ts` (RLS check → 1 h signed URL → 302, otherwise a `no-store` 404).
+  - Verified live: an approved user gets a **302** to a working signed URL (the file downloads); signed out and an unknown id get **404**; the private bucket's public URL is refused (400); after the email is removed the same session gets **404** on the next request.
+
+- [x] **4.9** `[dev]` Rename `_id` → `id` in `ResourceCarousel`, `ResourceGrid`, and every `data-morph-id`. Switch the type imports from `lib/sanity/types` to `lib/resources/types`. — *Done when:* the view switch morph still pairs cards correctly.
+  - `_id` → `id` everywhere, type imports from `lib/resources/types`. Verified in a browser with a signed-in session: the card ids in the carousel and in the grid are the same set, the toggle works both ways, and the morph names pair up.
+
+- [x] **4.10** `[dev]` `ResourceCard` (uses `href`; `hasTarget` removed), `VideoCard` (`src = href`), `CardCover` (Supabase URL, `objectPosition` from the hotspot, `placeholder="blur"` + lqip), `CardBody` (+ type label using `--color-badge-*`).
+  - `ResourceCard` uses `href` (`hasTarget` is gone), `VideoCard` takes `src = href`, `CardCover` uses the Supabase URL with `placeholder="blur"` and the stored lqip, and `CardBody` shows a type label (new `TypeLabel` component, colored dot from the `--color-badge-*` tokens). New styles are in new CSS modules so they don't conflict with the files `main` reformatted. Hidden per-card titles in the carousel are `<h2>` (they were `<h3>`, which axe flagged as a heading-order skip once the page had an `<h1>`).
+
+- [x] **4.11** `[dev]` `ResourceCarousel`: `backdropSrc` from `cover.src` + `cover.lqip` (§7.8), and a type subline under the big title.
+  - `backdropSrc` uses `cover.src` and `cover.lqip`, and the big carousel title has a type subline.
+
+- [x] **4.12** `[dev]` `ResourceViews({groups})` and the grouped `ResourceGrid` with category `<h2>`s and id-safe keys (§7.7). Remove the `additionalInfo` prop. Add CSS for the category headings and the spacing between groups.
+  - `ResourceViews({groups})` and a grouped `ResourceGrid`: one `<h2>` per category with unique ids (`category-<index>`, so categories that differ only by punctuation can't collide). Verified live: mixed-case categories rendered as one "Getting Started" group, groups in first-appearance order with main resources before exclusives; axe is clean in both views.
+
+- [x] **4.13** `[dev]` `lib/supabase/proxy.ts`: no redirects for artist paths; `/admin/*` (except login and callback) redirects to `/admin/login` without a session. Update the `proxy.ts` matcher. — *Done when:* signed out, `/x` returns 200 and `/admin` returns 307 to `/admin/login`.
+  - Signed out, `/x` returns **200** and `/admin` returns **307 → `/admin/login`**. (`/admin/login` is a 404 until Phase 5 builds it.) `isPublicPath` is replaced by `needsAdminSession`, and the matcher no longer excludes `studio` or `api/revalidate`.
+
+- [x] **4.14** `[dev]` `next.config.ts`: replace the Sanity CDN `remotePatterns` with the Supabase public `resource-images` path.
+  - `remotePatterns` now allows the Supabase `resource-images` public path. The host falls back to a placeholder when `NEXT_PUBLIC_SUPABASE_URL` is unset, because CI's `npm run typecheck` loads `next.config.ts` without env vars.
+
+- [x] **4.15** `[dev]` `app/(site)/page.tsx`: copy for the new flow ("open the link label services sent you, then enter your email").
+  - The `/` copy now says to open the link label services sent, then enter the email Vydia has on file.
+
+- [x] **4.16** `[dev]` `[ops]` On the new project, insert a throwaway artist and email in the SQL editor, then run **V1, V2, V5** (§12.3). Record the results in §4.7 and delete the throwaway rows.
+  - Done against the hosted project with throwaway rows, all deleted afterwards (artists, resources, hides, files, and the test users; the tables are empty again):
+    - **V2 ✔** `POST /auth/v1/otp` with the publishable key: an unknown email and `labelservices@vydia.com` both get **403 "Not approved"**, and no user is created. This also shows the hook (2.15) is enabled on the hosted project.
+    - **V1 ✔ (API level)** an approved email gets 200 and a user is created. Delivery and the received template couldn't be observed (the sink address can't be read, and the hosted templates are still to be pasted, see 4.7).
+    - **V5 ✔** the artist access token has `amr: [{method: "otp"}]`, so `/auth/confirm` accepts `otp`, and `is_admin()` rejects it as intended.
+    - Also verified end to end on the hosted project: the session shows the artist's page (hidden main resource gone, exclusive present), another slug with the same session shows only "Enter your email" and never the name, and removing the email revokes the page and the file on the next request.
 
 ### Phase 5: Admin auth and shell
 
