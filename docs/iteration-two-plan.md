@@ -91,7 +91,7 @@ GET /lil-example
 | D29 | **The sign-in pre-check runs with a server-only secret key** (`SUPABASE_SECRET_KEY`, used only in `lib/supabase/service.ts`) through a `security definer` RPC that isn't granted to `anon`/`authenticated`. | If the publishable key could call `email_can_access_slug`, anyone could probe *email × slug* pairs straight against PostgREST and skip our rate limit. This **reverses** iteration one's "the app never reads the service key". |
 | D30 | **A "Before User Created" auth hook (Postgres function) blocks self-signup at the source.** Email-provider users are created only if the email is on some artist and isn't an admin. Google users only if listed in `admins`. | Success state: "no user is created in Supabase" for unapproved emails, and "a non-admin Google account is rejected". This replaces D20's sign-in-then-sign-out. |
 | D31 | **`is_admin()` requires an OAuth (`amr` method `oauth`) session plus a row in `admins` plus `@vydia.com`.** Magic-link requests for admin emails are refused. | "Admins sign in only with Google SSO." Supabase auto-links identities by email, so without the `amr` check a magic-link session for an admin address would carry admin rights. |
-| D32 | **Admins see every artist page directly** while signed in with Google. `can_view_artist()` and `resources_read` include `is_admin()`, so `/[slug]` renders the resources page for them, and the admin detail page links to it ("Open page"). | **Owner decision.** It replaces the old permanent/internal viewers for label services, and no separate preview route is needed. |
+| D32 | **Admins see every artist page directly** while signed in with Google. `can_view_artist()` and `resources_read` include `is_admin()`, so `/[slug]` renders the resources page for them, and the admin detail page links to it ("Open page"). | **Owner decision.** It replaces the old permanent/internal viewers for label services, and no separate preview route is needed. **Re-confirmed:** admins reach artist pages with a Google session only. A magic-link session for an admin address is never admin and the sign-in flow keeps refusing admin addresses. A token refresh keeps the original sign-in method in `amr` (tested across two refreshes), so a Google session stays admin. |
 | D33 | **The email link signs in directly. This reverses D18.** `/auth/confirm` becomes a GET route handler: `verifyOtp({token_hash})` → session cookies → redirect to `/[slug]`. The Continue page and its server action are deleted. Any failure redirects to "This link has expired". Links are still verified by `token_hash` (D19), so they work in any browser. | **Owner decision**, matching the spec's "Artist clicks the magic link → session is created → redirected". Accepted trade-off: an email security scanner that opens links (Outlook Safe Links, Mimecast) can spend the single-use token first, and the artist then sees the expired screen and requests a new link (§16). |
 | D34 | **Rate-limit `sendLink`** per IP (20 per 10 min) and per email (one send per 60 s), in a `private` schema that only the secret key can reach. | The form now tells you whether an email is approved for a slug, by design. That makes it a pair-probing oracle unless it's throttled. The 60 s per-email cooldown is a business rule. |
 | D35 | **Files go in a private bucket (`resource-files`) and are served through `/api/resources/[id]/file`.** That route checks RLS with the visitor's JWT, then 302s to a 1-hour signed URL. **Images go in a public bucket (`resource-images`)** under unguessable UUID paths, for main **and** exclusive resources. | Exclusive PDFs and decks must never reach other artists. Cover images have to work with `next/image` (its optimizer fetches without cookies). **Owner decision:** a public but unguessable image URL is acceptable, including covers and PDF first-page previews of exclusive resources. |
@@ -2481,10 +2481,10 @@ Run these once with the migration applied and E1–E8 done, then write the resul
 
 - [x] V1 (API level; email delivery and template pending 0.9/0.10 and 4.7) `signInWithOtp` for an email on an artist → user created, email arrives from Resend with the Vydia template, link → `/auth/confirm` → lands on `/{slug}` signed in.
 - [x] V2 `signInWithOtp` called **directly** (curl with the publishable key) for an unknown email → hook rejects, **no row in `auth.users`**, no email.
-- [ ] V3 Google sign-in with a non-admin account → no `auth.users` row. Note what Supabase appends to `/admin/auth/callback` (it should end at "You don't have access." either way).
-- [ ] V4 Google sign-in with a seeded admin → `/admin`, `admins.user_id`/`display_name`/`avatar_url` filled in.
+- [ ] V3 (to do by you) Google sign-in with a non-admin account → no `auth.users` row. Note what Supabase appends to `/admin/auth/callback` (it should end at "You don't have access." either way).
+- [x] V4 (done by the owner 2026-11-09: `display_name`, `avatar_url`, `user_id`, and `last_sign_in_at` were filled in the `admins` row) Google sign-in with a seeded admin → `/admin`, `admins.user_id`/`display_name`/`avatar_url` filled in.
 - [x] V5 (`otp`) Decode an artist access token: record whether `amr` is `otp` or `magiclink` (both are accepted).
-- [ ] V6 Admin API `generate_link` / `createUser` for an unattached email: does the hook fire? This only affects the e2e fixtures, which attach emails first either way.
+- [ ] V6 (partial: admin `createUser` bypasses the hook locally) Admin API `generate_link` / `createUser` for an unattached email: does the hook fire? This only affects the e2e fixtures, which attach emails first either way.
 
 ### 12.4 Cutover from the old project
 
@@ -2874,16 +2874,42 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
     - **V5 ✔** the artist access token has `amr: [{method: "otp"}]`, so `/auth/confirm` accepts `otp`, and `is_admin()` rejects it as intended.
     - Also verified end to end on the hosted project: the session shows the artist's page (hidden main resource gone, exclusive present), another slug with the same session shows only "Enter your email" and never the name, and removing the email revokes the page and the file on the next request.
 
-### Phase 5: Admin auth and shell
+### Phase 5: Admin auth and shell (2026-11-09: built and verified, with an admin session reproduced locally; 5.8 needs a real Google sign-in from you)
 
-- [ ] **5.1** `[dev]` `app/(admin)/layout.tsx` (second root layout) + `admin.css` (light, desktop-first tokens: surface, border, text, accent, danger; a 1200 px content width).
-- [ ] **5.2** `[dev]` `app/(admin)/admin/login/page.tsx` + `actions.ts` (`signInWithGoogle` with `hd=vydia.com` and `prompt=select_account`) + `login.module.css`. `?error=no-access` → "You don't have access."
-- [ ] **5.3** `[dev]` `app/(admin)/admin/auth/callback/route.ts` (no `code` → no-access; exchange; `claim_admin_profile()`; non-admin → sign out → no-access).
-- [ ] **5.4** `[dev]` `app/(admin)/admin/auth/signout/route.ts` (POST → sign out → 303 to `/admin/login`).
-- [ ] **5.5** `[dev]` `lib/admin/auth.ts` `requireAdmin()` (`cache()`d; returns `{supabase, admin}`).
-- [ ] **5.6** `[dev]` `app/(admin)/admin/(panel)/layout.tsx` + `panel.module.css`: nav (Artists, Resources, active state), avatar + display name, Sign out.
-- [ ] **5.7** `[dev]` `npm run build`. — *Done when:* both root layouts build, `/admin` isn't captured by `[slug]`, and `admin` can't be saved as a slug (SQL check + `isValidSlug`).
+- [x] **5.1** `[dev]` `app/(admin)/layout.tsx` (second root layout) + `admin.css` (light, desktop-first tokens: surface, border, text, accent, danger; a 1200 px content width).
+  - `app/(admin)/layout.tsx` (a third root layout next to `(site)` and Studio) and `admin.css`: light `--admin-*` tokens, a 1200 px content width, its own reset and `.visually-hidden`. Admin styles can't reach the artist pages.
+
+- [x] **5.2** `[dev]` `app/(admin)/admin/login/page.tsx` + `actions.ts` (`signInWithGoogle` with `hd=vydia.com` and `prompt=select_account`) + `login.module.css`. `?error=no-access` → "You don't have access."
+  - `/admin/login` shows the Google button; `?error=no-access` → "You don’t have access.", `?error=google` → the retry message, and any other value shows nothing (checked with an injected value). axe is clean. The button starts the real flow: Google, `prompt=select_account`, the `vydia.com` hint, and the hosted project's callback.
+  - An already-signed-in admin gets a redirect to `/admin` instead of the button (via the new non-redirecting `getAdmin()`).
+
+- [x] **5.3** `[dev]` `app/(admin)/admin/auth/callback/route.ts` (no `code` → no-access; exchange; `claim_admin_profile()`; non-admin → sign out → no-access).
+  - Every failure (no code, Supabase error params from the hook rejecting someone, a bad code, a non-admin) lands on `/admin/login?error=no-access`; a non-admin is signed out first. A listed admin goes to `/admin` after `claim_admin_profile()`.
+
+- [x] **5.4** `[dev]` `app/(admin)/admin/auth/signout/route.ts` (POST → sign out → 303 to `/admin/login`).
+  - POST signs out and 303s to `/admin/login`. Checked as an admin and as an artist: afterwards `/admin` redirects to login and the artist page shows the email screen.
+
+- [x] **5.5** `[dev]` `lib/admin/auth.ts` `requireAdmin()` (`cache()`d; returns `{supabase, admin}`).
+  - `lib/admin/auth.ts`: `getAdmin()` (cached, no redirect) and `requireAdmin()`. A signed-in non-admin is sent to `/admin/login?error=no-access`; a signed-out visitor to plain `/admin/login`. The admin row is read from `admins` with the caller's own JWT, so the typed row replaces the plan's `as AdminProfile` cast.
+
+- [x] **5.6** `[dev]` `app/(admin)/admin/(panel)/layout.tsx` + `panel.module.css`: nav (Artists, Resources, active state), avatar + display name, Sign out.
+  - `(panel)/layout.tsx` plus a client `AdminNav` (Artists, Resources, `aria-current` active state), the admin's avatar and name, and Sign out. The avatar uses `next/image` with `unoptimized` (Google avatar hosts vary). `(panel)/page.tsx` is a **placeholder** until task 6.1 builds the real index.
+
+- [x] **5.7** `[dev]` `npm run build`. — *Done when:* both root layouts build, `/admin` isn't captured by `[slug]`, and `admin` can't be saved as a slug (SQL check + `isValidSlug`).
+  - `npm run build` passes with all three root layouts. `/admin`, `/admin/login`, and the auth routes are separate from `/[slug]`. The database refuses the slugs `admin`, `api`, `login`, and `Admin` (`artists_slug_check`), and `isValidSlug` rejects them (`tests/slug.test.ts`).
+  - Checked live: signed out, `/admin`, `/admin/resources`, and `/admin/artists/new` all 307 to `/admin/login`; `/api` (a reserved slug) shows the email screen, not a 404. `/admin/resources` and `/admin/artists/new` return 404 once signed in, until Phases 6–7 build them.
+
 - [ ] **5.8** `[ops]` Run **V3, V4** (§12.3). Record the results in §4.7.
+  - Also check, as a listed admin signed in with Google: open an artist page you are **not** attached to (any slug) and see its resources, not the Enter your email screen (D32). Then confirm it still works after the session has been refreshed (wait past the 1 hour token expiry, or sign in the day before).
+  - **Reproduced locally in place of Google** (a real Google account can't be driven from here). GoTrue builds `amr` from the `auth.mfa_amr_claims` table, so I added an `oauth` entry for a local test user (`labelservices@vydia.com`, seeded as an admin), refreshed the session, and ran a production build against the local stack on port 3100. Results:
+    - `/admin` renders the panel: title, nav, active state, the seeded name, a Sign out form.
+    - **D32 ✔** the admin opens an artist it is **not** attached to and sees its main and exclusive resources; an unknown slug and a signed-out visitor still get only the email screen, with no name leak.
+    - **Refresh ✔** a session whose access token had expired was refreshed by the proxy, `oauth` stayed in `amr`, and `/admin` and the artist page still worked.
+    - A signed-in **non-admin** (artist session) on `/admin` gets "You don’t have access."
+    - All test data and the 3100 server are gone; the hosted project is empty.
+  - **V6 (partial):** an admin-API `createUser` for an admin address **bypasses** the sign-up hook (local stack). The e2e fixtures can therefore create users directly.
+  - **V4 ✔ done by you:** the admin sign-in worked and filled in your `admins` row. Opening an artist page as that admin needs an artist to exist: the new project has none yet (Sanity's `test-artist` isn't migrated), so `/test-artist` correctly shows the email screen until one is created in Phase 6.
+  - **Still for you (needs a real Google account):** V3 (a non-admin Google account → "You don’t have access.", no `auth.users` row) and V4 (a seeded admin → `/admin`, with `display_name` and `avatar_url` filled in the `admins` row). The Google redirect URI and hook are already set up. When you do V4, also open an artist you aren't attached to, and again after the session has been refreshed.
 
 ### Phase 6: Admin: artists
 
@@ -3074,7 +3100,7 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 
 | Question | Answer | Where it lands |
 |---|---|---|
-| Should admins see artist pages directly? | Yes | D32, `is_admin()` in `can_view_artist` / `resources_read`, pgTAP test, "Open page" link, manual QA |
+| Should admins see artist pages directly? | Yes. Re-confirmed 2026-11-09: **Google sign-in only**, no magic-link access for admins, even view-only | D32, `is_admin()` in `can_view_artist` / `resources_read`, pgTAP test, "Open page" link, manual QA |
 | Keep the Continue page or go straight from link to session? | Straight to session | D33 (reverses D18), §3.3, §7.5 `route.ts`, e2e §13.3, risk §16 |
 | Keep per-artist additional info? | Drop it | D41, §0, §9 deletions |
 | Sender address | Placeholder `welcome@vydia.com` for now | §11, tasks 0.10 and 12.4 |

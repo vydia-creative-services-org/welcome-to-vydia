@@ -1,0 +1,38 @@
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-space-6);
+  min-width: 0;
+}
+
+.brand {
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.links {
+  display: flex;
+  gap: var(--admin-space-1);
+  padding: 0;
+  list-style: none;
+}
+
+.link {
+  display: block;
+  padding: var(--admin-space-2) var(--admin-space-3);
+  color: var(--admin-muted);
+  border-radius: var(--admin-radius);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.link:hover {
+  color: var(--admin-text);
+  background: var(--admin-bg);
+}
+
+.link[aria-current='page'] {
+  color: var(--admin-text);
+  background: var(--admin-bg);
+}

@@ -1,0 +1,58 @@
+.shell {
+  min-height: 100vh;
+}
+
+.bar {
+  background: var(--admin-surface);
+  border-bottom: 1px solid var(--admin-border);
+}
+
+.barInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--admin-space-5);
+  max-width: var(--admin-content-width);
+  margin: 0 auto;
+  padding: 0 var(--admin-space-5);
+  min-height: 60px;
+}
+
+.me {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-space-3);
+  min-width: 0;
+}
+
+.avatar {
+  border-radius: 50%;
+}
+
+.name {
+  overflow: hidden;
+  max-width: 220px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.signOut {
+  padding: var(--admin-space-2) var(--admin-space-3);
+  color: var(--admin-muted);
+  background: none;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  cursor: pointer;
+}
+
+.signOut:hover {
+  color: var(--admin-text);
+  border-color: var(--admin-border-strong);
+}
+
+.main {
+  max-width: var(--admin-content-width);
+  margin: 0 auto;
+  padding: var(--admin-space-6) var(--admin-space-5) var(--admin-space-7);
+}
