@@ -118,6 +118,21 @@ export const resource = defineType({
       initialValue: () => new Date().toISOString(),
       validation: (rule) => rule.required(),
     }),
+    defineField({
+      name: 'category',
+      type: 'string',
+      description:
+        'Groups this card in grid view, e.g. "Getting Started". Upper/lower case is ignored when grouping, so "getting started" and "Getting Started" end up together.',
+      validation: (rule) => rule.required(),
+    }),
+    defineField({
+      name: 'sortOrder',
+      title: 'Sort order',
+      type: 'number',
+      description:
+        'Position on the page, lowest first. Leave empty: the Supabase migration fills it from the Website order.',
+      validation: (rule) => rule.integer().min(0),
+    }),
   ],
   validation: (rule) =>
     rule.custom<ResourceDocument>((doc) => {

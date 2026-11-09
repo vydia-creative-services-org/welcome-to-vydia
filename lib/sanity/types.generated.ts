@@ -79,6 +79,8 @@ export type Resource = {
     _type: 'image'
   }
   addedOn?: string
+  category?: string
+  sortOrder?: number
 }
 
 export type SanityImageCrop = {

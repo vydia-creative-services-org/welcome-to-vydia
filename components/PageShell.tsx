@@ -1,7 +1,6 @@
-import { cx } from '@/lib/cx'
-import { Footer } from './Footer'
-import { Header } from './Header'
-
+import {cx} from '@/lib/cx'
+import {Footer} from './Footer'
+import {Header} from './Header'
 
 import styles from './PageShell.module.css'
 
