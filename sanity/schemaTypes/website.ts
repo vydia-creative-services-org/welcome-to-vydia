@@ -1,6 +1,6 @@
 import {HomeIcon} from '@sanity/icons/Home'
 import {defineArrayMember, defineField, defineType} from 'sanity'
-import {EMAIL_PATTERN} from './shared'
+import {EMAIL_PATTERN} from '../../lib/email'
 
 export const website = defineType({
   name: 'website',

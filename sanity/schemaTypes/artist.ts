@@ -2,7 +2,7 @@ import {UserIcon} from '@sanity/icons/User'
 import {defineArrayMember, defineField, defineType, type SlugValue, type ValidationContext} from 'sanity'
 import {RESERVED_SLUGS, SLUG_PATTERN, slugify} from '../../lib/slug'
 import {apiVersion} from '../env'
-import {EMAIL_PATTERN} from './shared'
+import {EMAIL_PATTERN} from '../../lib/email'
 
 const isSlugAvailable = async (slug: string, context: ValidationContext) => {
   const published = context.document?._id.replace(/^drafts\./, '') ?? ''

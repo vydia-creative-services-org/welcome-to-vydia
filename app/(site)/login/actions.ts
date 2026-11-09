@@ -1,13 +1,13 @@
 'use server'
 import {redirect} from 'next/navigation'
 import {after} from 'next/server'
-import {canSignIn, normalizeEmail} from '@/lib/access'
+import {canSignIn} from '@/lib/access'
+import {EMAIL_PATTERN, normalizeEmail} from '@/lib/email'
 import {SITE_URL} from '@/lib/env'
 import {field} from '@/lib/form'
 import {safeNext} from '@/lib/safe-redirect'
 import {createClient} from '@/lib/supabase/server'
 import {createStatelessClient} from '@/lib/supabase/stateless'
-import {EMAIL_PATTERN} from '@/sanity/schemaTypes/shared'
 
 export type LinkState = {sentTo?: string; error?: string}
 

@@ -2720,6 +2720,7 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 
 - [ ] **1.6** `[dev]` Merge `main` into `iteration-two`, so the branch has the new `schema.json`.
   - **Blocked on 1.3.** Once PR #3 is merged: `git fetch && git merge origin/main` on `iteration-two`. Expect conflicts in the 8 formatted files only if `iteration-two` changed them.
+  - **Partly applied, for Phase 3.** PR #3 is merged, but the merge itself (a commit) is yours. To unblock `tests/schema-parity.test.ts` I staged `sanity/schema.json`, `lib/sanity/types.generated.ts`, and `sanity/schemaTypes/resource.ts` from `origin/main` (identical content, so the real merge applies cleanly). Still to do: `git fetch && git merge origin/main`.
 
 - [x] **1.7** `[dev]` Update the sample data in `docs/iteration-two.md` to match the schema (§5.3: video uses `file`, plus `coverImage` / `sortOrder` naming).
   - Done: the main-resource sample in `docs/iteration-two.md` is now `{ title, type: "video", file: "walkthrough.mp4", category, coverImage: "walkthrough.jpg", sortOrder: 1 }`. The exclusive-resource sample already matched.
@@ -2779,17 +2780,38 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
     `insert into public.admins (email) values ('mason.omara@vydia.com'), ('erica.johnson@vydia.com') on conflict do nothing;`
     Each must be a real `@vydia.com` Google account (the table rejects other domains).
 
-### Phase 3: Shared libraries
+### Phase 3: Shared libraries (2026-11-09: done; typecheck, lint, build, and 139 unit tests pass)
 
-- [ ] **3.1** `[dev]` `lib/email.ts` (`EMAIL_PATTERN`, `normalizeEmail`). Repoint the existing imports from `lib/access.ts` and `sanity/schemaTypes/shared.ts`.
-- [ ] **3.2** `[dev]` `lib/slug.ts`: `SLUG_MIN`/`SLUG_MAX` (3–60), the 60-char `slugify` cap, `isValidSlug`, `normalizeSlug`, and an updated `RESERVED_SLUGS` matching the SQL check. Update `tests/slug.test.ts`.
-- [ ] **3.3** `[dev]` `lib/resources/types.ts` (`RESOURCE_TYPES` moved here, `Resource`, `ResourceCardData`, `Hotspot`). Until Phase 9, `sanity/schemaTypes/resource.ts` imports `RESOURCE_TYPES` from it.
-- [ ] **3.4** `[dev]` `lib/resources/mapping.ts` (`RESOURCE_FIELD_MAP`, the compile-time enum parity check, `publicImageUrl`, `fromRow`, `toCard`) + `tests/mapping.test.ts`.
-- [ ] **3.5** `[dev]` `lib/resources/group.ts` + `tests/group.test.ts` (case-insensitive grouping, first-seen order and spelling).
-- [ ] **3.6** `[dev]` `lib/validation.ts` (`resourceInput`, `artistPayload`, the lqip regex) + `tests/validation.test.ts` (every Sanity per-type rule, all field limits, email dedupe, exactly one primary).
-- [ ] **3.7** `[dev]` `tests/schema-parity.test.ts` (§13.1). — *Done when:* it fails if a field is added to `schema.json` without a mapping.
-- [ ] **3.8** `[dev]` `lib/supabase/service.ts`. Add the `<Database>` generic in `lib/supabase/server.ts`, `stateless.ts`, and `proxy.ts`.
-- [ ] **3.9** `[dev]` `.env.example`: add `SUPABASE_SECRET_KEY` and `SUPABASE_PROJECT_ID`. The Sanity variables stay until Phase 9.
+- [x] **3.1** `[dev]` `lib/email.ts` (`EMAIL_PATTERN`, `normalizeEmail`). Repoint the existing imports from `lib/access.ts` and `sanity/schemaTypes/shared.ts`.
+  - `lib/email.ts` is the only home of `EMAIL_PATTERN` and `normalizeEmail`. `lib/access.ts`, `app/(site)/login/actions.ts`, and the Sanity `artist` and `website` schemas import from it, and `sanity/schemaTypes/shared.ts` is deleted.
+
+- [x] **3.2** `[dev]` `lib/slug.ts`: `SLUG_MIN`/`SLUG_MAX` (3–60), the 60-char `slugify` cap, `isValidSlug`, `normalizeSlug`, and an updated `RESERVED_SLUGS` matching the SQL check. Update `tests/slug.test.ts`.
+  - `SLUG_MIN`/`SLUG_MAX`, the 60-char `slugify` cap, `isValidSlug`, and `normalizeSlug` are in. `RESERVED_SLUGS` is now exactly the eight words in the SQL check (`admin`, `api`, `auth`, `login`, `logout`, `account`, `studio`, `static`); the other entries in the old list (`_next`, `favicon.ico`, …) can't match `SLUG_PATTERN` anyway.
+  - `tests/slug.test.ts` is updated and gains a test that reads the migration and fails if the SQL list and `RESERVED_SLUGS` ever differ.
+
+- [x] **3.3** `[dev]` `lib/resources/types.ts` (`RESOURCE_TYPES` moved here, `Resource`, `ResourceCardData`, `Hotspot`). Until Phase 9, `sanity/schemaTypes/resource.ts` imports `RESOURCE_TYPES` from it.
+  - `RESOURCE_TYPE_VALUES` (a tuple, so zod's `z.enum` accepts it without a cast) is the source of `ResourceType`, and `RESOURCE_TYPES` (with titles) is checked against it with `satisfies`. `sanity/schemaTypes/resource.ts` and `lib/sanity/types.ts` import from `lib/resources/types.ts`; the old `ResourceCardData` in `lib/sanity/types.ts` is untouched until Phase 4.
+
+- [x] **3.4** `[dev]` `lib/resources/mapping.ts` (`RESOURCE_FIELD_MAP`, the compile-time enum parity check, `publicImageUrl`, `fromRow`, `toCard`) + `tests/mapping.test.ts`.
+  - Deviations from §5.4: the enum parity check is `expectTypeOf` in `tests/mapping.test.ts` (checked by `tsc`) rather than an unused constant, the hotspot is read with a type guard instead of a cast, and `toCard` uses `url ?? file route`, which is equivalent because the database constraints allow only one of the two per type.
+  - `tests/mapping.test.ts`: 11 tests, including cover vs PDF-preview precedence and which image's lqip is used.
+
+- [x] **3.5** `[dev]` `lib/resources/group.ts` + `tests/group.test.ts` (case-insensitive grouping, first-seen order and spelling).
+  - `tests/group.test.ts`: case-insensitive grouping under the first spelling seen, first-appearance order, whitespace collapsing.
+
+- [x] **3.6** `[dev]` `lib/validation.ts` (`resourceInput`, `artistPayload`, the lqip regex) + `tests/validation.test.ts` (every Sanity per-type rule, all field limits, email dedupe, exactly one primary).
+  - As §8.4, minus the tuple cast, plus a rule matching the database constraint that only PDFs can have a preview, and an exported `ResourceInput` type. `tests/validation.test.ts` covers every per-type rule and message, the 120/100/60/40 limits, the slug rules, lqip, http(s)-only links, email dedupe, and exactly one primary. Test ids use `crypto.randomUUID()` because zod 4's `z.uuid()` rejects made-up ids like `…0f1`.
+
+- [x] **3.7** `[dev]` `tests/schema-parity.test.ts` (§13.1). — *Done when:* it fails if a field is added to `schema.json` without a mapping.
+  - `tests/schema-parity.test.ts` parses `sanity/schema.json` with zod (no casts). Checked by mutation: removing `sortOrder` from `RESOURCE_FIELD_MAP` makes it fail, restoring it passes.
+  - **Not derivable:** the plan also wanted required/optional rules compared with `resourceInput`, but Sanity's schema extraction marks every field optional (validation isn't in `schema.json`), so there's nothing to compare. Those rules are covered by `tests/validation.test.ts` instead.
+  - This test needs `category` and `sortOrder` in `sanity/schema.json`; see the note on 1.6.
+
+- [x] **3.8** `[dev]` `lib/supabase/service.ts`. Add the `<Database>` generic in `lib/supabase/server.ts`, `stateless.ts`, and `proxy.ts`.
+  - `lib/supabase/service.ts` reads `SUPABASE_SECRET_KEY` inside `createServiceClient()` rather than at import, so builds and tests don't fail when the key is absent. `server.ts`, `stateless.ts`, and `proxy.ts` now use the `Database` generic.
+
+- [x] **3.9** `[dev]` `.env.example`: add `SUPABASE_SECRET_KEY` and `SUPABASE_PROJECT_ID`. The Sanity variables stay until Phase 9.
+  - `.env.example` has `SUPABASE_SECRET_KEY` and `SUPABASE_PROJECT_ID`. The Sanity variables stay until Phase 9.
 
 ### Phase 4: Artist side
 

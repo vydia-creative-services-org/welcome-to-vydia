@@ -1,4 +1,4 @@
-import type {ResourceType} from '@/sanity/schemaTypes/resource'
+import type {ResourceType} from '@/lib/resources/types'
 import type {ARTIST_PAGE_QUERY_RESULT, BlockContent} from './types.generated'
 
 type RawWebsite = NonNullable<ARTIST_PAGE_QUERY_RESULT['website']>

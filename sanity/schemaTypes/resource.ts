@@ -1,17 +1,9 @@
 import {DocumentIcon} from '@sanity/icons/Document'
 import {createImageUrlBuilder} from '@sanity/image-url'
 import {defineField, defineType, type FileValue, type ImageValue, type SanityDocument} from 'sanity'
+import {RESOURCE_TYPES, type ResourceType} from '../../lib/resources/types'
 import {apiVersion, dataset, projectId} from '../env'
 import {PdfPreviewInput} from '../components/PdfPreviewInput'
-
-export const RESOURCE_TYPES = [
-  {title: 'PDF', value: 'pdf'},
-  {title: 'Video', value: 'video'},
-  {title: 'Link (pitch forms, external pages)', value: 'link'},
-  {title: 'Slide deck', value: 'slides'},
-] as const
-
-export type ResourceType = (typeof RESOURCE_TYPES)[number]['value']
 
 const resourceTypeOf = (doc: SanityDocument | undefined): ResourceType | undefined =>
   RESOURCE_TYPES.find((t) => t.value === doc?.type)?.value
@@ -117,6 +109,21 @@ export const resource = defineType({
         'Shown on the card as "Added on …". Defaults to when this resource was created. Editing the resource later does NOT change it. When migrating from Seismic, set this to the original date.',
       initialValue: () => new Date().toISOString(),
       validation: (rule) => rule.required(),
+    }),
+    defineField({
+      name: 'category',
+      type: 'string',
+      description:
+        'Groups this card in grid view, e.g. "Getting Started". Upper/lower case is ignored when grouping, so "getting started" and "Getting Started" end up together.',
+      validation: (rule) => rule.required(),
+    }),
+    defineField({
+      name: 'sortOrder',
+      title: 'Sort order',
+      type: 'number',
+      description:
+        'Position on the page, lowest first. Leave empty: the Supabase migration fills it from the Website order.',
+      validation: (rule) => rule.integer().min(0),
     }),
   ],
   validation: (rule) =>

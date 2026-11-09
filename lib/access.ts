@@ -1,10 +1,9 @@
 import 'server-only'
 import type {User} from '@supabase/supabase-js'
+import {normalizeEmail} from './email'
 import {sanityFetch} from './sanity/fetch'
 import {ACCESS_QUERY, APPROVED_EMAILS_QUERY} from './sanity/queries'
 import type {ACCESS_QUERY_RESULT, APPROVED_EMAILS_QUERY_RESULT} from './sanity/types.generated'
-
-export const normalizeEmail = (email: string) => email.trim().toLowerCase()
 
 const PERMANENT_VIEWERS = new Set(
   (process.env.PERMANENT_VIEWER_EMAILS ?? 'labelservices@vydia.com,creativeservices@vydia.com')

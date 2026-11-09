@@ -1,6 +1,7 @@
 import {createServerClient} from '@supabase/ssr'
 import {NextResponse, type NextRequest} from 'next/server'
 import {SUPABASE_KEY, SUPABASE_URL} from '@/lib/env'
+import type {Database} from './database.types'
 
 const PUBLIC_EXACT = ['/']
 const PUBLIC_PREFIXES = ['/login', '/auth']
@@ -11,7 +12,7 @@ export const isPublicPath = (path: string) =>
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({request})
 
-  const supabase = createServerClient(SUPABASE_URL, SUPABASE_KEY, {
+  const supabase = createServerClient<Database>(SUPABASE_URL, SUPABASE_KEY, {
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll: (toSet) => {
