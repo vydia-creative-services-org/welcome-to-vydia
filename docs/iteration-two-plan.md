@@ -2650,23 +2650,43 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 
 ---
 
-### Phase 0: Accounts and environment
+### Phase 0: Accounts and environment (2026-11-09: everything doable now is done; 0.6 is deferred to the Pro upgrade, 0.9/0.10 to the domain purchase, and 0.13 needs the branch pushed, see notes)
 
-- [ ] **0.1** `[dev]` Install the Supabase CLI (`brew install supabase/tap/supabase`) and Docker Desktop for the local stack. — *Done when:* `supabase --version` works and `supabase start` boots a local stack.
-- [ ] **0.2** `[dev]` `supabase init` in the repo. Keep the existing `supabase/templates/`. In `supabase/config.toml` set `[auth] site_url = "http://localhost:3000"` and `additional_redirect_urls = ["http://localhost:3000/**"]`, `[auth.email] otp_expiry = 3600`, and point `[auth.email.template.magic_link]` / `[auth.email.template.confirmation]` `content_path` at the two template files. — *Done when:* the local Inbucket/Mailpit inbox shows the Vydia template for a local magic link.
-- [ ] **0.3** `[dev]` `supabase link --project-ref lsihwkbnrheczirlkswo`. — *Done when:* `supabase db remote commit --dry-run` (or `supabase migration list`) reaches the new project.
-- [ ] **0.4** `[ops]` New project → API Keys: create a **secret** key (`sb_secret_…`) and add it to `.env.local` as `SUPABASE_SECRET_KEY`. Confirm `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `NEXT_PUBLIC_SUPABASE_URL` in `.env.local` are the new project's. Leave the legacy `SUPABASE_SERVICE_ROLE_KEY` in place until 13.3. — *Done when:* `curl -H "apikey: $SUPABASE_SECRET_KEY" $NEXT_PUBLIC_SUPABASE_URL/rest/v1/` returns 200.
-- [ ] **0.5** `[ops]` Settings → JWT Keys: asymmetric signing keys are active (P4). — *Done when:* the JWKS endpoint `/auth/v1/.well-known/jwks.json` lists a key.
+- [x] **0.1** `[dev]` Install the Supabase CLI (`brew install supabase/tap/supabase`) and Docker Desktop for the local stack. — *Done when:* `supabase --version` works and `supabase start` boots a local stack.
+  - CLI 3.1.0 and Docker are installed. `supabase start` boots cleanly.
+- [x] **0.2** `[dev]` `supabase init` in the repo. Keep the existing `supabase/templates/`. In `supabase/config.toml` set `[auth] site_url = "http://localhost:3000"` and `additional_redirect_urls = ["http://localhost:3000/**"]`, `[auth.email] otp_expiry = 3600`, and point `[auth.email.template.magic_link]` / `[auth.email.template.confirmation]` `content_path` at the two template files. — *Done when:* the local Inbucket/Mailpit inbox shows the Vydia template for a local magic link.
+  - Verified: a local OTP request produced the Vydia-subject email in Mailpit with the `/auth/confirm?token_hash=…&type=email&redirect_to=…` link.
+  - **Local ports moved to 55xxx** (API 55321, DB 55322, Studio 55323, Mailpit 55324) because another local Supabase stack (`vydia-roster`) already holds 54321–54327. Use `http://127.0.0.1:55324` for Mailpit.
+  - Local `max_frequency` is `60s` (matches the spec's cooldown) and the local storage limit is `1GiB`.
+  - `redirect_to` is a **query parameter** on `/auth/v1/otp` (supabase-js does this). A URL outside `additional_redirect_urls` silently falls back to the Site URL, so on the hosted project E4 must list the slug paths (`https://welcometovydia.com/**`).
+- [x] **0.3** `[dev]` `supabase link --project-ref lsihwkbnrheczirlkswo`. — *Done when:* `supabase db remote commit --dry-run` (or `supabase migration list`) reaches the new project.
+  - Verified: `supabase link` succeeded for `Welcome to Vydia (lsihwkbnrheczirlkswo)` and `supabase migration list --linked` reaches it (no remote migrations yet). The local `supabase/.temp` link state is gitignored.
+- [x] **0.4** `[ops]` New project → API Keys: create a **secret** key (`sb_secret_…`) and add it to `.env.local` as `SUPABASE_SECRET_KEY`. Confirm `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `NEXT_PUBLIC_SUPABASE_URL` in `.env.local` are the new project's. Leave the legacy `SUPABASE_SERVICE_ROLE_KEY` in place until 13.3. — *Done when:* `curl -H "apikey: $SUPABASE_SECRET_KEY" $NEXT_PUBLIC_SUPABASE_URL/rest/v1/` returns 200.
+  - Verified: `SUPABASE_SECRET_KEY` (`sb_secret_…`) is in `.env.local`, and `GET /rest/v1/` with it returns 200. The URL and publishable key point at the new project. The legacy `SUPABASE_SERVICE_ROLE_KEY` is also for the new project and stays until 13.3.
+- [x] **0.5** `[ops]` Settings → JWT Keys: asymmetric signing keys are active (P4). — *Done when:* the JWKS endpoint `/auth/v1/.well-known/jwks.json` lists a key.
+  - Verified: one ES256 (P-256) key is published, so `getClaims()` verifies locally.
 - [ ] **0.6** `[ops]` Plan and Storage: the project is on Pro, and Storage → Settings → global file size limit is ≥ 1 GB (P6). — *Done when:* the setting shows ≥ 1 GB.
-- [ ] **0.7** `[ops]` Auth → Sessions: time-box never, inactivity never, single session per user off (P3).
-- [ ] **0.8** `[ops]` Google: add `https://lsihwkbnrheczirlkswo.supabase.co/auth/v1/callback` to the OAuth client's Authorized redirect URIs (P1). Enable the Google provider on the new project with the same client ID and secret (P2). Check the consent-screen user type (P9). — *Done when:* hitting `/auth/v1/authorize?provider=google` on the new project reaches Google's account picker without `redirect_uri_mismatch`.
+  - **Deferred (owner decision):** staying on Free for now, with an upgrade to Pro planned. **Until then the global upload limit is 50 MB**, so larger videos can't be uploaded or migrated. Upgrade and raise the limit to ≥ 1 GB before task 8.5 (migrating the real videos) and before 12.1. The migration still sets the `resource-files` bucket to 1 GB, which only takes effect once the global limit is raised.
+- [x] **0.7** `[ops]` Auth → Sessions: time-box never, inactivity never, single session per user off (P3).
+  - Confirmed by the owner: already set as specified.
+- [x] **0.8** `[ops]` Google: add `https://lsihwkbnrheczirlkswo.supabase.co/auth/v1/callback` to the OAuth client's Authorized redirect URIs (P1). Enable the Google provider on the new project with the same client ID and secret (P2). Check the consent-screen user type (P9). — *Done when:* hitting `/auth/v1/authorize?provider=google` on the new project reaches Google's account picker without `redirect_uri_mismatch`.
+  - Verified: `/auth/v1/settings` reports `google: true`, and `/auth/v1/authorize?provider=google` lands on Google's sign-in page with no `redirect_uri_mismatch`. The consent-screen user type (P9) can't be checked from here and is still worth a look in Google Cloud.
 - [ ] **0.9** `[IT]` `[ops]` Resend: verify the sending domain for the placeholder sender (SPF + DKIM, DMARC recommended), and create a sending-only API key for the new project (E2). — *Done when:* Resend shows the domain as Verified.
+  - **Deferred (owner decision):** waiting until the sending domain is bought. The `welcome@vydia.com` placeholder will be replaced by an address on that domain, so Resend verification and the API key should be done against the final domain (this also covers 12.4).
 - [ ] **0.10** `[ops]` Auth → SMTP: Resend settings with placeholder sender `welcome@vydia.com`, name "Vydia" (E1). — *Done when:* a test email (Auth → Users → Invite, to your own address, then delete the user) arrives from Resend.
-- [ ] **0.11** `[ops]` Auth → URL Configuration: Site URL plus redirect URLs `http://localhost:3000/**`, `https://welcometovydia.com/**`, and the Vercel preview pattern (E4).
-- [ ] **0.12** `[ops]` Auth → Providers → Email enabled, OTP expiry 3600 (E6). "Allow new users to sign up" on (E7). Rate limits: emails per hour raised, 60 s per-user OTP interval kept (E5).
+  - **Blocked by 0.9.** Partially verified earlier: an admin-API invite to the Resend sink address `delivered+phase0probe@resend.dev` returned 200 (the built-in sender rejects non-team addresses), then the probe user was deleted. That suggests some custom SMTP is already on. Re-check sender, host, and delivery once 0.9 is done.
+- [x] **0.11** `[ops]` Auth → URL Configuration: Site URL plus redirect URLs `http://localhost:3000/**`, `https://welcometovydia.com/**`, and the Vercel preview pattern (E4).
+  - Confirmed by the owner. Still re-check with V1 (§12.3) that a real link's `redirect_to` keeps `/{slug}`.
+- [x] **0.12** `[ops]` Auth → Providers → Email enabled, OTP expiry 3600 (E6). "Allow new users to sign up" on (E7). Rate limits: emails per hour raised, 60 s per-user OTP interval kept (E5).
+  - Confirmed by the owner. `/auth/v1/settings` also shows the email provider enabled and `disable_signup: false`.
 - [ ] **0.13** `[ops]` Vercel → Environment Variables → **Preview, branch `iteration-two` only**: the new project's `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY`. Production and other previews are unchanged. — *Done when:* an `iteration-two` preview build logs the new project URL.
-- [ ] **0.14** `[ops]` GitHub Actions: add the `SUPABASE_SECRET_KEY` secret (new project). Keep the old secrets until 12.7. Until Phase 10 lands, expect `e2e-preview.yml` failures on `iteration-two` previews (they run the old suite), or skip that workflow for the branch.
-- [ ] **0.15** `[dev]` On `iteration-two`: `npm install zod @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities` and `npm install -D tsx`. — *Done when:* `npm run build` still passes.
+  - **Partially done.** The Vercel CLI is now logged in as the Vydia account (team `vydia-creative-services-vercel-org`), and the local repo is linked to project `welcome-to-vydia` (`.vercel/` is gitignored; `vercel link` also appended a `VERCEL_OIDC_TOKEN` to `.env.local`, which is gitignored).
+  - **Blocked on pushing the branch:** `vercel env add … preview iteration-two` fails with `branch_not_found`, because `iteration-two` exists only locally. Vercel can only scope a variable to a branch that is on GitHub. Push the branch (this starts a preview build), then add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY` (sensitive) for Preview + `iteration-two`.
+  - Findings for cutover (12.6): the project's Preview and Production environments currently share `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SERVICE_ROLE_KEY` (set 19d ago, so almost certainly the old project). Production also already has Supabase integration variables added 2h ago (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `POSTGRES_*`, `SUPABASE_JWT_SECRET`, …). Their values are hidden, so check which project they point at. The app doesn't read any of them yet.
+- [x] **0.14** `[ops]` GitHub Actions: add the `SUPABASE_SECRET_KEY` secret (new project). Keep the old secrets until 12.7. Until Phase 10 lands, expect `e2e-preview.yml` failures on `iteration-two` previews (they run the old suite), or skip that workflow for the branch.
+  - Done: `SUPABASE_SECRET_KEY` is stored as a GitHub Actions secret on `vydia-creative-services-org/welcome-to-vydia`. No other secrets or variables existed. `e2e-preview.yml` reads `vars.NEXT_PUBLIC_SUPABASE_URL`, which doesn't exist yet, so that workflow stays broken for this branch until Phase 10 (or until cutover task 12.7 creates the variable).
+- [x] **0.15** `[dev]` On `iteration-two`: `npm install zod @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities` and `npm install -D tsx`. — *Done when:* `npm run build` still passes.
+  - Installed `zod` 4.6, `@dnd-kit/core` 6.3, `@dnd-kit/sortable` 10, `@dnd-kit/utilities` 3.2, and dev `tsx`. `tsc --noEmit` and `npm run build` pass. npm also pruned lockfile entries for an npm copy of the Supabase CLI that weren't in `package.json` (the Homebrew CLI is used).
 
 ### Phase 1: Sanity contract (ships on `main`)
 
@@ -2803,6 +2823,7 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [ ] **8.3** `[dev]` `--dry-run` against local Supabase. Fix or explain every ✗ line.
 - [ ] **8.4** `[dev]` A real run against local Supabase. Create a test artist in the local admin and QA its page: order, categories, covers with blur-up, PDFs open, videos play, slides link vs file.
 - [ ] **8.5** `[dev]` `--dry-run`, then a real run against `lsihwkbnrheczirlkswo`. — *Done when:* the migrated count equals `count(*[_id=="website"][0].resources)` minus any explained skips, and the report is pasted into the PR.
+  - **Prerequisite (0.6):** the project must be on Pro with the global storage limit raised to ≥ 1 GB, or videos over 50 MB will fail to copy. Photos, PDFs, and links will migrate on Free.
 - [ ] **8.6** `[dev]` `[LS]` Spot-check on the `iteration-two` preview with a real-looking test artist: every resource opens, covers match the live site, and the categories look right.
 
 ### Phase 9: Remove Sanity and the old sign-in (§9)
@@ -2856,6 +2877,7 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
   - [ ] Label services and creative services admins can sign in, and a non-admin Google account is rejected
 - [ ] **12.3** `[dev]` Device and email-client QA: iOS Safari, Android Chrome, desktop Safari/Chrome/Firefox. Open the magic-link email in Gmail web and app, Apple Mail, and Outlook/Microsoft 365 (watch for Safe Links spending the token, §16).
 - [ ] **12.4** `[ops]` Final sender address: replace the `welcome@vydia.com` placeholder in Resend (domain) and Supabase SMTP once it's decided. If it's still undecided at launch, launch on the placeholder and log it here.
+  - The final address is on the domain being purchased (0.9). Note the SMTP sender must be on a domain verified in Resend.
 - [ ] **12.5** `[LS]` `[dev]` Content freeze in Studio, then re-run `npm run migrate:sanity` against the new project (idempotent; picks up edits since 8.5). Resources deleted in Sanity since then are deleted by hand in `/admin/resources`.
 - [ ] **12.6** `[ops]` Vercel **Production**: switch `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to the new project, add `SUPABASE_SECRET_KEY`, remove the Sanity variables and `PERMANENT_VIEWER_EMAILS`.
 - [ ] **12.7** `[ops]` GitHub Actions: update the `NEXT_PUBLIC_SUPABASE_URL` variable, remove the `SUPABASE_SERVICE_ROLE_KEY`, `SANITY_E2E_EDITOR_TOKEN`, and `SANITY_REVALIDATE_SECRET` secrets, and remove the Sanity variables.
