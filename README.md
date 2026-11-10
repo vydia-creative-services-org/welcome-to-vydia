@@ -1,135 +1,163 @@
 # Welcome to Vydia
 
-Branded, per-artist welcome microsites at `welcometovydia.com/[artist-name]`. Each new client gets a page with Vydia's onboarding resources (guides, tutorial videos, pitch forms, service decks). The page is gated to the email addresses listed on their artist record. It replaces the Seismic link L&A used to send.
+An internal tool for Vydia's label services team. When a new artist signs, label services creates a personalized "Welcome to Vydia" page for them, copies the link, and emails it to the artist from their own inbox. The artist opens the link, enters an approved email, gets a magic link, and lands on their resources page. It replaces the Seismic link label services used to send.
 
-- Requirements: [`docs/research.md`](docs/research.md)
-- Implementation plan, decisions, and to-do list: [`docs/plan.md`](docs/plan.md)
-- Editor guide for L&A and Creative Services: [`docs/editor-guide.md`](docs/editor-guide.md)
+- Spec: [`docs/iteration-two.md`](docs/iteration-two.md)
+- Implementation plan, decisions, and task list: [`docs/iteration-two-plan.md`](docs/iteration-two-plan.md)
+- Guide for label services and creative services: [`docs/admin-guide.md`](docs/admin-guide.md)
+- Earlier plans (iteration one, Sanity-based): [`docs/plan.md`](docs/plan.md), [`docs/sign-in-plan.md`](docs/sign-in-plan.md)
 
 ## How it works
 
-| Piece   | Where                                                  | What it does                                                                                                                                                                                                                                                          |
-| ------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Site    | Next.js 16 App Router on Vercel                        | `/[slug]` artist pages, `/` instructions, `/login`, `/auth/*`                                                                                                                                                                                                         |
-| Content | Sanity (private dataset), Studio embedded at `/studio` | Artists, resources, and the global Website layout                                                                                                                                                                                                                     |
-| Sign-in | Supabase Auth                                          | Google and email magic link, no passwords. Links are only sent to approved emails, and unapproved Google accounts are signed back out (see [`docs/sign-in-plan.md`](docs/sign-in-plan.md))                                                                            |
-| Gate    | `proxy.ts` + `lib/access.ts`                           | Signed-out visitors go to `/login` for every path. After sign-in, the page checks the email against the artist's allowed list (case-insensitive) plus the permanent and internal viewers. Unknown artists and denied visitors get the identical "not available" page. |
-| Cache   | `'use cache'` + `cacheTag` in `lib/sanity/fetch.ts`    | Sanity data is cached until Sanity's publish webhook calls `/api/revalidate`                                                                                                                                                                                          |
+| Piece           | Where                                        | What it does                                                                                                                                                                                                                 |
+| --------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Artist pages    | `app/(site)/[slug]`                          | One URL per artist. It shows either the resources page or the **Enter your email** screen, never a 404 or a "no access" page, so nobody can guess slugs to find out who is on Vydia.                                         |
+| Artist sign-in  | `[slug]/actions.ts`, `auth/confirm`          | Magic link only. The server checks the email against the artist at that slug **before** asking Supabase to send anything. The link signs in directly and redirects to the page.                                              |
+| Admin panel     | `app/(admin)/admin`                          | Create, edit, and delete artists, their emails, hidden main resources, exclusive resources, and the main resources. Google sign-in only, for `@vydia.com` accounts listed in the `admins` table.                             |
+| Access control  | Postgres row-level security                  | The page is read with the **visitor's own session**. RLS returns the artist only if their verified email is linked to it right now, so removing an email cuts off access on the next load even though sessions never expire. |
+| Data and files  | Supabase Postgres + Storage                  | Artists, emails, resources, and hides in Postgres. Files in a private bucket (served through a signed-URL route), cover images in a public bucket under unguessable paths.                                                   |
+| Magic-link mail | Supabase Auth with Resend as the SMTP sender | The only email the app sends. Label services send the Welcome link themselves.                                                                                                                                               |
+| Hosting         | Vercel                                       | Next.js on Vercel.                                                                                                                                                                                                           |
 
-Key decisions are recorded as D1–D15 in [`docs/plan.md`](docs/plan.md) §1.
+Key decisions are D23–D44 in [`docs/iteration-two-plan.md`](docs/iteration-two-plan.md) §2. The database design is in §4, and the migration file is the source of truth.
 
 ## Stack
 
-- **Next.js 16.4** (App Router, `cacheComponents` on). Request gating is in `proxy.ts` (Next 16's name for middleware).
-- **React 19.3**, **Sanity 6** with `next-sanity`, **Supabase** with `@supabase/ssr`.
-- **CSS Modules** with design tokens in `app/(site)/globals.css`. No Tailwind.
+- **Next.js 16.4** (App Router, `cacheComponents` on). Request handling is in `proxy.ts` (Next 16's name for middleware). **Read the guides in `node_modules/next/dist/docs/` before changing Next-specific code**; this version differs from older ones.
+- **React 19.3**, **Supabase** (`@supabase/ssr`, `@supabase/supabase-js`), **zod 4** for validation, **dnd-kit** for drag-to-reorder, **pdfjs-dist** for PDF first-page previews, **Playwright** and **Vitest** for tests.
+- **CSS Modules** with design tokens in `app/(site)/globals.css` (artist side) and `app/(admin)/admin.css` (admin side). No Tailwind.
 - **Node 22.**
 
 ## Local setup
+
+You need Node 22, Docker, and the [Supabase CLI](https://supabase.com/docs/guides/local-development).
 
 ```bash
 nvm use 22
 npm install
 cp .env.example .env.local   # fill in the values below
-npm run dev                  # http://localhost:3000, Studio at http://localhost:3000/studio
+supabase start               # local database, auth, storage, and a mail inbox
+npm run dev                  # http://localhost:3000
 ```
+
+The local stack uses ports `55321`–`55329` (API `55321`, database `55322`, Studio `55323`, mail inbox `55324`), so it can run next to another Supabase project. `supabase status -o env` prints the local keys.
+
+To use the hosted project instead, put its URL and keys in `.env.local`.
 
 ### Environment variables
 
-| Variable                               | Where it comes from                                                         | Used by                                                                                    |
-| -------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `NEXT_PUBLIC_SITE_URL`                 | `http://localhost:3000` locally, `https://welcometovydia.com` in production | Auth redirects                                                                             |
-| `NEXT_PUBLIC_SANITY_PROJECT_ID`        | sanity.io/manage → project `t7ic4vs4`                                       | Site, Studio, CLI                                                                          |
-| `NEXT_PUBLIC_SANITY_DATASET`           | `production`                                                                | Site, Studio, CLI                                                                          |
-| `SANITY_API_READ_TOKEN`                | sanity.io/manage → API → Tokens (Viewer role)                               | Server only: reads the private dataset                                                     |
-| `SANITY_REVALIDATE_SECRET`             | `openssl rand -hex 32`. Must match the Sanity webhook's secret              | `/api/revalidate`                                                                          |
-| `NEXT_PUBLIC_SUPABASE_URL`             | Supabase → Project Settings → API                                           | Auth                                                                                       |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase → API Keys (`sb_publishable_…`)                                    | Auth                                                                                       |
-| `PERMANENT_VIEWER_EMAILS`              | `labelservices@vydia.com,creativeservices@vydia.com`                        | Access check (always allowed on every artist page)                                         |
-| `SUPABASE_SERVICE_ROLE_KEY`            | Supabase → API Keys. **Local only, optional**                               | `npm run e2e:setup` / `e2e:teardown` only. The app never reads it. Don't add it to Vercel. |
+| Variable                               | Where it comes from                                                         | Used by                                                                                      |
+| -------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SITE_URL`                 | `http://localhost:3000` locally, `https://welcometovydia.com` in production | Welcome links, magic-link redirects                                                          |
+| `NEXT_PUBLIC_SUPABASE_URL`             | Supabase → Project Settings → API                                           | Everything                                                                                   |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase → API Keys (`sb_publishable_…`)                                    | Browser and server clients (always subject to RLS)                                           |
+| `SUPABASE_SECRET_KEY`                  | Supabase → API Keys (`sb_secret_…`). **Server only. Never `NEXT_PUBLIC_`.** | `lib/supabase/service.ts` (sign-in approval, rate limits), the scripts, and the e2e fixtures |
+| `SUPABASE_PROJECT_ID`                  | The project ref (`lsihwkbnrheczirlkswo`)                                    | Supabase CLI commands                                                                        |
 
-`.env.local` is gitignored; `.env.example` lists every variable.
+`.env.local` is gitignored; `.env.example` lists every variable. The one-time Sanity import also reads `NEXT_PUBLIC_SANITY_PROJECT_ID`, `NEXT_PUBLIC_SANITY_DATASET`, and `SANITY_API_READ_TOKEN` (see `.env.example`).
 
 ## Scripts
 
-| Script                                              | What it does                                                                                                             |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `npm run dev`                                       | Dev server on http://localhost:3000                                                                                      |
-| `npm run build` / `npm run start`                   | Production build / serve it                                                                                              |
-| `npm run lint`                                      | ESLint                                                                                                                   |
-| `npm run typecheck`                                 | Regenerates Next route types, then `tsc`                                                                                 |
-| `npm run test`                                      | Unit tests (Vitest, `tests/*.test.ts`)                                                                                   |
-| `npm run e2e`                                       | End-to-end tests (Playwright, `tests/e2e/`)                                                                              |
-| `npm run e2e:setup` / `npm run e2e:teardown`        | Create / remove the e2e test users and their access                                                                      |
-| `npm run typegen`                                   | Re-extract the Sanity schema and regenerate `lib/sanity/types.generated.ts` (run after changing schemas or GROQ queries) |
-| `npm run format` / `npm run format:check`           | Prettier                                                                                                                 |
-| `npx sanity exec scripts/seed.ts --with-user-token` | Create the Website singleton (safe to re-run)                                                                            |
+| Script                                       | What it does                                                                                                                                       |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                                | Dev server on http://localhost:3000                                                                                                                |
+| `npm run build` / `npm run start`            | Production build / serve it                                                                                                                        |
+| `npm run lint`                               | ESLint                                                                                                                                             |
+| `npm run typecheck`                          | Regenerates Next route types, then `tsc`                                                                                                           |
+| `npm run test`                               | Unit tests (Vitest, `tests/*.test.ts`)                                                                                                             |
+| `npm run db:test`                            | Database tests (pgTAP, `supabase/tests`) against the local stack                                                                                   |
+| `npm run db:types`                           | Regenerates `lib/supabase/database.types.ts` from the **local** database. Run it after every migration.                                            |
+| `npm run db:push`                            | Pushes migrations. With no flag it targets the **local** stack; use `supabase db push --remote` for the hosted project.                            |
+| `npm run e2e`                                | End-to-end tests (Playwright, `tests/e2e`)                                                                                                         |
+| `npm run e2e:setup` / `npm run e2e:teardown` | Create / remove the e2e artists, resources, and test users                                                                                         |
+| `npm run storage:sweep`                      | Lists uploaded files nothing references and that are over 24 hours old. Add `--delete` to remove them. Run it monthly.                             |
+| `npm run migrate:sanity`                     | The one-time import of resources from Sanity. Flags: `--dry-run`, `--include-drafts`, `--default-category`, `--max-file-mb`. Removed after launch. |
+| `npm run format` / `npm run format:check`    | Prettier                                                                                                                                           |
+
+### Database changes
+
+1. `supabase migration new <name>` and write the SQL. Never edit a migration that has already been pushed.
+2. `supabase db reset` to apply everything from scratch, then `npm run db:test` and `npm run db:types`.
+3. If you changed `supabase/config.toml` (auth hook, templates, ports), run `supabase stop && supabase start`. `db reset` does not reload it.
+4. Push with `supabase db push --remote` (agent runs also need `--yes`).
+
+Things that have already bitten this project:
+
+- Supabase's API layer enforces `pg_safeupdate`, which rejects any `DELETE` or `UPDATE` without a `WHERE`. Direct database tests don't, so `supabase/tests/safe-statements.test.sql` fails if a function breaks this.
+- `resources(*)` embedded from `artists` is ambiguous to PostgREST. Use `resources!resources_artist_id_fkey(*)`.
+- Cache Components keeps the previous route mounted but hidden, so after a navigation the DOM can briefly hold two copies of a form. Test selectors should look at visible elements.
 
 ### End-to-end tests
 
-The e2e suite signs in as two throwaway users: one approved on `test-artist`/`test-renamed`, one not approved anywhere. Global setup gets each session from a Supabase admin `generate_link` call (no email is sent) and the real `/auth/confirm` page, so `npm run e2e` needs `SUPABASE_SERVICE_ROLE_KEY` too.
+The suite signs in as four test users using admin-generated magic links, so it needs `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SECRET_KEY`. It creates real rows, so point it at a local stack or the preview project, never production.
 
 ```bash
-npm run build && npm run start &              # or point E2E_BASE_URL at a deployment
-npm run e2e:setup                             # needs SUPABASE_SERVICE_ROLE_KEY and a `sanity login`
+npm run build && npm run start &     # or set E2E_BASE_URL to a deployment
+npm run e2e:setup
 npm run e2e
 npm run e2e:teardown
 ```
 
-`e2e:setup` also calls `/api/revalidate` so the cached access lookups pick up the new users. In CI, `.github/workflows/e2e-preview.yml` does the same against each Vercel preview; see the secrets it needs in `docs/plan.md` task 10.4.
+Google sign-in can't be automated. One test (`storage-queue.spec.ts`) calls a database function through the REST API as an admin and only runs when `E2E_ADMIN_ACCESS_TOKEN` is set.
 
 ## CI
 
-- `.github/workflows/ci.yml`: lint, typecheck, unit tests, and format check on every PR and push to `main`.
-- `.github/workflows/e2e-preview.yml`: Playwright against each successful Vercel preview deployment.
+- `.github/workflows/ci.yml`: lint, typecheck, unit tests, and format check; and a `db` job that starts a local Supabase and runs the pgTAP tests. Both run on every PR and push to `main`.
+- `.github/workflows/e2e-preview.yml`: Playwright against each successful Vercel preview deployment, using the repository variable `NEXT_PUBLIC_SUPABASE_URL` and the secrets `SUPABASE_SECRET_KEY` and `VERCEL_AUTOMATION_BYPASS_SECRET`.
 
 ## Deploy flow
 
 1. Push a branch and open a PR. CI runs; Vercel builds a preview, and the e2e workflow runs against it.
-2. Merge to `main`. Vercel deploys production to `welcometovydia.com`.
-3. Content changes don't need a deploy. Publishing in Studio triggers the Sanity webhook → `/api/revalidate` → the affected pages refresh on the next visit.
+2. Merge to `main`. Vercel deploys production.
+3. Database migrations are **not** applied by a deploy. Push them with `supabase db push --remote` before or with the code that needs them.
 
-The Vercel project needs every variable above except `SUPABASE_SERVICE_ROLE_KEY`, for both Preview and Production. Pages can be prerendered with Sanity content at build time, so `SANITY_API_READ_TOKEN` is needed by the **build** too.
+Vercel needs `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY` (sensitive) for Production and Preview. Commits must be authored by an account on the Vydia Vercel team, or Vercel blocks the deployment.
 
 ## Dashboards
 
-| Service      | Where                                                           | What lives there                                                                                                                    |
-| ------------ | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Sanity       | https://www.sanity.io/manage → "Welcome to Vydia" (`t7ic4vs4`)  | Members/seats, API tokens, CORS origins, webhooks, usage and plan (**upgrade to Growth before the trial ends**, see plan task 0.17) |
-| Studio       | `/studio` on the site                                           | Content editing (shared L&A and Creative Services logins)                                                                           |
-| Supabase     | https://supabase.com/dashboard → project `cqqzvzljlthrqrttqnga` | Users, providers (email, Google), URL configuration, SMTP, email templates                                                          |
-| Google Cloud | console.cloud.google.com → "Welcome to Vydia"                   | OAuth client and consent screen used by Supabase's Google provider                                                                  |
-| Vercel       | vercel.com → the Welcome to Vydia project                       | Deployments, environment variables, domain                                                                                          |
-| GitHub       | `vydia-creative-services-org/welcome-to-vydia`                  | Code, CI, Actions secrets for the e2e workflow                                                                                      |
+| Service      | Where                                                                       | What lives there                                                                                                                                    |
+| ------------ | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Supabase     | https://supabase.com/dashboard → project `lsihwkbnrheczirlkswo`             | Tables (including `admins`), storage buckets, Auth settings (providers, URL configuration, SMTP, email templates, the **Before User Created** hook) |
+| Resend       | https://resend.com                                                          | The verified sending domain and the API key Supabase uses as its SMTP password                                                                      |
+| Google Cloud | console.cloud.google.com → "Welcome to Vydia"                               | The OAuth client and consent screen used by the admin Google sign-in. Its redirect URI must include the Supabase project's `/auth/v1/callback`.     |
+| Vercel       | vercel.com → team `vydia-creative-services-vercel-org` → `welcome-to-vydia` | Deployments, environment variables, domain                                                                                                          |
+| GitHub       | `vydia-creative-services-org/welcome-to-vydia`                              | Code, CI, Actions secrets and variables                                                                                                             |
 
-Email templates for Supabase live in `supabase/templates/` (the subject is in the first line of each file).
+Email templates for Supabase live in `supabase/templates/` (the subject is in the first line of each file and in `supabase/config.toml`). **Templates, SMTP, the hook, and URL settings are per Supabase project**, so they have to be set again on a new project. The checklist is in `docs/iteration-two-plan.md` §12.
+
+The previous Supabase project (`cqqzvzljlthrqrttqnga`) and the Sanity project are kept only until the post-launch cleanup (plan Phase 13).
 
 ## Rotating secrets
 
-**Sanity read token** (`SANITY_API_READ_TOKEN`)
+**Supabase secret key** (`SUPABASE_SECRET_KEY`)
 
-1. sanity.io/manage → API → Tokens → add a new token with the **Viewer** role.
-2. Put it in Vercel (Preview + Production) and your `.env.local`, then redeploy.
-3. Once the new deployment is live, delete the old token in Sanity.
+1. Supabase → API Keys → create a new secret key.
+2. Update it in Vercel (Production and Preview), in the GitHub Actions secret, and in your `.env.local`, then redeploy.
+3. Once the new deployment is live, delete the old key. Secret keys can be revoked one at a time.
 
-**Webhook secret** (`SANITY_REVALIDATE_SECRET`)
+**Supabase publishable key**: create a new one, update `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in Vercel, redeploy, then revoke the old one.
 
-1. Generate a new one: `openssl rand -hex 32`.
-2. Update it in Vercel (and the `SANITY_REVALIDATE_SECRET` GitHub Actions secret), then redeploy.
-3. Right after the deploy, edit the webhook in sanity.io/manage → API → Webhooks and paste the same secret. Webhook calls between steps 2 and 3 get a 401, so publish anything urgent again afterwards.
+**Resend API key** (the SMTP password)
 
-**Supabase keys**: Supabase → API Keys. Create a new publishable key, update `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in Vercel, redeploy, then revoke the old key. If the service key leaks, rotate it in Supabase and update the GitHub Actions secret.
+1. Resend → API Keys → create a new sending-only key.
+2. Supabase → Auth → SMTP Settings → paste it as the password and save.
+3. Send a test magic link, then delete the old key in Resend.
+
+## Admins
+
+Admins are managed by hand in the Supabase table editor (`admins` table): add the person's `@vydia.com` email, and their name and avatar fill in on their first Google sign-in. Removing the row ends their access on their next request. `labelservices@vydia.com` and `creativeservices@vydia.com` are seeded by the migration.
 
 ## Project layout
 
 ```
-app/(site)/          site routes (layout, /, /[slug], /login, /auth/*, /account/*)
-app/studio/          embedded Sanity Studio
-app/api/revalidate/  Sanity webhook
-components/          UI components, each with a co-located .module.css
-lib/                 access check, Sanity data layer, Supabase clients, helpers
-sanity/              schema types, desk structure, document actions, PDF preview input
-scripts/             seed and e2e fixture scripts
+app/(site)/          artist side: /, /[slug], /auth/confirm, /auth/expired
+app/(admin)/         admin side: /admin/login, /admin/auth/*, and the panel under /admin/(panel)
+app/api/resources/   the signed-URL file route
+components/          artist UI; components/admin/ for the admin panel
+lib/                 Supabase clients, artist page data, validation, resource mapping, admin helpers
+sanity/              schema.json: the frozen resource field contract (Sanity is not used at runtime)
+scripts/             migrate-sanity, storage-sweep, e2e-fixtures
+supabase/            migrations, pgTAP tests, config, and email templates
 tests/               unit tests (Vitest) and tests/e2e (Playwright)
-supabase/templates/  Supabase email templates
+docs/                spec, plans, and the admin guide
 ```
