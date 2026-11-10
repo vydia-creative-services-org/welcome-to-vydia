@@ -687,9 +687,20 @@ uri = "pg-functions://postgres/public/hook_before_user_created"
 
 On the hosted project, enable it under **Auth → Hooks → Before User Created → Postgres → `public.hook_before_user_created`** (§12).
 
-**Results (2026-11-09, hosted project):** the hook is enforced for `signInWithOtp` with the email provider (V2); `signInWithOtp` sessions carry `amr` method **`otp`** (V5). Which other paths fire the hook (admin `generate_link`/`createUser`, Google OAuth) and the Google rejection redirect (V3, V4, V6) are still to check.
+**Results (updated 2026-11-10):**
 
-The docs leave three things unspecified, so they're verified on the new project before building on them (§12.3):
+| Check | Result |
+|---|---|
+| V1 an approved email signs in | **Works.** `signInWithOtp` returns 200 and creates the user; the link signs in directly and lands on the page (verified end to end on the hosted project and in the e2e suite). Delivery and the received template on the hosted project are still unconfirmed (needs Resend, 0.9/0.10, and the templates pasted, 4.7). |
+| V2 a direct sign-up for an unknown or admin address | **Blocked.** 403 "Not approved", no `auth.users` row. |
+| V3 a non-admin Google account | **Not yet verified.** Needs a real non-admin Google account. The callback treats every failure as "You don’t have access." whatever Supabase sends back, so no code depends on the answer. |
+| V4 a listed admin signs in with Google | **Works** (done by the owner): the `admins` row gets `user_id`, `display_name`, `avatar_url`, and `last_sign_in_at`. |
+| V5 the `amr` method of a magic-link session | **`otp`.** The confirm route accepts `otp` or `magiclink`; `is_admin()` accepts only `oauth`. A token refresh keeps the original methods (tested across two refreshes). |
+| V6 which paths fire the sign-up hook | An admin-API `createUser` **bypasses** the hook (local stack). `generate_link` for an email already attached to an artist works on the hosted project (the e2e suite relies on it). The fixtures attach emails before users are created, so they pass either way. |
+
+Nothing in the code needed to change because of these results: it already tolerates both answers to every open question.
+
+The docs left three things unspecified, so they were checked on the new project (§12.3):
 1. Which sign-up paths fire the hook: `signInWithOtp` with `shouldCreateUser`, Google OAuth, and admin `createUser`/`generate_link`. The plan assumes the first two do. The e2e fixtures attach emails to artists *before* creating users, so they pass either way.
 2. How a rejected Google sign-in reaches our redirect URL. `/admin/auth/callback` treats any request without a `code` as "You don't have access.", so the exact query parameters don't matter.
 3. Whether `signInWithOtp` sessions carry `amr` method `otp` or `magiclink`. Both are documented values, and the code accepts either (§7.5). `is_admin()` only accepts `oauth`.
@@ -3013,76 +3024,164 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [x] **7.6** `[dev]` Manual check: a new main resource appears on every existing artist's page. Reordering and recategorizing show on artist pages on the next load.
   - Verified with an admin session that can read any artist page: a new main resource appeared on artist A's and artist B's pages immediately; an edit and a delete reached them on the next load; moving a category changed the order on their pages; a resource hidden for artist A stayed hidden for A only.
 
-### Phase 8: Sanity → Supabase migration
+### Phase 8: Sanity → Supabase migration (2026-11-10: built, tested, and run; 9 of 13 resources are on the hosted project, the 4 videos wait for the Pro plan)
 
-- [ ] **8.1** `[dev]` `scripts/migrate-sanity.ts` (§10) + the `migrate:sanity` script. Keep `@sanity/client` available (devDependency) until 13.3.
-- [ ] **8.2** `[dev]` Export `uuidFromSanityId` and `croppedCover`, and unit-test them in `tests/migrate.test.ts`: deterministic id, valid UUID format, crop rect math, and the hotspot moved into the cropped frame.
-- [ ] **8.3** `[dev]` `--dry-run` against local Supabase. Fix or explain every ✗ line.
-- [ ] **8.4** `[dev]` A real run against local Supabase. Create a test artist in the local admin and QA its page: order, categories, covers with blur-up, PDFs open, videos play, slides link vs file.
+- [x] **8.1** `[dev]` `scripts/migrate-sanity.ts` (§10) + the `migrate:sanity` script. Keep `@sanity/client` available (devDependency) until 13.3.
+  - `scripts/migrate-sanity.ts` plus pure helpers in `scripts/migrate-sanity-lib.ts` (so they can be unit-tested without running the script). `@sanity/client` is now an explicit devDependency, so it survives Phase 9. `npm run migrate:sanity`.
+  - Flags: `--dry-run`, `--include-drafts`, `--default-category <name>`, `--max-file-mb <n>`.
+  - What the real Sanity data needed that the plan didn't anticipate: **13 resources, every `sortOrder` empty** (the Website order becomes the order); **one PDF with a stale `url`** that the database would reject (per-type normalization drops it and reports it); **two resources whose categories exist only as unpublished drafts** (see 8.3).
+  - Each resource is migrated on its own: a failure skips that one and never leaves a half-written row. Storage paths are named from the content hash (`file-<sha1>.pdf`, `cover-<sha1>-<crop>.webp`), so a re-run skips what's already there and a changed asset gets a new path (the old one is queued for cleanup by the existing trigger). Resources deleted in Sanity are not removed from Supabase.
+
+- [x] **8.2** `[dev]` Export `uuidFromSanityId` and `croppedCover`, and unit-test them in `tests/migrate.test.ts`: deterministic id, valid UUID format, crop rect math, and the hotspot moved into the cropped frame.
+  - `tests/migrate.test.ts` (18 tests): deterministic, valid ids (a draft and its published document map to the same id), crop-to-rect math, the hotspot moved into the cropped frame and clamped, per-type file/URL rules and their notes, extensions, and content-hash paths.
+
+- [x] **8.3** `[dev]` `--dry-run` against local Supabase. Fix or explain every ✗ line.
+  - Dry run against local Supabase: it wrote nothing. Published content only: **11 migrate, 2 skipped**, both because the resource has **no published category**: *LS Best Practices for Pitching* and *Sync Submission for Pitching Consideration*. Both have the right category (*Playlisting and Sync Pitch Forms*) in an **unpublished draft** in Studio, so 1.4 looks done but those two edits were never published. With `--include-drafts`: **13 of 13**. The one note is *Broadcast Distribution Pricing*, a PDF carrying a stale link URL that is ignored.
+
+- [x] **8.4** `[dev]` A real run against local Supabase. Create a test artist in the local admin and QA its page: order, categories, covers with blur-up, PDFs open, videos play, slides link vs file.
+  - Real run against local Supabase with `--include-drafts` (~720 MB of video; it took under a minute): 13 rows, sort order 1–13 in the Website order, three categories, all 10 files stored at exactly the sizes Sanity reports (323 / 220 / 94 / 81 MB for the videos), and PDF previews with blur placeholders for all 6 PDFs. A second run took 1 s, changed nothing, and queued nothing for cleanup.
+  - QA as an artist (browser, admin session): order matches the Website; the grid shows 3 groups of 6 / 4 / 3 with correct type labels; all 6 PDFs redirect to signed URLs that serve real PDFs; the 3 pitch forms point at their Google Forms; the video dialog loads (97 s duration) and supports range requests (206); the real PDF first-page covers render with blurred backdrops; axe is clean.
+  - Found while doing this: `next.config.ts` hardcoded `https` and ignored the port in the image `remotePattern`, so any non-default API (local, a staging project) was rejected. It now uses the API URL's protocol and port. Next also refuses private-IP image hosts, so covers can't show on a local stack without `dangerouslyAllowLocalIP` (verified once with a temporary build, then reverted); the hosted project's public hostname works.
+
 - [ ] **8.5** `[dev]` `--dry-run`, then a real run against `lsihwkbnrheczirlkswo`. — *Done when:* the migrated count equals `count(*[_id=="website"][0].resources)` minus any explained skips, and the report is pasted into the PR.
   - **Prerequisite (0.6):** the project must be on Pro with the global storage limit raised to ≥ 1 GB, or videos over 50 MB will fail to copy. Photos, PDFs, and links will migrate on Free.
+  - **Run against `lsihwkbnrheczirlkswo`** (`npm run migrate:sanity -- --include-drafts --max-file-mb 50`, after a dry run with the same flags): **9 of 13 migrated, 4 skipped, all explained**, so 13 = 9 + 4 as the done-when requires. The 4 skipped are the videos (308, 210, 90, and 77 MB). A probe confirmed the hosted project still rejects uploads over 50 MB (413), so they're skipped before downloading.
+  - **Report:** migrated: Vydia Guide Book, ISRC and UPC Guide, LS Best Practices for Pitching, Video Pitch Form, Audio Pitch Form, Sync Submission for Pitching Consideration, Pub Admin One Sheet, Physical Distribution & E-Commerce Pricing, Broadcast Distribution Pricing (a stale link URL ignored). Skipped (over the 50 MB upload limit): How to Upload Content, How to Create a New Album, How to Add a Payee, How to Set Up a Recoupment.
+  - **Left open until the Pro upgrade (0.6) raises the global limit to at least 1 GB:** re-run `npm run migrate:sanity -- --include-drafts` (no `--max-file-mb`). It is idempotent, it skips the nine already done, and it fills in sort positions 2–5. Then this task is complete.
+  - I used `--include-drafts` so the two unpublished category edits come across. If you'd rather publish them in Studio first, drop the flag.
+  - **Audit (2026-11-10), Sanity vs hosted, field by field:** the 9 migrated rows match Sanity on title, type, category, link URL, added date, and stored file size. The only resources missing are the 4 videos. Everything else Sanity holds is accounted for: 13 resources (all on the Website, plus 2 unpublished drafts that were included), **no artists**, **no cover images**, no resources outside the Website, and 5 unreferenced old file versions that don't need moving. **Not migrated, by design of the new app:** Sanity's `internalViewerEmails` (`erica.johnson@vydia.com`, `mason.omara@vydia.com`). Mason is an admin on the hosted project; **Erica is not**, so she can't see artist pages until she's added to `admins` (a Google `@vydia.com` account is required).
+
 - [ ] **8.6** `[dev]` `[LS]` Spot-check on the `iteration-two` preview with a real-looking test artist: every resource opens, covers match the live site, and the categories look right.
+  - **Developer half done on the hosted data** (a throwaway artist, since deleted): the 9 migrated resources show in the Website order under the three categories, every PDF cover renders through Next's image optimizer (0 broken images), all 6 PDFs open through signed URLs, the 3 pitch forms link to Google Forms, and axe is clean.
+  - **Still for label services:** compare covers and titles with the live site, and re-check once the videos are migrated.
 
-### Phase 9: Remove Sanity and the old sign-in (§9)
+### Phase 9: Remove Sanity and the old sign-in (§9) (2026-11-10: done; lint, typecheck, 157 unit tests, and the production build all pass)
 
-- [ ] **9.1** `[dev]` Delete `app/studio/`, `app/api/revalidate/`, `lib/sanity/`, `lib/access.ts`, `sanity.config.ts`, `sanity.cli.ts`, `sanity/actions/`, `sanity/components/`, `sanity/schemaTypes/`, `sanity/structure.ts`, `sanity/env.ts`, `scripts/seed.ts`, `components/RichText.*`, `app/(site)/login/`, `app/(site)/auth/callback/`, `app/(site)/auth/signout/`.
-- [ ] **9.2** `[dev]` Keep `sanity/schema.json`. Add `sanity/README.md` (frozen-contract note, §9).
-- [ ] **9.3** `[dev]` Delete the obsolete unit tests: `tests/access.test.ts`, `tests/artist-page.test.ts`, `tests/cover-source.test.ts`, `tests/image.test.ts`. Keep `format`, `safe-redirect`, `slug`.
-- [ ] **9.4** `[dev]` `npm uninstall sanity next-sanity @sanity/icons @sanity/image-url @sanity/ui @sanity/vision @sanity/webhook @portabletext/react styled-components`.
-- [ ] **9.5** `[dev]` `package.json` scripts: remove `typegen` and the `sanity exec` e2e scripts. Add `storage:sweep` and the new `e2e:*` (§9).
-- [ ] **9.6** `[dev]` `.env.example`: remove `NEXT_PUBLIC_SANITY_*`, `SANITY_*`, `PERMANENT_VIEWER_EMAILS`, `SUPABASE_SERVICE_ROLE_KEY`. `proxy.ts` matcher: drop `studio|api/revalidate`.
-- [ ] **9.7** `[dev]` `grep -rE "sanity|portabletext|PERMANENT_VIEWER" app components lib proxy.ts next.config.ts`. — *Done when:* nothing turns up except `scripts/migrate-sanity.ts`.
-- [ ] **9.8** `[dev]` `npm run lint && npm run typecheck && npm run test && npm run build`. — *Done when:* all green.
+- [x] **9.1** `[dev]` Delete `app/studio/`, `app/api/revalidate/`, `lib/sanity/`, `lib/access.ts`, `sanity.config.ts`, `sanity.cli.ts`, `sanity/actions/`, `sanity/components/`, `sanity/schemaTypes/`, `sanity/structure.ts`, `sanity/env.ts`, `scripts/seed.ts`, `components/RichText.*`, `app/(site)/login/`, `app/(site)/auth/callback/`, `app/(site)/auth/signout/`.
+  - Everything on the list is deleted. Also deleted: `scripts/e2e-fixtures.ts`, which isn't on the list but imported Sanity and so couldn't compile; task 10.2 rewrites it. The route table is now only the new app: `/`, `/[slug]`, `/auth/confirm`, `/auth/expired`, the file route, and `/admin/*`. Stale generated route types under `.next/dev/types` (your dev server's, gitignored) made `tsc` fail locally until I removed that folder; it is recreated when the dev server restarts, and CI never has it.
 
-### Phase 10: End-to-end tests and CI
+- [x] **9.2** `[dev]` Keep `sanity/schema.json`. Add `sanity/README.md` (frozen-contract note, §9).
+  - `sanity/README.md` states that `schema.json` is the frozen contract and what must change together with it.
 
-- [ ] **10.1** `[dev]` `tests/e2e/users.ts`: personas `artistA` (`delivered+a@resend.dev`), `manager` (`delivered+mgr@resend.dev`), `aux2` (`delivered+a2@resend.dev`), `artistB` (`delivered+b@resend.dev`).
-- [ ] **10.2** `[dev]` Rewrite `scripts/e2e-fixtures.ts` on the secret key:
+- [x] **9.3** `[dev]` Delete the obsolete unit tests: `tests/access.test.ts`, `tests/artist-page.test.ts`, `tests/cover-source.test.ts`, `tests/image.test.ts`. Keep `format`, `safe-redirect`, `slug`.
+  - Deleted `access`, `artist-page`, `cover-source`, and `image` tests. 10 files and 157 tests remain (the new migration, mapping, validation, send-link, and admin tests make up the difference).
+
+- [x] **9.4** `[dev]` `npm uninstall sanity next-sanity @sanity/icons @sanity/image-url @sanity/ui @sanity/vision @sanity/webhook @portabletext/react styled-components`.
+  - All nine packages are uninstalled. **`@sanity/client` stays** as an explicit devDependency, because the migration still needs it (the video re-run after the Pro upgrade, and the content-freeze re-run in 12.5). Verified: with the packages gone, `npm run migrate:sanity -- --dry-run --include-drafts` still reads Sanity and reports 13 of 13.
+
+- [x] **9.5** `[dev]` `package.json` scripts: remove `typegen` and the `sanity exec` e2e scripts. Add `storage:sweep` and the new `e2e:*` (§9).
+  - Removed `typegen` and the two `sanity exec` e2e scripts, and removed the `lib/sanity/types.generated.ts` ignore and the `@sanity/icons` import rule from `eslint.config.mjs`. `storage:sweep` and `migrate:sanity` were added earlier. **The new `e2e:setup`/`e2e:teardown` scripts are added in task 10.2**, together with the fixtures they run. Until then `e2e-preview.yml` (task 10.10) can't run its setup step.
+
+- [x] **9.6** `[dev]` `.env.example`: remove `NEXT_PUBLIC_SANITY_*`, `SANITY_*`, `PERMANENT_VIEWER_EMAILS`, `SUPABASE_SERVICE_ROLE_KEY`. `proxy.ts` matcher: drop `studio|api/revalidate`.
+  - `.env.example` now lists only the Supabase and site variables. The three Sanity variables the migration still reads are kept as a **commented** block, labelled as migration-only (a small deviation from "remove", so the re-runs in 8.5 and 12.5 have somewhere to look). `PERMANENT_VIEWER_EMAILS` is gone, and `SUPABASE_SERVICE_ROLE_KEY` was already absent. The `proxy.ts` matcher dropped `studio|api/revalidate` in 4.13.
+
+- [x] **9.7** `[dev]` `grep -rE "sanity|portabletext|PERMANENT_VIEWER" app components lib proxy.ts next.config.ts`. — *Done when:* nothing turns up except `scripts/migrate-sanity.ts`.
+  - `grep -rniE "sanity|portabletext|PERMANENT_VIEWER" app components lib proxy.ts next.config.ts` finds nothing. Remaining mentions elsewhere are expected and owned by later tasks: the migration and its tests, the contract README, `README.md` (11.1), and `e2e-preview.yml` (10.10).
+
+- [x] **9.8** `[dev]` `npm run lint && npm run typecheck && npm run test && npm run build`. — *Done when:* all green.
+  - `npm run lint`, `npm run typecheck`, `npm run test` (157 passed), and `npm run build` all pass, and the database tests still pass. Prettier still flags only the 8 files PR #3 fixed on `main` plus a gitignored local file.
+
+### Phase 10: End-to-end tests and CI (2026-11-10: the suite passes locally, 41 tests plus one that needs an admin token; 10.11 needs the PR pushed)
+
+- [x] **10.1** `[dev]` `tests/e2e/users.ts`: personas `artistA` (`delivered+a@resend.dev`), `manager` (`delivered+mgr@resend.dev`), `aux2` (`delivered+a2@resend.dev`), `artistB` (`delivered+b@resend.dev`).
+  - `tests/e2e/users.ts`: the four personas, the artist slugs and names, and the fixture titles. `tests/e2e/admin-client.ts` is a typed Supabase admin client (`Database` generic, secret key) shared by the fixtures, global setup, and specs.
+
+- [x] **10.2** `[dev]` Rewrite `scripts/e2e-fixtures.ts` on the secret key:
   - `e2e-artist-a` (3 emails) and `e2e-artist-b`.
   - 2 main resources, one of them hidden on A, mixed-case categories.
   - One exclusive on A.
   - A teardown that deletes the artists (cascade) and the auth users.
   - Remove the legacy-key and Sanity code.
-- [ ] **10.3** `[dev]` `tests/e2e/global-setup.ts`: `generate_link` with the secret key, then a **GET** of `/auth/confirm` (no Continue click), then save each persona's storage state.
-- [ ] **10.4** `[dev]` `tests/e2e/access.spec.ts`: the parity rows from §13.3 (signed-out real vs fake slug; A opening B; the removed email revoked on reload; admins gate).
-- [ ] **10.5** `[dev]` `tests/e2e/sign-in.spec.ts`: wrong email vs unknown slug give the identical message; no `auth.users` row is created; the approved email shows the sent state and a disabled countdown; the link signs in directly; a bogus or used link goes to expired.
-- [ ] **10.6** `[dev]` `tests/e2e/resources.spec.ts`: exclusive on A only; hide on A only; all three of A's emails see the page; grid groups by category (mixed case → one heading); link cards use `target=_blank rel=noopener noreferrer`; the video dialog opens and closes and returns focus; the file route 302s for a viewer and 404s for another artist.
+  - Also add the new `e2e:setup` and `e2e:teardown` npm scripts here (`tsx --env-file-if-exists=.env.local scripts/e2e-fixtures.ts [teardown]`). They were removed in 9.5 with the Sanity ones.
+  - `scripts/e2e-fixtures.ts`: artist A (primary, manager, and `aux2` emails) and artist B; two main resources with mixed-case categories (`Getting Started` / `getting started`), the second hidden for A; on A an exclusive link and an exclusive **video** (a small uploaded file, so the dialog and file route can be tested). Setup tears down first, so it's safe to re-run; teardown deletes the artists, the `E2E %` main resources, the stored file, and the persona auth users. `npm run e2e:setup` and `e2e:teardown` are back.
+
+- [x] **10.3** `[dev]` `tests/e2e/global-setup.ts`: `generate_link` with the secret key, then a **GET** of `/auth/confirm` (no Continue click), then save each persona's storage state.
+  - Global setup uses `generate_link` and a plain GET of `/auth/confirm` (no Continue click), then saves each persona's storage state. Emails are attached to artists before users are created, so the sign-up hook allows them whether or not it fires for admin-generated links.
+
+- [x] **10.4** `[dev]` `tests/e2e/access.spec.ts`: the parity rows from §13.3 (signed-out real vs fake slug; A opening B; the removed email revoked on reload; admins gate).
+  - `access.spec.ts` (9 tests): a real and a made-up slug render the same `<main>` (status 200, title "Welcome to Vydia", no artist name); `/` is public; security headers; A opening B's URL shows only the email screen with no trace of B; an unknown slug looks identical to an inaccessible one; no sign-out, account menu, or links on the artist page.
+
+- [x] **10.5** `[dev]` `tests/e2e/sign-in.spec.ts`: wrong email vs unknown slug give the identical message; no `auth.users` row is created; the approved email shows the sent state and a disabled countdown; the link signs in directly; a bogus or used link goes to expired.
+  - `sign-in.spec.ts` (10 tests): the wrong-email and unknown-slug messages are identical, the input stays filled, and **no `auth.users` row is created** (checked through the admin API); another artist's email on the wrong slug is also not approved; the auxiliary email (typed in capitals) shows the sent state and a disabled `Resend email (Ns)`; a fresh link signs in directly (307 with `sb-` cookies); bogus, missing, and already-used links go to the expired screen with a way back; signing in as a different email replaces the old session.
+
+- [x] **10.6** `[dev]` `tests/e2e/resources.spec.ts`: exclusive on A only; hide on A only; all three of A's emails see the page; grid groups by category (mixed case → one heading); link cards use `target=_blank rel=noopener noreferrer`; the video dialog opens and closes and returns focus; the file route 302s for a viewer and 404s for another artist.
   - Add an API-level check for the storage queue: as an admin session, call `take_storage_garbage` through the REST API (not directly in the database). That path runs `pg_safeupdate`, which direct database tests can't reproduce.
+  - `resources.spec.ts` (11 tests): exclusive on A only; hide on A only (B sees the resource A hides); all three of A's emails see the same page greeted by the artist; link cards are `_blank`/`noopener noreferrer`; the video dialog opens, closes on Escape, and returns focus; the file route 302s to a signed URL for a viewer and returns 404 (`no-store`) for another artist and when signed out. The mixed-case grid check uses artist **B**, because A hides one of the two resources.
+  - `revoke.spec.ts`: removing an email revokes access on the next load with a still-valid session, then the row is restored.
+  - **API-level storage queue check:** `storage-queue.spec.ts` calls `take_storage_garbage` through the REST API with an admin (Google-method) access token, which runs under `pg_safeupdate`. A real Google token can't be produced in CI, so it **skips unless `E2E_ADMIN_ACCESS_TOKEN` is set**. Verified locally with a minted admin token: it passed and emptied the queue.
 
-- [ ] **10.7** `[dev]` `tests/e2e/admin.spec.ts`: signed out `/admin` → `/admin/login`; a magic-link persona on `/admin` → "You don't have access."; the login page shows only **Sign in with Google**.
-- [ ] **10.8** `[dev]` `tests/e2e/a11y.spec.ts`: axe on Enter your email (idle, sent, not-approved), the resources page (both views), `/auth/expired`, and `/admin/login`.
-- [ ] **10.9** `[dev]` `.github/workflows/ci.yml`: a `db` job using `supabase/setup-cli` → `supabase start` → `npm run db:test`. The existing lint/typecheck/test/format job keeps going.
-- [ ] **10.10** `[dev]` `.github/workflows/e2e-preview.yml`: env → the new project URL var plus `SUPABASE_SECRET_KEY`. Drop the Sanity and revalidate secrets. Setup and teardown use the new scripts.
+- [x] **10.7** `[dev]` `tests/e2e/admin.spec.ts`: signed out `/admin` → `/admin/login`; a magic-link persona on `/admin` → "You don't have access."; the login page shows only **Sign in with Google**.
+  - `admin.spec.ts` (7 tests): signed out, every admin page goes to `/admin/login`; the login page has only the Google button (no email or password); only the known error code shows a message; every callback failure lands on "You don’t have access."; the button starts the Google flow with `prompt=select_account`; a magic-link persona on the panel pages gets "You don’t have access." while their artist page keeps working. For the Google redirect to be testable on a local stack, `supabase/config.toml` now enables a **placeholder** Google client (local only; no real credentials).
+
+- [x] **10.8** `[dev]` `tests/e2e/a11y.spec.ts`: axe on Enter your email (idle, sent, not-approved), the resources page (both views), `/auth/expired`, and `/admin/login`.
+  - `a11y.spec.ts` (axe, WCAG 2.0 to 2.2 AA): the instructions page, Enter your email (idle, not approved, sent), the expired screen, the admin login, and the resources page in both views. **It found a real bug:** the shared `Notice` component (instructions and expired screens) used muted gray text that failed contrast on the dark page. It now uses a lighter text color.
+
+- [x] **10.9** `[dev]` `.github/workflows/ci.yml`: a `db` job using `supabase/setup-cli` → `supabase start` → `npm run db:test`. The existing lint/typecheck/test/format job keeps going.
+  - `ci.yml` has a new `db` job (`supabase/setup-cli` → `supabase start` → `npm run db:test`) next to the existing check job.
+
+- [x] **10.10** `[dev]` `.github/workflows/e2e-preview.yml`: env → the new project URL var plus `SUPABASE_SECRET_KEY`. Drop the Sanity and revalidate secrets. Setup and teardown use the new scripts.
+  - `e2e-preview.yml` now needs only `NEXT_PUBLIC_SUPABASE_URL` (a repository variable, created in 12.7), `SUPABASE_SECRET_KEY` (already a secret), and the Vercel bypass secret. The Sanity and revalidate secrets are gone. Setup, the run, and teardown use the new scripts. The Playwright config now runs one worker, because the revoke test changes shared data.
+
 - [ ] **10.11** `[dev]` — *Done when:* CI and the e2e preview are green on the `iteration-two` PR.
+  - **Local result:** with the production build running against a local Supabase stack, `npx playwright test` gives **41 passed, 1 skipped** (the token-gated check above), and the unit, lint, typecheck, build, and database tests pass. The workflows themselves can't run until the branch is pushed and a PR is open (Vercel must also build the preview, see 0.13), so this task stays open until you see both green on the PR.
+  - Things the suite caught on the way: the fixture insert needed an explicit id on every row; the `Notice` contrast bug (10.8); the local stack had no Google provider (10.7).
 
-### Phase 11: Docs
+### Phase 11: Docs (2026-11-10: done)
 
-- [ ] **11.1** `[dev]` Rewrite `README.md`: how it works (Supabase + RLS, admin panel), stack, env table, scripts (`db:*`, `migrate:sanity`, `storage:sweep`, `e2e:*`), dashboards (Supabase `lsihwkbnrheczirlkswo`, Resend, Google Cloud, Vercel, GitHub; Sanity removed), deploy flow, and rotating secrets (secret key, Resend key).
-- [ ] **11.2** `[dev]` `docs/admin-guide.md`, replacing `docs/editor-guide.md`: signing in; creating an artist; emails and labels; hiding main resources; exclusive resources and uploads (file types, 5 MB covers, 1080p MP4); copying and sending the Welcome link; renaming a slug; deleting; main resources and reordering; categories; what artists see; adding an admin in the table editor; running the storage sweep.
-- [ ] **11.3** `[dev]` `docs/plan.md` §1: add D23–D44 with a pointer here, and mark D18 superseded by D33 and D6/D22 by D44. `docs/sign-in-plan.md`: a header note that iteration two supersedes it.
-- [ ] **11.4** `[dev]` This plan: write the V1–V6 results into §4.7 and adjust any code that depended on them.
+- [x] **11.1** `[dev]` Rewrite `README.md`: how it works (Supabase + RLS, admin panel), stack, env table, scripts (`db:*`, `migrate:sanity`, `storage:sweep`, `e2e:*`), dashboards (Supabase `lsihwkbnrheczirlkswo`, Resend, Google Cloud, Vercel, GitHub; Sanity removed), deploy flow, and rotating secrets (secret key, Resend key).
+  - `README.md` is rewritten for the Supabase design: how it works (artist side, sign-in, admin panel, RLS), stack, local setup (including the local port range and `supabase start`), the environment table, every script, the database-change procedure with the project's known pitfalls, e2e instructions, CI, deploy flow, dashboards (Supabase `lsihwkbnrheczirlkswo`, Resend, Google Cloud, Vercel, GitHub; Sanity removed), rotating the Supabase secret key and the Resend key, how to add admins, and the project layout.
 
-### Phase 12: QA, cutover, launch
+- [x] **11.2** `[dev]` `docs/admin-guide.md`, replacing `docs/editor-guide.md`: signing in; creating an artist; emails and labels; hiding main resources; exclusive resources and uploads (file types, 5 MB covers, 1080p MP4); copying and sending the Welcome link; renaming a slug; deleting; main resources and reordering; categories; what artists see; adding an admin in the table editor; running the storage sweep.
+  - `docs/admin-guide.md` is written for label services and creative services (sign-in, creating and editing an artist, emails and labels, hiding main resources, exclusive resources and uploads with the real file rules, copying and sending the Welcome link, renaming a slug, deleting, main resources and reordering, categories, what artists see, a troubleshooting table, adding an admin, and the monthly storage sweep). `docs/editor-guide.md` is removed; the older plans still mention it as history.
+
+- [x] **11.3** `[dev]` `docs/plan.md` §1: add D23–D44 with a pointer here, and mark D18 superseded by D33 and D6/D22 by D44. `docs/sign-in-plan.md`: a header note that iteration two supersedes it.
+  - `docs/plan.md` §1 now has D23–D44, a banner listing which earlier decisions are superseded and which still hold, and D6, D18, and D22 are marked superseded (by D44, D33, and D44). `docs/sign-in-plan.md` has a header note that iteration two supersedes it.
+
+- [x] **11.4** `[dev]` This plan: write the V1–V6 results into §4.7 and adjust any code that depended on them.
+  - The V1–V6 results are in a table in §4.7. No code needed to change. **Still open there, tracked elsewhere:** V3 (a real non-admin Google account) and the hosted email render (4.7, 0.9/0.10).
+
+### Phase 12: QA, cutover, launch (2026-11-10: everything that can be verified from here is verified; the rest is people, dashboards, and the production cutover, which need your go-ahead)
 
 - [ ] **12.1** `[dev]` `[LS]` Manual QA (§13.4) on the `iteration-two` preview, including **both** shared inboxes and one individual admin signing in with Google, and a personal Gmail being rejected.
+  - **Needs people.** Automated stand-ins are in place and pass (see 12.2): the full e2e suite ran against the **hosted** project via the dev server, 40 of 41 on the first pass (the one failure was the Next dev-tools badge being counted as a button, fixed) and 7 of 7 on the rerun of that file. Test data was created and removed around the run; your own `mason` artist and the 9 real resources were untouched.
+  - **Still to do by hand (§13.4):** sign in to `/admin` with Google as **`labelservices@` and `creativeservices@`** (shared inboxes, if they're real Google Workspace accounts) and as an individual admin; confirm a **personal Gmail is rejected** with no `auth.users` row (V3); create "Lil Example" from the spec's sample data in the real admin; run each artist email through the real magic-link email on a preview; and walk the admin guide once.
+
 - [ ] **12.2** `[dev]` Success-state sign-off: tick each item from the spec's **Success State** with evidence (test name or screenshot):
-  - [ ] Primary + two aux emails each sign in and see the same page
-  - [ ] An unattached email gets not-approved, receives no email, and creates no Supabase user
-  - [ ] `/does-not-exist` is identical to a real slug, and any email gets not-approved
-  - [ ] Signed in for A, B's URL shows Enter your email with no trace of B
-  - [ ] Exclusive on A is visible on A only
-  - [ ] Hide on A affects A only
-  - [ ] A removed aux email shows Enter your email on the next load
-  - [ ] Label services and creative services admins can sign in, and a non-admin Google account is rejected
+  - Evidence is the e2e suite (`tests/e2e`, 41 tests, run against both a local stack and the **hosted** project), plus the database tests and unit tests where noted. Real Google accounts can't be automated, so the last item is not ticked.
+  - [x] Primary + two aux emails each sign in and see the same page: `resources.spec.ts` › "artistA, manager, aux2 … sees the same page, greeted by the artist" (each persona signs in through a real admin-generated magic link and the confirm route).
+  - [x] An unattached email gets not-approved, receives no email, and creates no Supabase user: `sign-in.spec.ts` › "a wrong email and any email on an unknown slug get the identical message, and no user is created" (checked against `auth.users`); no send happens because the approval check returns before Supabase is asked (`tests/send-link.test.ts`); direct sign-ups are also blocked by the hook (V2, 403).
+  - [x] `/does-not-exist` is identical to a real slug, and any email gets not-approved: `access.spec.ts` › "a real and a made-up slug render the same screen" and `sign-in.spec.ts` (same message on both).
+  - [x] Signed in for A, B's URL shows Enter your email with no trace of B: `access.spec.ts` › "opening artist B's URL shows Enter your email, never B's name or resources".
+  - [x] Exclusive on A is visible on A only: `resources.spec.ts` (artist A sees it, artist B does not; the file route returns 404 for B), and `supabase/tests/rls.test.sql`.
+  - [x] Hide on A affects A only: `resources.spec.ts` (A lacks the hidden resource, B has it).
+  - [x] A removed aux email shows Enter your email on the next load: `revoke.spec.ts` (session stays valid, the page is gone, then the row is restored); also `supabase/tests/rls.test.sql`.
+  - [ ] Label services and creative services admins can sign in, and a non-admin Google account is rejected: **partly verified.** A listed admin sees the panel and every artist page, a non-admin session gets "You don’t have access.", the callback rejects every failure (`admin.spec.ts`, and a locally reproduced Google-method session in 5.8), and the database tests cover `is_admin()`. Your own Google sign-in works (V4). **Not yet verified with real accounts:** the two shared inboxes and a non-admin Google account (V3).
+
 - [ ] **12.3** `[dev]` Device and email-client QA: iOS Safari, Android Chrome, desktop Safari/Chrome/Firefox. Open the magic-link email in Gmail web and app, Apple Mail, and Outlook/Microsoft 365 (watch for Safe Links spending the token, §16).
+  - **Browser engines tested (automated, `tests/e2e/cross-browser.spec.ts`, opt in with `E2E_ALL_BROWSERS=1`):** desktop **Chromium**, desktop **WebKit** (Safari's engine), **iPhone 14** emulation (mobile Safari's engine), and **Pixel 7** emulation (mobile Chrome). On each: the Enter your email screen fits with no horizontal scroll and shows the not-approved message with the input kept; the carousel, the grouped grid, and the video dialog (open, Escape closes) work; the carousel returns; no page errors; the admin login renders. All 12 pass. This covers the engines most likely to differ for the carousel's 3D transforms, scroll snap, and view transitions.
+  - **Not verifiable from here:** **Firefox** (the Playwright Firefox build fails to launch on this Mac, "Could not find profile folder", so it stays untested here; the project is in the config for the Linux CI runner), **real iOS and Android devices**, and the **magic-link email in Gmail (web and app), Apple Mail, and Outlook/Microsoft 365**, including whether Safe Links spends the token (§16). Do those by hand.
+
 - [ ] **12.4** `[ops]` Final sender address: replace the `welcome@vydia.com` placeholder in Resend (domain) and Supabase SMTP once it's decided. If it's still undecided at launch, launch on the placeholder and log it here.
   - The final address is on the domain being purchased (0.9). Note the SMTP sender must be on a domain verified in Resend.
+  - **Waiting on the domain** (0.9/0.10). Until then the hosted project sends from the `welcome@vydia.com` placeholder, which is **not verified in Resend**, so a real artist's magic link may not be delivered or may land in spam. This is a launch blocker, not a cosmetic one.
+
 - [ ] **12.5** `[LS]` `[dev]` Content freeze in Studio, then re-run `npm run migrate:sanity` against the new project (idempotent; picks up edits since 8.5). Resources deleted in Sanity since then are deleted by hand in `/admin/resources`.
+  - **Waiting on label services and the Pro plan.** The migration is idempotent and was re-checked on 2026-11-10 (a dry run lists the same 13 resources; 9 are on the hosted project). Do this after the Studio content freeze: `npm run migrate:sanity -- --include-drafts`, with no `--max-file-mb` once the Storage limit is at least 1 GB (0.6). Resources deleted in Sanity since the first run must be deleted by hand in `/admin/resources`.
+
 - [ ] **12.6** `[ops]` Vercel **Production**: switch `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to the new project, add `SUPABASE_SECRET_KEY`, remove the Sanity variables and `PERMANENT_VIEWER_EMAILS`.
+  - **Not done, on purpose: this is the production cutover and needs your go-ahead.** `main` still serves the iteration-one app, which reads Sanity and the **old** Supabase project, so switching Production's Supabase variables now would break the live site until `iteration-two` is merged and deployed. Do 12.6, 12.8, and 12.9 together, in one sitting, in this order: (1) content freeze and re-run (12.5); (2) switch the Production variables; (3) merge; (4) smoke test. Note: Production already holds integration-added variables (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `POSTGRES_*`, …) with hidden values; check which project they point at.
+
 - [ ] **12.7** `[ops]` GitHub Actions: update the `NEXT_PUBLIC_SUPABASE_URL` variable, remove the `SUPABASE_SERVICE_ROLE_KEY`, `SANITY_E2E_EDITOR_TOKEN`, and `SANITY_REVALIDATE_SECRET` secrets, and remove the Sanity variables.
+  - **First half done:** the repository variable `NEXT_PUBLIC_SUPABASE_URL` now points at the new project (the preview e2e workflow reads it). The repository has no Sanity secrets or variables and no `SUPABASE_SERVICE_ROLE_KEY` secret (only `SUPABASE_SECRET_KEY`), so there is nothing to remove. This task is complete once 12.6 is done; nothing further is needed here.
+
 - [ ] **12.8** `[dev]` Merge `iteration-two` → `main`. — *Done when:* the production deploy succeeds.
+  - **Needs your go-ahead** (see 12.6). Before merging: 10.11 (CI and preview e2e green on the PR), 12.1, the Pro upgrade for the videos, and a working sender (12.4).
+
 - [ ] **12.9** `[dev]` Production smoke test on `welcometovydia.com`: admin Google sign-in, create a real artist, copy the link, run the magic link end to end in a private window, check `/does-not-exist`, then delete the smoke-test artist.
+  - **After 12.8.** The e2e suite can be pointed at production for part of this (`E2E_BASE_URL`), but it creates and deletes real rows, so use it only with fixtures you are happy to create there; the Google sign-in and a real artist's magic link must be done by hand.
+
 - [ ] **12.10** `[LS]` Recreate active artists in `/admin` and send each one their new Welcome link.
+  - **Label services**, after launch. The admin guide (`docs/admin-guide.md`) is the how-to.
 
 ### Phase 13: Post-launch cleanup (about a week after 12.8)
 
