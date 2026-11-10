@@ -1,6 +1,6 @@
 # Passwordless Sign-in: Implementation Plan
 
-> **Superseded by iteration two** ([`iteration-two-plan.md`](./iteration-two-plan.md)). Artists now sign in from the artist's own page with a magic link only, the server checks the email against that artist first, and the link signs in directly (no Continue page). Google sign-in is for admins only, at `/admin`. This document is kept for history.
+> **Superseded by iteration two** ([`iteration-two-plan.md`](./iteration-two-plan.md)). Clients now sign in from the client's own page with a magic link only, the server checks the email against that client first, and the link signs in directly (no Continue page). Google sign-in is for admins only, at `/admin`. This document is kept for history.
 >
 > Scope: the "Email and sign in" block in [`TASKS.md`](../TASKS.md).
 > Builds on [`docs/plan.md`](./plan.md) §4.3 (Supabase setup), §8 (Authentication), and §9 (Access control). This plan **replaces** §8.4 (login page) and §8.5 (auth routes) of that document. Everything else there still holds.
@@ -16,17 +16,17 @@ Two ways to sign in, and **no accounts or passwords**:
 
 The flow only works for people who are already approved:
 
-- A magic link is only ever **sent** to an email that is on some artist's **Allowed emails**, on Website → **Internal viewers**, or on the permanent list. Every visitor sees the same "check your email" screen, so the form can't be used to find out who is a Vydia client.
+- A magic link is only ever **sent** to an email that is on some client's **Allowed emails**, on Website → **Internal viewers**, or on the permanent list. Every visitor sees the same "check your email" screen, so the form can't be used to find out who is a Vydia client.
 - A Google account that isn't approved anywhere is signed straight back out.
-- Each artist page still runs the same per-artist check as today (§9 of the main plan). That check is the real gate. The two points above just stop strangers from getting sessions at all.
+- Each client page still runs the same per-client check as today (§9 of the main plan). That check is the real gate. The two points above just stop strangers from getting sessions at all.
 
-Who can see an artist page after this change:
+Who can see a client page after this change:
 
 | Who | Where it's configured | Sees |
 |---|---|---|
-| The artist's own emails | Artist → Access → **Allowed emails** (Studio) | That artist's page |
-| `creativeservices@vydia.com`, `labelservices@vydia.com` | `PERMANENT_VIEWER_EMAILS` env var (code fallback in `lib/access.ts`) | Every artist page |
-| `erica.johnson@vydia.com`, `mason.omara@vydia.com` (and anyone added later) | Website → Access → **Internal viewers** (Studio) | Every artist page |
+| The client's own emails | Client → Access → **Allowed emails** (Studio) | That client's page |
+| `creativeservices@vydia.com`, `labelservices@vydia.com` | `PERMANENT_VIEWER_EMAILS` env var (code fallback in `lib/access.ts`) | Every client page |
+| `erica.johnson@vydia.com`, `mason.omara@vydia.com` (and anyone added later) | Website → Access → **Internal viewers** (Studio) | Every client page |
 | Anyone else | — | Can't get a sign-in link. A Google sign-in is rejected. |
 
 Sessions stay effectively never-ending (D11): Supabase refresh tokens never time out, and the proxy re-issues the 400-day cookies on every visit.
@@ -41,7 +41,7 @@ Numbering continues from the main plan (D1–D15).
 |---|---|---|
 | D16 | **Passwordless only: Google + email magic link.** Remove sign-up, password sign-in, "forgot password", `/account/update-password`, and the reset email template. | TASKS: "access without having to create an account". Nothing left to remember or reset. Existing Supabase users (shared inboxes, testers) keep working: a magic link to the same email signs into the same user. |
 | D17 | **Magic links are only sent to approved emails, and the response never says which.** The approval lookup and the send both run in `after()`, once the response is already on its way. | "Only these people." Random addresses never become Supabase users and never cost email quota. Because the work happens after the response, approved and unknown emails get the same answer at the same speed (the same idea as D4). |
-| D18 | **The email link opens a "Finish signing in" page with a Continue button.** Clicking it runs a server action that verifies the `token_hash`. `/auth/confirm` becomes a page instead of a GET route handler. | Email security scanners (Outlook Safe Links, Mimecast, Proofpoint…) open every link in an email. Today's GET route would spend the single-use token on the scanner's visit, and the artist would get "link expired". Scanners don't submit forms. This is still magic link only (no code to type). Dropping the page is a 10-line change if you'd rather not have the extra click (§5.7). |
+| D18 | **The email link opens a "Finish signing in" page with a Continue button.** Clicking it runs a server action that verifies the `token_hash`. `/auth/confirm` becomes a page instead of a GET route handler. | Email security scanners (Outlook Safe Links, Mimecast, Proofpoint…) open every link in an email. Today's GET route would spend the single-use token on the scanner's visit, and the client would get "link expired". Scanners don't submit forms. This is still magic link only (no code to type). Dropping the page is a 10-line change if you'd rather not have the extra click (§5.7). |
 | D19 | **Verify links by `token_hash`, not by PKCE code exchange.** The link works in any browser, not only the one that asked for it. | A PKCE link (`/auth/callback?code=…`) needs a cookie from the browser that asked for it, so it fails in the Gmail app's in-app browser. `verifyOtp({token_hash})` has no such requirement. The trade-off: the session lands in whichever browser opens the link, so the email says "open it in the browser you want to stay signed in on". |
 | D20 | **Google accounts that aren't approved anywhere are signed out in `/auth/callback`**, which sends them to `/login?error=not-approved`. | Supabase creates a user for any Google account, and we can't stop that without an Auth hook (§10). Signing them out means they never hold a session. This can tell the visitor whether their own Google email is approved, which is fine: Google has already proved they own it. |
 | D21 | **All auth runs on the server.** Google sign-in becomes a server action, and the browser Supabase client (`lib/supabase/client.ts`) is deleted. | Every auth cookie is then written by a `Set-Cookie` header. Safari limits cookies written by JavaScript to 7 days, which would quietly break "never-ending sessions" on iPhones and Macs. |
@@ -54,8 +54,8 @@ Numbering continues from the main plan (D1–D15).
 ### 2.1 Email magic link
 
 ```
-/test-artist (signed out)
-  └─ proxy → /login?next=/test-artist
+/test-client (signed out)
+  └─ proxy → /login?next=/test-client
        └─ enter email → [Email me a sign-in link]
             ├─ server action returns at once: "If jane@… has access, a link is on its way"
             └─ after():  approved anywhere?  ── no ─→ do nothing
@@ -67,19 +67,19 @@ Numbering continues from the main plan (D1–D15).
                               ▼
             /auth/confirm (page): "Finish signing in"  [Continue]
                               ▼   (POST, server action)
-            verifyOtp({type: 'email', token_hash}) → session cookies → redirect(/test-artist)
+            verifyOtp({type: 'email', token_hash}) → session cookies → redirect(/test-client)
                               ▼
-            /test-artist → per-artist access check (unchanged) → page or "This page isn't available"
+            /test-client → per-client access check (unchanged) → page or "This page isn't available"
 ```
 
 ### 2.2 Google
 
 ```
-/login?next=/test-artist → [Continue with Google]  (form → server action)
+/login?next=/test-client → [Continue with Google]  (form → server action)
   └─ signInWithOAuth (server; the PKCE verifier cookie is set by Set-Cookie) → redirect to accounts.google.com
-       └─ Google → Supabase → /auth/callback?code=…&next=/test-artist
+       └─ Google → Supabase → /auth/callback?code=…&next=/test-client
             └─ exchangeCodeForSession
-                 ├─ approved anywhere → redirect(/test-artist)
+                 ├─ approved anywhere → redirect(/test-client)
                  └─ not approved      → signOut → /login?error=not-approved
 ```
 
@@ -106,7 +106,7 @@ No sign-in screen at all. The proxy refreshes the access token from the refresh-
 | Edit | `app/(site)/auth/callback/route.ts`: reject unapproved Google accounts |
 | Delete | `app/(site)/account/update-password/` (both files), `lib/supabase/client.ts`, `supabase/templates/reset-password.html` |
 | New / rewrite | `supabase/templates/magic-link.html`, `supabase/templates/confirm-signup.html` |
-| Edit | `sanity/schemaTypes/website.ts`, `sanity/schemaTypes/artist.ts` (descriptions, Access tab) |
+| Edit | `sanity/schemaTypes/website.ts`, `sanity/schemaTypes/client.ts` (descriptions, Access tab) |
 | Edit | `scripts/seed.ts`: seed the two internal viewers |
 | Edit | `.env.example`, `README.md`, `docs/editor-guide.md`, `docs/plan.md` (D16–D22 and a pointer here) |
 | Edit | `tests/access.test.ts`, `tests/safe-redirect.test.ts`, `tests/e2e/*`, `scripts/e2e-fixtures.ts`, `.github/workflows/e2e-preview.yml` |
@@ -123,12 +123,12 @@ No sign-in screen at all. The proxy refreshes the access token from the refresh-
 ```ts
 // lib/sanity/queries.ts (add)
 export const APPROVED_EMAILS_QUERY = defineQuery(`{
-  "artistEmails": *[_type == "artist" && defined(slug.current)].allowedEmails[],
+  "clientEmails": *[_type == "client" && defined(slug.current)].allowedEmails[],
   "internalViewers": *[_type == "website" && _id == "website"][0].internalViewerEmails
 }`)
 ```
 
-Run `npm run typegen` to generate `APPROVED_EMAILS_QUERY_RESULT` (`artistEmails: Array<string | null>`, `internalViewers: Array<string> | null`). The result is a flat list, cached with the `artist` and `website` tags, so the publish webhook keeps it fresh. A few hundred artists × a few emails is a few KB.
+Run `npm run typegen` to generate `APPROVED_EMAILS_QUERY_RESULT` (`clientEmails: Array<string | null>`, `internalViewers: Array<string> | null`). The result is a flat list, cached with the `client` and `website` tags, so the publish webhook keeps it fresh. A few hundred clients × a few emails is a few KB.
 
 GROQ has no `trim()`, so case and whitespace are normalized in TypeScript, the same way `decideAccess` does it.
 
@@ -145,22 +145,22 @@ const PERMANENT_VIEWERS = new Set(
     .filter(Boolean),
 )
 
-// …isInternalViewer, decideAccess, verifiedEmail, normalizeSlug, resolveArtistAccess unchanged…
+// …isInternalViewer, decideAccess, verifiedEmail, normalizeSlug, resolveClientAccess unchanged…
 
 export function isApprovedAnywhere(email: string, lookup: APPROVED_EMAILS_QUERY_RESULT) {
   const normalized = normalizeEmail(email)
   return (
     isInternalViewer(normalized, lookup.internalViewers) ||
-    lookup.artistEmails.some((allowed) => allowed !== null && normalizeEmail(allowed) === normalized)
+    lookup.clientEmails.some((allowed) => allowed !== null && normalizeEmail(allowed) === normalized)
   )
 }
 
 export async function canSignIn(email: string) {
-  return isApprovedAnywhere(email, await sanityFetch(APPROVED_EMAILS_QUERY, {}, ['artist', 'website']))
+  return isApprovedAnywhere(email, await sanityFetch(APPROVED_EMAILS_QUERY, {}, ['client', 'website']))
 }
 ```
 
-`canSignIn` decides only who gets a session. `resolveArtistAccess` still decides which page they see. Someone approved on artist A who opens artist B's URL still gets "This page isn't available".
+`canSignIn` decides only who gets a session. `resolveClientAccess` still decides which page they see. Someone approved on client A who opens client B's URL still gets "This page isn't available".
 
 ---
 
@@ -213,7 +213,7 @@ export type LinkState = {sentTo?: string; error?: string}
 export async function sendMagicLink(_: LinkState, form: FormData): Promise<LinkState> {
   const email = normalizeEmail(field(form, 'email'))
   if (!EMAIL_PATTERN.test(email)) return {error: 'Enter your full email address.'}
-  // The email template puts this into a query string as-is, so drop any query of our own (artist pages have none).
+  // The email template puts this into a query string as-is, so drop any query of our own (client pages have none).
   const redirectTo = `${SITE_URL}${safeNext(field(form, 'next')).split('?')[0]}`
 
   // The lookup and the send happen after the response, so approved and unknown emails get the same answer at the
@@ -250,7 +250,7 @@ export async function signInWithGoogle(form: FormData) {
 ```
 
 Notes:
-- `shouldCreateUser: true` is safe because the send only runs for approved emails. A first-time artist gets a Supabase user created silently. That's the "no account" experience.
+- `shouldCreateUser: true` is safe because the send only runs for approved emails. A first-time client gets a Supabase user created silently. That's the "no account" experience.
 - Supabase limits each email to one link per 60 seconds, plus an hourly project-wide cap. Errors only go to the server log, because showing them would reveal which emails are approved. The UI's 60-second resend cooldown (§5.4) matches the per-email limit, so real users don't run into it.
 - `signInWithGoogle` uses the cookie client on purpose. It needs the PKCE verifier cookie, which `/auth/callback` reads, and server actions can set cookies (D21).
 
@@ -505,7 +505,7 @@ To skip the extra click (a plain magic link), keep a GET `route.ts` that runs th
 - `app/(site)/account/update-password/` (page + form). `account` stays in `RESERVED_SLUGS`.
 - `lib/supabase/client.ts`: no remaining imports after §5.4 (D21).
 - `supabase/templates/reset-password.html`.
-- In `tests/safe-redirect.test.ts`, change the `/account/update-password` case to any other same-site path, e.g. `/test-artist/`.
+- In `tests/safe-redirect.test.ts`, change the `/account/update-password` case to any other same-site path, e.g. `/test-client/`.
 
 ---
 
@@ -549,7 +549,7 @@ Supabase sends **Magic Link** to existing users and **Confirm signup** to an ema
 </table>
 ```
 
-`confirm-signup.html` gets the same body with subject `<!-- Subject: Your Welcome to Vydia sign-in link -->`. A first-time artist shouldn't see "confirm your account" wording. Verifying the link also confirms the email, which sets `email_confirmed_at` (the field `verifiedEmail` requires).
+`confirm-signup.html` gets the same body with subject `<!-- Subject: Your Welcome to Vydia sign-in link -->`. A first-time client shouldn't see "confirm your account" wording. Verifying the link also confirms the email, which sets `email_confirmed_at` (the field `verifiedEmail` requires).
 
 ---
 
@@ -598,7 +598,7 @@ export const website = defineType({
       type: 'array',
       group: 'access',
       description:
-        'Vydia people who can view EVERY artist page and sign in with Google or an email link. creativeservices@ and labelservices@ always have access and don’t need to be listed. Removing someone takes effect on their next page load.',
+        'Vydia people who can view EVERY client page and sign in with Google or an email link. creativeservices@ and labelservices@ always have access and don’t need to be listed. Removing someone takes effect on their next page load.',
       initialValue: ['erica.johnson@vydia.com', 'mason.omara@vydia.com'],
       // …of + validation unchanged (@vydia.com only, no duplicates)…
     }),
@@ -636,7 +636,7 @@ main().catch((error) => {
 
 ⚠️ If Studio has an unpublished draft of Website (`drafts.website`), publishing that draft later overwrites this patch. Publish or discard the draft first. Or skip the script and add the two emails in Studio → Website → Access, then Publish. The publish webhook refreshes the cached lists either way.
 
-### 8.3 `sanity/schemaTypes/artist.ts`
+### 8.3 `sanity/schemaTypes/client.ts`
 
 Only the description of **Allowed emails** changes:
 
@@ -669,13 +669,13 @@ description:
 |---|---|
 | Auth → Providers → Email | Enabled. "Confirm email" can stay on. Magic links confirm by themselves. |
 | Auth → Providers → Email → Email OTP expiration | `3600` (1 hour, the default). Matches the "expires in 1 hour" wording. |
-| Auth → Sign In / Providers → Allow new users to sign up | **On.** Needed for an approved artist's first link and first Google sign-in. Our allowlist is what keeps strangers out. |
+| Auth → Sign In / Providers → Allow new users to sign up | **On.** Needed for an approved client's first link and first Google sign-in. Our allowlist is what keeps strangers out. |
 | Auth → Email Templates → **Magic Link** | Subject + body from `supabase/templates/magic-link.html` |
 | Auth → Email Templates → **Confirm signup** | Subject + body from `supabase/templates/confirm-signup.html` |
 | Auth → Email Templates → Reset password | Leave as is. Nothing sends it any more. |
 | Auth → URL Configuration → Redirect URLs | Unchanged (`http://localhost:3000/**`, `https://welcometovydia.com/**`, preview pattern). `emailRedirectTo` must match one of these, or Supabase falls back to the Site URL (which `safeNext` turns into `/`). |
 | Auth → Sessions | §7 (check that single session per user is off) |
-| Auth → SMTP | **Still a blocker:** Resend (U7 / task 0.12). The built-in sender only delivers to Supabase team members, 2 emails/hour. Until Resend is set up, artists can only use Google. |
+| Auth → SMTP | **Still a blocker:** Resend (U7 / task 0.12). The built-in sender only delivers to Supabase team members, 2 emails/hour. Until Resend is set up, clients can only use Google. |
 | Auth → Rate limits | After Resend: raise "emails per hour" (e.g. 100). Keep the 60-second per-email limit. |
 | Google Cloud → Audience | Publish the app (task 11.3) so any Google account can sign in, not only listed test users. |
 
@@ -698,9 +698,9 @@ beforeAll(async () => {
 // "always allows the permanent internal emails": LabelServices@vydia.com instead of LabelRelationships@
 
 describe('isApprovedAnywhere', () => {
-  const approved = {artistEmails: ['Jane@Example.com ', null, 'sam@example.com'], internalViewers: ['Erica.Johnson@vydia.com']}
+  const approved = {clientEmails: ['Jane@Example.com ', null, 'sam@example.com'], internalViewers: ['Erica.Johnson@vydia.com']}
 
-  it('accepts any artist email, internal viewer, or permanent viewer, ignoring case and spaces', () => {
+  it('accepts any client email, internal viewer, or permanent viewer, ignoring case and spaces', () => {
     expect(access.isApprovedAnywhere(' jane@example.COM', approved)).toBe(true)
     expect(access.isApprovedAnywhere('erica.johnson@vydia.com', approved)).toBe(true)
     expect(access.isApprovedAnywhere('labelservices@VYDIA.com', approved)).toBe(true)
@@ -712,7 +712,7 @@ describe('isApprovedAnywhere', () => {
   })
 
   it('survives an empty dataset', () => {
-    expect(access.isApprovedAnywhere('jane@example.com', {artistEmails: [], internalViewers: null})).toBe(false)
+    expect(access.isApprovedAnywhere('jane@example.com', {clientEmails: [], internalViewers: null})).toBe(false)
   })
 })
 ```
@@ -774,7 +774,7 @@ import {E2E_USERS} from './users'
 
 test.describe('sign-in page', () => {
   test('offers Google and an email link, and no password', async ({page}) => {
-    await page.goto('/login?next=%2Ftest-artist')
+    await page.goto('/login?next=%2Ftest-client')
     await expect(page.getByRole('button', {name: 'Continue with Google'})).toBeVisible()
     await expect(page.getByRole('button', {name: 'Email me a sign-in link'})).toBeVisible()
     await expect(page.locator('input[type="password"]')).toHaveCount(0)
@@ -803,16 +803,16 @@ test.describe('sign-in page', () => {
   })
 
   test('Google goes to accounts.google.com via Supabase', async ({page}) => {
-    await page.goto('/login?next=%2Ftest-artist')
+    await page.goto('/login?next=%2Ftest-client')
     const google = page.waitForRequest((request) => request.url().startsWith('https://accounts.google.com/'))
     await page.getByRole('button', {name: 'Continue with Google'}).click()
     expect((await google).url()).toContain('prompt=select_account')
   })
 
   test('a bad or used link asks for a new one', async ({page}) => {
-    await page.goto('/auth/confirm?token_hash=not-a-real-token&type=email&redirect_to=/test-artist')
+    await page.goto('/auth/confirm?token_hash=not-a-real-token&type=email&redirect_to=/test-client')
     await page.getByRole('button', {name: 'Continue'}).click()
-    await expect(page).toHaveURL('/login?error=link&next=%2Ftest-artist')
+    await expect(page).toHaveURL('/login?error=link&next=%2Ftest-client')
     await expect(page.locator('p[role="alert"]')).toContainText('invalid, expired, or already used')
   })
 
@@ -830,15 +830,15 @@ test.describe('sign-in page', () => {
 
 Run on a preview deployment once Resend is set up:
 
-- [ ] Approved artist email → link arrives (from Resend, with branding) → Continue → lands on their page.
+- [ ] Approved client email → link arrives (from Resend, with branding) → Continue → lands on their page.
 - [ ] First-ever sign-in for a new approved email: the Confirm signup template arrives with sign-in wording and works the same way.
 - [ ] Unapproved email → same screen, no email arrives, no user appears in Supabase → Users.
 - [ ] Outlook / Microsoft 365 recipient: the link still works after the message has sat in the inbox for a minute (scanner check).
 - [ ] Open the link on a phone in the Gmail app → signed in inside that browser. Then confirm the email text tells people where to open it.
 - [ ] Resend shows a countdown, and works after 60 seconds.
 - [ ] Google, approved account → returns to `next`. Unapproved account → `/login` with the not-approved message, and no session cookie.
-- [ ] `erica.johnson@` / `mason.omara@` (Google or link) can open any artist page. Removing one from Internal viewers and publishing → "This page isn't available" on their next load.
-- [ ] `labelservices@` and `creativeservices@` can open any artist page. `labelrelationships@` can't (after the Vercel env update).
+- [ ] `erica.johnson@` / `mason.omara@` (Google or link) can open any client page. Removing one from Internal viewers and publishing → "This page isn't available" on their next load.
+- [ ] `labelservices@` and `creativeservices@` can open any client page. `labelrelationships@` can't (after the Vercel env update).
 - [ ] Close and reopen the browser a few days later → still signed in, no prompt. Safari included.
 
 ---
@@ -847,7 +847,7 @@ Run on a preview deployment once Resend is set up:
 
 1. **The Sanity seat.** The shared Studio login (Sanity member) is `labelrelationships@vydia.com` (main plan 0.4, editor guide line 5). Does that seat move to `labelservices@` too, or does only viewer access change? This plan only changes viewer access.
 2. **Does the `labelservices@vydia.com` inbox exist and receive mail?** With passwords gone, the email link is that inbox's only way in besides Google.
-3. **Link lifetime.** 1 hour is Supabase's default and the safer choice. If artists often open the email the next day, it can go up to 24 hours (`86400`), and the email copy changes to match.
+3. **Link lifetime.** 1 hour is Supabase's default and the safer choice. If clients often open the email the next day, it can go up to 24 hours (`86400`), and the email copy changes to match.
 4. **Bot protection.** Supabase can require a captcha (Cloudflare Turnstile) on `signInWithOtp`. It's not needed at launch, because unapproved emails cost nothing and approved ones are rate-limited per address. Worth adding if the logs show abuse.
 
 ---
@@ -860,7 +860,7 @@ Run on a preview deployment once Resend is set up:
 - [x] **A.3** Studio → Website → add `erica.johnson@vydia.com` and `mason.omara@vydia.com` to Internal viewers → Publish (or run §8.2 after deploying the schema change).
   ✅ 2026-10-21: ran `npx sanity exec scripts/seed.ts --with-user-token` against `production` (no `drafts.website` existed). Both emails are on the published Website. A second run added nothing.
 - [ ] **A.4** ⏳ *Needs you.* Answer §12 Q1–Q2.
-- [ ] **A.5** ⏳ *Needs you (Resend approval + DNS).* Resend + Supabase SMTP (existing U7). This blocks email sign-in for artists, but not the code work.
+- [ ] **A.5** ⏳ *Needs you (Resend approval + DNS).* Resend + Supabase SMTP (existing U7). This blocks email sign-in for clients, but not the code work.
 
 ### Phase B: Code
 - [x] **B.1** `APPROVED_EMAILS_QUERY` + `npm run typegen` (§4.1).
@@ -871,7 +871,7 @@ Run on a preview deployment once Resend is set up:
 - [x] **B.6** `/auth/confirm` page + action, delete `route.ts` (§5.7).
 - [x] **B.7** Deletions (§5.8).
 - [x] **B.8** Templates in the repo (§6).
-- [x] **B.9** Website/artist schema changes + seed script (§8).
+- [x] **B.9** Website/client schema changes + seed script (§8).
 - [x] **B.10** `.env.example`, README, editor guide, main plan (§9).
 - [x] **B.11** E2E: global setup, fixtures, workflow, new spec, a11y updates (§11.2–11.3).
 - [x] **B.12** `npm run lint && npm run typecheck && npm run test && npm run format:check`, then `npm run e2e` locally.
@@ -888,4 +888,4 @@ Run on a preview deployment once Resend is set up:
 - [ ] **C.4** ⏳ *Needs your go-ahead (production deploy).* Merge → production. Repeat the Google and link checks on `welcometovydia.com`.
 - [ ] **C.5** ⏳ *Needs you.* Record a short Loom addendum for L&A: "clients no longer create a password", and how to add a colleague as an internal viewer.
 
-**Done when:** an approved artist can open their page via Google or one email link without ever choosing a password; an unapproved email or Google account never ends up with a session; the four Vydia addresses can open every page; and a returning visitor is never asked to sign in again unless they cleared their cookies.
+**Done when:** an approved client can open their page via Google or one email link without ever choosing a password; an unapproved email or Google account never ends up with a session; the four Vydia addresses can open every page; and a returning visitor is never asked to sign in again unless they cleared their cookies.

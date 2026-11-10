@@ -1,6 +1,6 @@
 # Welcome to Vydia: Admin Guide
 
-For label services and creative services. It covers everything you do in the admin panel at `welcometovydia.com/admin`. You never edit anything on an artist's page directly: you change the artist or the main resources here, and the page updates the next time anyone opens it.
+For label services and creative services. It covers everything you do in the admin panel at `welcometovydia.com/admin`. You never edit anything on a client's page directly: you change the client or the main resources here, and the page updates the next time anyone opens it.
 
 ## Signing in
 
@@ -12,26 +12,26 @@ You stay signed in. **Sign out** is at the top right of the panel.
 ## How it fits together
 
 - A **main resource** is a card everyone sees: a guide, a tutorial video, a pitch form. You manage them under **Resources**.
-- An **artist** is one client. Creating an artist gives them a page at `welcometovydia.com/their-link` and a list of emails that are allowed to open it.
-- On one artist you can **hide** a main resource (only for them) and add **exclusive** resources (only they see them).
+- A **client** is one entry in the admin panel. Creating a client gives them a page at `welcometovydia.com/their-link` and a list of emails that are allowed to open it.
+- On one client you can **hide** a main resource (only for them) and add **exclusive** resources (only they see them).
 
-Artists never see an account area, a sign-out button, or a list of other pages. A link shows either their resources or an "Enter your email" screen.
+Clients never see an account area, a sign-out button, or a list of other pages. A link shows either their resources or an "Enter your email" screen.
 
-## Create a new artist
+## Create a new client
 
-1. Open **Artists** and click **New artist**.
-2. Type the **Artist name**. The **Link** fills in for you (for example "Lil Example" becomes `lil-example`). You can change it: 3 to 60 characters, lowercase letters, numbers, and hyphens.
-3. Enter the **Primary email**: the artist's own address.
+1. Open **Clients** and click **New client**.
+2. Type the **Client name**. The **Link** fills in for you (for example "Lil Example" becomes `lil-example`). You can change it: 3 to 60 characters, lowercase letters, numbers, and hyphens.
+3. Enter the **Primary email**: the client's own address.
 4. Click **Add email** for each manager or alternate address. The label (Manager, Alt, Assistant, or anything you like) is optional. Every email signs in on its own, and capital letters don't matter.
-5. Under **Main resources**, click **Remove** on anything this artist should not see. The row turns gray and struck through. **Restore** brings it back.
+5. Under **Main resources**, click **Remove** on anything this client should not see. The row turns gray and struck through. **Restore** brings it back.
 6. Optional: add **exclusive resources** (see below).
 7. Click **Save**. Nothing is saved until you do, and either everything saves or nothing does.
 
-You land on the artist's page in the admin with the **Welcome link** at the top. Click **Copy link** and paste it into your own email to the artist. The app never sends the Welcome link itself.
+You land on the client's page in the admin with the **Welcome link** at the top. Click **Copy link** and paste it into your own email to the client. The app never sends the Welcome link itself.
 
 ## Exclusive resources
 
-Use **Add exclusive resource** for something only this artist should see, like a release plan.
+Use **Add exclusive resource** for something only this client should see, like a release plan.
 
 1. Give it a **Title** (up to 120 characters) and pick a **Type**.
 2. Add the content:
@@ -40,49 +40,49 @@ Use **Add exclusive resource** for something only this artist should see, like a
    - **Slide deck**: upload a PDF, PowerPoint, or Keynote file, **or** enter a link such as Google Slides, not both.
 3. Optional **Cover image**: JPG, PNG, or WebP up to 5 MB, with alt text. PDFs without a cover use their first page automatically; everything else uses the Vydia tile.
 4. Pick a **Category**. It suggests categories that already exist as you type. "getting started" and "Getting Started" count as the same category.
-5. Click **Done**, then **Save** the artist.
+5. Click **Done**, then **Save** the client.
 
 Wait for **Uploading…** to finish before you save. If a field is wrong, the message under it tells you what to fix.
 
-## Editing an artist
+## Editing a client
 
-Open the artist from the list, change anything, and click **Save**.
+Open the client from the list, change anything, and click **Save**.
 
 - **Removing an email cuts off that person immediately.** The next time they open the page they see the "Enter your email" screen, even though they were signed in before.
-- **Changing the link breaks the old one.** You'll see a warning ("The old link will stop working - send the artist the new one") and a confirmation before it saves. Old links are not redirected, so send the artist the new one.
-- **Open page** shows you exactly what the artist sees. As an admin signed in with Google you can open any artist's page.
+- **Changing the link breaks the old one.** You'll see a warning ("The old link will stop working - send the client the new one") and a confirmation before it saves. Old links are not redirected, so send the client the new one.
+- **Open page** shows you exactly what the client sees. As an admin signed in with Google you can open any client's page.
 
-## Deleting an artist
+## Deleting a client
 
-Open the artist, scroll to the bottom, and click **Delete artist**, then confirm. This permanently removes the artist, their emails, their hidden-resource choices, and their exclusive resources and files. Anyone who was attached only to that artist loses access. The link can be reused for a new artist.
+Open the client, scroll to the bottom, and click **Delete client**, then confirm. This permanently removes the client, their emails, their hidden-resource choices, and their exclusive resources and files. Anyone who was attached only to that client loses access. The link can be reused for a new client.
 
 ## Main resources (everyone sees these)
 
-Open **Resources** in the top bar. Changes here apply to **every artist immediately**.
+Open **Resources** in the top bar. Changes here apply to **every client immediately**.
 
-- **New main resource** adds one. A new one appears on every artist's page automatically (you can hide it per artist afterwards).
-- **Edit** and **Delete** are on each row. Deleting removes it from every artist, and any per-artist hides for it too.
+- **New main resource** adds one. A new one appears on every client's page automatically (you can hide it per client afterwards).
+- **Edit** and **Delete** are on each row. Deleting removes it from every client, and any per-client hides for it too.
 - **Reorder:** drag a row's handle (⠿) to change the order inside a category, or drag a category's handle to move the whole group. Keyboard: focus a handle, press Space, move with the arrow keys, press Space again.
-- **Categories** group the cards in the artist's grid view. Cards are shown in the order you set here.
+- **Categories** group the cards in the client's grid view. Cards are shown in the order you set here.
 
-## What artists see
+## What clients see
 
 1. They open the Welcome link and see **Enter your email**.
-2. They type their address and click **Send link**. If it's attached to that artist, they get a link by email ("Open your Welcome to Vydia page") and the screen says **Email sent, check your inbox**. **Resend email** unlocks after 60 seconds.
+2. They type their address and click **Send link**. If it's attached to that client, they get a link by email ("Open your Welcome to Vydia page") and the screen says **Email sent, check your inbox**. **Resend email** unlocks after 60 seconds.
 3. If it isn't, nothing is sent and they see: "This email isn't approved to view this page. Please contact Vydia label services if you're having trouble."
 4. They click the link in the email and land on their page. They stay signed in on that browser.
 
-The page has a carousel and a grid view (grouped by category). The artist's name never appears until they have access, and a link for an artist that doesn't exist looks exactly the same as one that does.
+The page has a carousel and a grid view (grouped by category). The client's name never appears until they have access, and a link for a client that doesn't exist looks exactly the same as one that does.
 
 ## When something goes wrong
 
-| What the artist says                                  | What to check                                                                                                                             |
+| What the client says                                  | What to check                                                                                                                             |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| "It says my email isn't approved."                    | Open the artist and check the spelling of that address, and that it's on **that** artist (not a different one). Add it and save.          |
-| "I never got the email."                              | Ask them to check spam and wait a minute. Then ask them to use **Resend email**. Make sure the address is on the artist.                   |
+| "It says my email isn't approved."                    | Open the client and check the spelling of that address, and that it's on **that** client (not a different one). Add it and save.          |
+| "I never got the email."                              | Ask them to check spam and wait a minute. Then ask them to use **Resend email**. Make sure the address is on the client.                   |
 | "The link says it has expired."                       | Links work once and last an hour. Some company email systems open links before the person does. Ask them to enter their email again.      |
 | "I changed browsers and I'm asked for my email again." | Normal. Each browser signs in separately. They can request a new link.                                                                     |
-| "The old link stopped working."                       | The artist's link was changed. Send them the current one from the artist's page.                                                           |
+| "The old link stopped working."                       | The client's link was changed. Send them the current one from the client's page.                                                           |
 
 ## Adding an admin
 
@@ -90,4 +90,4 @@ Admins are managed in Supabase, not in this panel. In the Supabase dashboard ope
 
 ## For developers: cleaning up uploads
 
-If someone uploads a file and then leaves the form without saving, the file stays in storage. Run `npm run storage:sweep` about once a month to list files nothing references that are over 24 hours old, and `npm run storage:sweep -- --delete` to remove them. Files from deleted artists and resources are cleaned up automatically.
+If someone uploads a file and then leaves the form without saving, the file stays in storage. Run `npm run storage:sweep` about once a month to list files nothing references that are over 24 hours old, and `npm run storage:sweep -- --delete` to remove them. Files from deleted clients and resources are cleaned up automatically.

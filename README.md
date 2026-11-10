@@ -1,6 +1,6 @@
 # Welcome to Vydia
 
-An internal tool for Vydia's label services team. When a new artist signs, label services creates a personalized "Welcome to Vydia" page for them, copies the link, and emails it to the artist from their own inbox. The artist opens the link, enters an approved email, gets a magic link, and lands on their resources page. It replaces the Seismic link label services used to send.
+An internal tool for Vydia's label services team. When a new client signs, label services creates a personalized "Welcome to Vydia" page for them, copies the link, and emails it to the client from their own inbox. The client opens the link, enters an approved email, gets a magic link, and lands on their resources page. It replaces the Seismic link label services used to send.
 
 - Spec: [`docs/iteration-two.md`](docs/iteration-two.md)
 - Implementation plan, decisions, and task list: [`docs/iteration-two-plan.md`](docs/iteration-two-plan.md)
@@ -11,11 +11,11 @@ An internal tool for Vydia's label services team. When a new artist signs, label
 
 | Piece           | Where                                        | What it does                                                                                                                                                                                                                 |
 | --------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Artist pages    | `app/(site)/[slug]`                          | One URL per artist. It shows either the resources page or the **Enter your email** screen, never a 404 or a "no access" page, so nobody can guess slugs to find out who is on Vydia.                                         |
-| Artist sign-in  | `[slug]/actions.ts`, `auth/confirm`          | Magic link only. The server checks the email against the artist at that slug **before** asking Supabase to send anything. The link signs in directly and redirects to the page.                                              |
-| Admin panel     | `app/(admin)/admin`                          | Create, edit, and delete artists, their emails, hidden main resources, exclusive resources, and the main resources. Google sign-in only, for `@vydia.com` accounts listed in the `admins` table.                             |
-| Access control  | Postgres row-level security                  | The page is read with the **visitor's own session**. RLS returns the artist only if their verified email is linked to it right now, so removing an email cuts off access on the next load even though sessions never expire. |
-| Data and files  | Supabase Postgres + Storage                  | Artists, emails, resources, and hides in Postgres. Files in a private bucket (served through a signed-URL route), cover images in a public bucket under unguessable paths.                                                   |
+| Client pages    | `app/(site)/[slug]`                          | One URL per client. It shows either the resources page or the **Enter your email** screen, never a 404 or a "no access" page, so nobody can guess slugs to find out who is on Vydia.                                         |
+| Client sign-in  | `[slug]/actions.ts`, `auth/confirm`          | Magic link only. The server checks the email against the client at that slug **before** asking Supabase to send anything. The link signs in directly and redirects to the page.                                              |
+| Admin panel     | `app/(admin)/admin`                          | Create, edit, and delete clients, their emails, hidden main resources, exclusive resources, and the main resources. Google sign-in only, for `@vydia.com` accounts listed in the `admins` table.                             |
+| Access control  | Postgres row-level security                  | The page is read with the **visitor's own session**. RLS returns the client only if their verified email is linked to it right now, so removing an email cuts off access on the next load even though sessions never expire. |
+| Data and files  | Supabase Postgres + Storage                  | Clients, emails, resources, and hides in Postgres. Files in a private bucket (served through a signed-URL route), cover images in a public bucket under unguessable paths.                                                   |
 | Magic-link mail | Supabase Auth with Resend as the SMTP sender | The only email the app sends. Label services send the Welcome link themselves.                                                                                                                                               |
 | Hosting         | Vercel                                       | Next.js on Vercel.                                                                                                                                                                                                           |
 
@@ -25,7 +25,7 @@ Key decisions are D23–D44 in [`docs/iteration-two-plan.md`](docs/iteration-two
 
 - **Next.js 16.4** (App Router, `cacheComponents` on). Request handling is in `proxy.ts` (Next 16's name for middleware). **Read the guides in `node_modules/next/dist/docs/` before changing Next-specific code**; this version differs from older ones.
 - **React 19.3**, **Supabase** (`@supabase/ssr`, `@supabase/supabase-js`), **zod 4** for validation, **dnd-kit** for drag-to-reorder, **pdfjs-dist** for PDF first-page previews, **Playwright** and **Vitest** for tests.
-- **CSS Modules** with design tokens in `app/(site)/globals.css` (artist side) and `app/(admin)/admin.css` (admin side). No Tailwind.
+- **CSS Modules** with design tokens in `app/(site)/globals.css` (client side) and `app/(admin)/admin.css` (admin side). No Tailwind.
 - **Node 22.**
 
 ## Local setup
@@ -69,7 +69,7 @@ To use the hosted project instead, put its URL and keys in `.env.local`.
 | `npm run db:types`                           | Regenerates `lib/supabase/database.types.ts` from the **local** database. Run it after every migration.                                            |
 | `npm run db:push`                            | Pushes migrations. With no flag it targets the **local** stack; use `supabase db push --remote` for the hosted project.                            |
 | `npm run e2e`                                | End-to-end tests (Playwright, `tests/e2e`)                                                                                                         |
-| `npm run e2e:setup` / `npm run e2e:teardown` | Create / remove the e2e artists, resources, and test users                                                                                         |
+| `npm run e2e:setup` / `npm run e2e:teardown` | Create / remove the e2e clients, resources, and test users                                                                                         |
 | `npm run storage:sweep`                      | Lists uploaded files nothing references and that are over 24 hours old. Add `--delete` to remove them. Run it monthly.                             |
 | `npm run migrate:sanity`                     | The one-time import of resources from Sanity. Flags: `--dry-run`, `--include-drafts`, `--default-category`, `--max-file-mb`. Removed after launch. |
 | `npm run format` / `npm run format:check`    | Prettier                                                                                                                                           |
@@ -84,7 +84,7 @@ To use the hosted project instead, put its URL and keys in `.env.local`.
 Things that have already bitten this project:
 
 - Supabase's API layer enforces `pg_safeupdate`, which rejects any `DELETE` or `UPDATE` without a `WHERE`. Direct database tests don't, so `supabase/tests/safe-statements.test.sql` fails if a function breaks this.
-- `resources(*)` embedded from `artists` is ambiguous to PostgREST. Use `resources!resources_artist_id_fkey(*)`.
+- `resources(*)` embedded from `clients` is ambiguous to PostgREST. Use `resources!resources_client_id_fkey(*)`.
 - Cache Components keeps the previous route mounted but hidden, so after a navigation the DOM can briefly hold two copies of a form. Test selectors should look at visible elements.
 
 ### End-to-end tests
@@ -150,11 +150,11 @@ Admins are managed by hand in the Supabase table editor (`admins` table): add th
 ## Project layout
 
 ```
-app/(site)/          artist side: /, /[slug], /auth/confirm, /auth/expired
+app/(site)/          client side: /, /[slug], /auth/confirm, /auth/expired
 app/(admin)/         admin side: /admin/login, /admin/auth/*, and the panel under /admin/(panel)
 app/api/resources/   the signed-URL file route
-components/          artist UI; components/admin/ for the admin panel
-lib/                 Supabase clients, artist page data, validation, resource mapping, admin helpers
+components/          client UI; components/admin/ for the admin panel
+lib/                 Supabase clients, client page data, validation, resource mapping, admin helpers
 sanity/              schema.json: the frozen resource field contract (Sanity is not used at runtime)
 scripts/             migrate-sanity, storage-sweep, e2e-fixtures
 supabase/            migrations, pgTAP tests, config, and email templates

@@ -2,7 +2,7 @@
 
 > Spec: [`docs/iteration-two.md`](./iteration-two.md). Builds on [`docs/plan.md`](./plan.md) (D1–D15) and [`docs/sign-in-plan.md`](./sign-in-plan.md) (D16–D22). Decisions here continue the numbering from **D23**.
 >
-> **Owner decisions (2026-11-09):** admins see artist pages directly (D32); magic links sign in straight away with no Continue page (D33); per-artist additional info is dropped (D41); the sender address stays a placeholder for now (§11); public, unguessable image URLs are fine, including for exclusive resources (D35); covers keep the same blur-up style as today (D42); abandoned uploads are cleaned by a manual sweep (D43); `labelservices@` and `creativeservices@` are both seeded as admins (D44). See §17.
+> **Owner decisions (2026-11-09):** admins see client pages directly (D32); magic links sign in straight away with no Continue page (D33); per-client additional info is dropped (D41); the sender address stays a placeholder for now (§11); public, unguessable image URLs are fine, including for exclusive resources (D35); covers keep the same blur-up style as today (D42); abandoned uploads are cleaned by a manual sweep (D43); `labelservices@` and `creativeservices@` are both seeded as admins (D44). See §17.
 >
 > **Supabase project:** iteration two runs on the **new** project `lsihwkbnrheczirlkswo` (already in `.env.local`). Its auth, email, and Google settings have to be set up again, see §12.
 >
@@ -12,24 +12,24 @@
 
 ## 0. TL;DR
 
-Iteration one is a Sanity-backed microsite. Sanity holds artists, resources, and allow-lists, and Supabase handles sign-in. Iteration two moves **everything into Supabase**, removes Sanity at runtime, and adds an **admin panel** inside the Next app:
+Iteration one is a Sanity-backed microsite. Sanity holds clients, resources, and allow-lists, and Supabase handles sign-in. Iteration two moves **everything into Supabase**, removes Sanity at runtime, and adds an **admin panel** inside the Next app:
 
 | Area | Today (iteration one) | Iteration two |
 |---|---|---|
 | Content + access data | Sanity (private dataset, cached with `'use cache'`, webhook revalidation) | Supabase Postgres + Storage, read **per request with the visitor's JWT under RLS**. No server cache. |
 | Editing | Sanity Studio at `/studio` | `/admin` (Google SSO, `admins` table, `@vydia.com` only) |
-| Artist sign-in | `/login` page: Google **or** magic link. The response never says whether an email is approved. | Inline on `/[slug]`: magic link **only**. The server checks *email × slug* **before** sending and shows an explicit "not approved" message. |
+| Client sign-in | `/login` page: Google **or** magic link. The response never says whether an email is approved. | Inline on `/[slug]`: magic link **only**. The server checks *email × slug* **before** sending and shows an explicit "not approved" message. |
 | Signed-out visitor on `/[slug]` | Proxy redirects to `/login?next=…` | `/[slug]` renders the **Enter your email** screen in place, with no redirect |
 | Denied / unknown slug | Identical "This page isn't available" screen with a sign-out button | Identical **Enter your email** screen. No sign-out, no "no access" page. |
 | Internal viewers | `PERMANENT_VIEWER_EMAILS` + Website → Internal viewers | Gone. Admins (Google) can preview any page. Nobody else gets blanket access. |
 | Slug renames | `previousSlugs`, old URLs redirect | No history. An old slug behaves like any unknown slug. Admins see a warning before saving. |
-| Per-artist resources | `resourceOverride` **replaces** the global list | Main resources minus per-artist **hides**, plus per-artist **exclusive** resources |
+| Per-client resources | `resourceOverride` **replaces** the global list | Main resources minus per-client **hides**, plus per-client **exclusive** resources |
 | Grid view | One flat grid | **Grouped by category** |
-| Extra artist text | `additionalInfo` rich text | Dropped (D41) |
+| Extra client text | `additionalInfo` rich text | Dropped (D41) |
 | Email link | Opens a "Finish signing in" page; **Continue** creates the session | Opens the session directly (GET), then redirects to `/[slug]` (D33) |
-| Admins on artist pages | n/a (Studio users were permanent viewers) | Admins signed in with Google see every artist page directly (D32) |
+| Admins on client pages | n/a (Studio users were permanent viewers) | Admins signed in with Google see every client page directly (D32) |
 
-The security model in one sentence: **Postgres RLS is the gate**. Every artist-page load runs one RPC as the signed-in user. RLS returns the artist only if the user's verified email is linked to it *right now*, so removing an email takes effect on the next load even though sessions never expire.
+The security model in one sentence: **Postgres RLS is the gate**. Every client-page load runs one RPC as the signed-in user. RLS returns the client only if the user's verified email is linked to it *right now*, so removing an email takes effect on the next load even though sessions never expire.
 
 ---
 
@@ -45,27 +45,27 @@ GET /lil-example
        ├─ getClaims() refreshes the Supabase session, re-sets 400-day cookies
        └─ no claims and path not in ['/', '/login*', '/auth*'] → 307 /login?next=/lil-example
   └─ app/(site)/[slug]/page.tsx  (instant = false)
-       └─ loadArtistPage(slug) (React cache(), shared with generateMetadata)
+       └─ loadClientPage(slug) (React cache(), shared with generateMetadata)
             ├─ supabase.auth.getUser()        → no user → redirect /login
-            ├─ resolveArtistAccess(slug,user) → lib/access.ts
-            │    └─ sanityFetch(ACCESS_QUERY)  ('use cache', cacheLife max, tags artist/website)
-            │    └─ decideAccess(): permanent viewers ∪ internal viewers ∪ artist.allowedEmails
+            ├─ resolveClientAccess(slug,user) → lib/access.ts
+            │    └─ sanityFetch(ACCESS_QUERY)  ('use cache', cacheLife max, tags client/website)
+            │    └─ decideAccess(): permanent viewers ∪ internal viewers ∪ client.allowedEmails
             ├─ denied   → notFound() → [slug]/not-found.tsx → <NoAccess/> (200 under PPR, see D15)
             ├─ redirect → previous slug → redirect(/canonical)
-            └─ granted  → getArtistPage(artistId) (lib/sanity/page.ts: override REPLACES website.resources)
-  └─ <ViewModeProvider><PageShell fullscreen artistName><ResourceViews/></PageShell></ViewModeProvider>
+            └─ granted  → getClientPage(clientId) (lib/sanity/page.ts: override REPLACES website.resources)
+  └─ <ViewModeProvider><PageShell fullscreen clientName><ResourceViews/></PageShell></ViewModeProvider>
 ```
 
 ### 1.2 Sign-in today
 
-- `app/(site)/login/actions.ts` `sendMagicLink`: returns `{sentTo}` immediately. In `after()` it checks `canSignIn(email)` (approved on **any** artist) and calls `signInWithOtp` with the stateless client (`lib/supabase/stateless.ts`, implicit flow, token-hash links).
+- `app/(site)/login/actions.ts` `sendMagicLink`: returns `{sentTo}` immediately. In `after()` it checks `canSignIn(email)` (approved on **any** client) and calls `signInWithOtp` with the stateless client (`lib/supabase/stateless.ts`, implicit flow, token-hash links).
 - `signInWithGoogle`: a server action with the PKCE verifier cookie set by `Set-Cookie` (D21). `/auth/callback` signs out unapproved Google accounts (D20).
 - `/auth/confirm` is a page with a **Continue** button (D18, against email scanners). `confirmSignIn` calls `verifyOtp({type:'email', token_hash})`.
 - Sessions never expire: no Supabase time-box or inactivity timeout, plus `@supabase/ssr` 400-day cookies refreshed by the proxy (D11). There's no browser Supabase client (D21).
 
 ### 1.3 UI today
 
-- `PageShell` → `Header` (greeting `"{artist} | Welcome to Vydia"`, a view toggle when inside `ViewModeProvider`) + `Footer`.
+- `PageShell` → `Header` (greeting `"{client} | Welcome to Vydia"`, a view toggle when inside `ViewModeProvider`) + `Footer`.
 - `ResourceViews` → `ResourceCarousel` (3D cover-flow on a native scroll-snap container, with inertia, drag, trackpad and backdrop crossfade) or `ResourceGrid` (flat `<ul>`). View switches use View Transitions keyed on `data-morph-id={resource._id}` (`ViewMode.tsx`).
 - Cards: `ResourceCard` → `<a target=_blank>` for pdf/link/slides, `VideoCard` (`<dialog>` + `<video>`) for video. `CardCover` uses the Sanity image builder (`urlFor`, `coverSource` for crop/hotspot) and the Sanity `lqip`. The fallback is a branded tile.
 - Styling: CSS Modules + tokens in `app/(site)/globals.css` (D12, no Tailwind).
@@ -83,27 +83,27 @@ GET /lil-example
 | # | Decision | Why |
 |---|---|---|
 | D23 | **Supabase is the only runtime data source.** Sanity is read once by `scripts/migrate-sanity.ts`, then the Sanity packages and Studio are removed. `sanity/schema.json` stays in the repo as the frozen field contract. | Spec: "The app reads Sanity once, for the migration, and never at runtime" and "`/sanity/schema.json` is the source of truth". |
-| D24 | **RLS is the access gate. Artist data is read with the visitor's own JWT, never with a privileged key.** One `security invoker` RPC (`get_artist_page`) returns the artist plus visible resources, or `null`. | "Enforced with Supabase RLS, not just in the UI." The query sees the live `artist_emails` rows on every request. |
-| D25 | **No server-side caching of artist data.** Drop `'use cache'`, `cacheTag`, and the revalidate webhook. | Cached data can't depend on the caller's JWT (`'use cache'` can't read cookies), and "changes apply to every artist immediately". At this scale one indexed RPC per load is cheap. |
-| D26 | **One `resources` table for main and exclusive resources.** `artist_id IS NULL` means main, otherwise exclusive to that artist. Hides go in `artist_hidden_resources`. | One shape maps 1:1 to the Sanity `resource` type, and one query renders the page. A check trigger keeps hides pointing only at main resources. |
+| D24 | **RLS is the access gate. Client data is read with the visitor's own JWT, never with a privileged key.** One `security invoker` RPC (`get_client_page`) returns the client plus visible resources, or `null`. | "Enforced with Supabase RLS, not just in the UI." The query sees the live `client_emails` rows on every request. |
+| D25 | **No server-side caching of client data.** Drop `'use cache'`, `cacheTag`, and the revalidate webhook. | Cached data can't depend on the caller's JWT (`'use cache'` can't read cookies), and "changes apply to every client immediately". At this scale one indexed RPC per load is cheap. |
+| D26 | **One `resources` table for main and exclusive resources.** `client_id IS NULL` means main, otherwise exclusive to that client. Hides go in `client_hidden_resources`. | One shape maps 1:1 to the Sanity `resource` type, and one query renders the page. A check trigger keeps hides pointing only at main resources. |
 | D27 | **Field names: Sanity's camelCase names are canonical.** TS domain types use them exactly (`coverImage`, `pdfPreview`, `addedOn`, `sortOrder`). Postgres uses the snake_case spelling of the same name (`cover_image`, …). One mapping table, plus a unit test that reads `sanity/schema.json` to enforce it. | Unquoted Postgres identifiers fold to lowercase (`coverImage` → `coverimage`), so a literal camelCase column would need quoting everywhere. A mechanical, tested mapping keeps "same names" without that cost. |
 | D28 | **The Sanity schema gains `category` (required string) and `sortOrder` (integer) first**, before the migration. `schema.json` is re-extracted. | Spec: "add it to the Sanity schema first so the 1:1 mapping holds". |
 | D29 | **The sign-in pre-check runs with a server-only secret key** (`SUPABASE_SECRET_KEY`, used only in `lib/supabase/service.ts`) through a `security definer` RPC that isn't granted to `anon`/`authenticated`. | If the publishable key could call `email_can_access_slug`, anyone could probe *email × slug* pairs straight against PostgREST and skip our rate limit. This **reverses** iteration one's "the app never reads the service key". |
-| D30 | **A "Before User Created" auth hook (Postgres function) blocks self-signup at the source.** Email-provider users are created only if the email is on some artist and isn't an admin. Google users only if listed in `admins`. | Success state: "no user is created in Supabase" for unapproved emails, and "a non-admin Google account is rejected". This replaces D20's sign-in-then-sign-out. |
+| D30 | **A "Before User Created" auth hook (Postgres function) blocks self-signup at the source.** Email-provider users are created only if the email is on some client and isn't an admin. Google users only if listed in `admins`. | Success state: "no user is created in Supabase" for unapproved emails, and "a non-admin Google account is rejected". This replaces D20's sign-in-then-sign-out. |
 | D31 | **`is_admin()` requires an OAuth (`amr` method `oauth`) session plus a row in `admins` plus `@vydia.com`.** Magic-link requests for admin emails are refused. | "Admins sign in only with Google SSO." Supabase auto-links identities by email, so without the `amr` check a magic-link session for an admin address would carry admin rights. |
-| D32 | **Admins see every artist page directly** while signed in with Google. `can_view_artist()` and `resources_read` include `is_admin()`, so `/[slug]` renders the resources page for them, and the admin detail page links to it ("Open page"). | **Owner decision.** It replaces the old permanent/internal viewers for label services, and no separate preview route is needed. **Re-confirmed:** admins reach artist pages with a Google session only. A magic-link session for an admin address is never admin and the sign-in flow keeps refusing admin addresses. A token refresh keeps the original sign-in method in `amr` (tested across two refreshes), so a Google session stays admin. |
-| D33 | **The email link signs in directly. This reverses D18.** `/auth/confirm` becomes a GET route handler: `verifyOtp({token_hash})` → session cookies → redirect to `/[slug]`. The Continue page and its server action are deleted. Any failure redirects to "This link has expired". Links are still verified by `token_hash` (D19), so they work in any browser. | **Owner decision**, matching the spec's "Artist clicks the magic link → session is created → redirected". Accepted trade-off: an email security scanner that opens links (Outlook Safe Links, Mimecast) can spend the single-use token first, and the artist then sees the expired screen and requests a new link (§16). |
+| D32 | **Admins see every client page directly** while signed in with Google. `can_view_client()` and `resources_read` include `is_admin()`, so `/[slug]` renders the resources page for them, and the admin detail page links to it ("Open page"). | **Owner decision.** It replaces the old permanent/internal viewers for label services, and no separate preview route is needed. **Re-confirmed:** admins reach client pages with a Google session only. A magic-link session for an admin address is never admin and the sign-in flow keeps refusing admin addresses. A token refresh keeps the original sign-in method in `amr` (tested across two refreshes), so a Google session stays admin. |
+| D33 | **The email link signs in directly. This reverses D18.** `/auth/confirm` becomes a GET route handler: `verifyOtp({token_hash})` → session cookies → redirect to `/[slug]`. The Continue page and its server action are deleted. Any failure redirects to "This link has expired". Links are still verified by `token_hash` (D19), so they work in any browser. | **Owner decision**, matching the spec's "Client clicks the magic link → session is created → redirected". Accepted trade-off: an email security scanner that opens links (Outlook Safe Links, Mimecast) can spend the single-use token first, and the client then sees the expired screen and requests a new link (§16). |
 | D34 | **Rate-limit `sendLink`** per IP (20 per 10 min) and per email (one send per 60 s), in a `private` schema that only the secret key can reach. | The form now tells you whether an email is approved for a slug, by design. That makes it a pair-probing oracle unless it's throttled. The 60 s per-email cooldown is a business rule. |
-| D35 | **Files go in a private bucket (`resource-files`) and are served through `/api/resources/[id]/file`.** That route checks RLS with the visitor's JWT, then 302s to a 1-hour signed URL. **Images go in a public bucket (`resource-images`)** under unguessable UUID paths, for main **and** exclusive resources. | Exclusive PDFs and decks must never reach other artists. Cover images have to work with `next/image` (its optimizer fetches without cookies). **Owner decision:** a public but unguessable image URL is acceptable, including covers and PDF first-page previews of exclusive resources. |
+| D35 | **Files go in a private bucket (`resource-files`) and are served through `/api/resources/[id]/file`.** That route checks RLS with the visitor's JWT, then 302s to a 1-hour signed URL. **Images go in a public bucket (`resource-images`)** under unguessable UUID paths, for main **and** exclusive resources. | Exclusive PDFs and decks must never reach other clients. Cover images have to work with `next/image` (its optimizer fetches without cookies). **Owner decision:** a public but unguessable image URL is acceptable, including covers and PDF first-page previews of exclusive resources. |
 | D36 | **Uploads go straight from the admin's browser to Storage via signed upload URLs.** The URL is issued by an admin-checked server action. | Server Actions cap request bodies at 1 MB and Vercel functions at about 4.5 MB, and videos are far larger. |
-| D37 | **Create *and* edit both save through one transactional RPC, `save_artist(payload jsonb)`.** It upserts the artist and replaces its emails, hides, and exclusive resources. | Spec: the create is "all or nothing (RPC)". The edit screen also has a single **Save**, so the same atomicity applies there. |
+| D37 | **Create *and* edit both save through one transactional RPC, `save_client(payload jsonb)`.** It upserts the client and replaces its emails, hides, and exclusive resources. | Spec: the create is "all or nothing (RPC)". The edit screen also has a single **Save**, so the same atomicity applies there. |
 | D38 | **Categories are normalized on write.** A trigger reuses the existing spelling when a new category matches one case-insensitively, and the UI groups by `lower(trim(category))` too. | "getting started" and "Getting Started" group together, and every page shows one canonical label. |
-| D39 | **Orphaned storage objects are queued by a DB trigger and removed by the server action** after a successful save or delete. | It runs on cascades (artist delete) and on file replacement without extra bookkeeping in each action. |
+| D39 | **Orphaned storage objects are queued by a DB trigger and removed by the server action** after a successful save or delete. | It runs on cascades (client delete) and on file replacement without extra bookkeeping in each action. |
 | D40 | **`zod` (v4) validates every action payload and the migration input.** It shares the same rules as the DB checks. | Server actions are public endpoints. Field errors come back to the form before Postgres raises. |
-| D41 | **Per-artist additional info (`additionalInfo`) is dropped.** There's no column, no admin field, and nothing under the grid. `RichText`, `@portabletext/react`, and the grid's `additionalInfo` slot are deleted. The migration doesn't read it. | **Owner decision.** It isn't in the spec. |
+| D41 | **Per-client additional info (`additionalInfo`) is dropped.** There's no column, no admin field, and nothing under the grid. `RichText`, `@portabletext/react`, and the grid's `additionalInfo` slot are deleted. The migration doesn't read it. | **Owner decision.** It isn't in the spec. |
 | D42 | **Covers keep today's blur-up style.** Each image stores its LQIP (a tiny base64 JPEG like Sanity's `metadata.lqip`) in `cover_image_lqip` / `pdf_preview_lqip`. The migration copies Sanity's LQIP as-is. Admin uploads generate it in the browser. `CardCover` keeps `placeholder="blur"` and the carousel backdrop keeps its instant placeholder layer. | **Owner decision:** the style should be the same. These are asset-metadata columns (Sanity keeps LQIP on the asset, not the document), so the field contract (§5) is unchanged. |
 | D43 | **Abandoned uploads are cleaned by a manual sweep** (`npm run storage:sweep`, dry run by default). Deletes and replacements are already cleaned automatically (D39). | **Owner decision.** No cron job needed at this volume. |
-| D44 | **`labelservices@vydia.com` and `creativeservices@vydia.com` are both seeded into `admins`** by the migration. Individuals (e.g. `mason.omara@`, `erica.johnson@`) are added by hand in the table editor. | **Owner decision.** They were permanent viewers in iteration one. As admins they keep seeing every artist page (D32) and can also edit. They must be real Google Workspace accounts to sign in. |
+| D44 | **`labelservices@vydia.com` and `creativeservices@vydia.com` are both seeded into `admins`** by the migration. Individuals (e.g. `mason.omara@`, `erica.johnson@`) are added by hand in the table editor. | **Owner decision.** They were permanent viewers in iteration one. As admins they keep seeing every client page (D32) and can also edit. They must be real Google Workspace accounts to sign in. |
 
 ---
 
@@ -120,10 +120,10 @@ GET /lil-example
 | `/api/resources/[id]/file` | route handler | RLS | 302 to a signed URL, 404 otherwise |
 | `/admin/login` | page | public | **Sign in with Google**, `?error=no-access` → "You don't have access." |
 | `/admin/auth/callback` | route handler | public | PKCE exchange → `claim_admin_profile()` → `/admin` or sign out |
-| `/admin/auth/signout` | route handler (POST) | admin | Admin-only sign-out (artists have none) |
-| `/admin` | page | admin | Artist index |
-| `/admin/artists/new` | page | admin | New artist form |
-| `/admin/artists/[id]` | page | admin | Welcome link + Copy, edit form, Delete |
+| `/admin/auth/signout` | route handler (POST) | admin | Admin-only sign-out (clients have none) |
+| `/admin` | page | admin | Client index |
+| `/admin/clients/new` | page | admin | New client form |
+| `/admin/clients/[id]` | page | admin | Welcome link + Copy, edit form, Delete |
 | `/admin/resources` | page | admin | Main resources by category, CRUD, drag to reorder |
 
 ### 3.2 Directory layout
@@ -143,22 +143,22 @@ app/
     admin/login/{page.tsx,actions.ts}
     admin/auth/callback/route.ts
     admin/auth/signout/route.ts
-    admin/(panel)/layout.tsx      requireAdmin() + nav (Artists, Resources) + avatar
-    admin/(panel)/page.tsx        artist index
-    admin/(panel)/artists/new/page.tsx
-    admin/(panel)/artists/[id]/page.tsx
-    admin/(panel)/artists/actions.ts
+    admin/(panel)/layout.tsx      requireAdmin() + nav (Clients, Resources) + avatar
+    admin/(panel)/page.tsx        client index
+    admin/(panel)/clients/new/page.tsx
+    admin/(panel)/clients/[id]/page.tsx
+    admin/(panel)/clients/actions.ts
     admin/(panel)/resources/page.tsx
     admin/(panel)/resources/actions.ts
     admin/(panel)/uploads/actions.ts
   api/resources/[id]/file/route.ts
-components/                       artist-side components (existing)
-components/admin/                 ArtistForm, EmailRows, MainResourcePicker, ResourceEditor,
+components/                       client-side components (existing)
+components/admin/                 ClientForm, EmailRows, MainResourcePicker, ResourceEditor,
                                   CategoryInput, SortableResourceList, CopyLinkButton, ConfirmDialog
 lib/
   supabase/{server,proxy,stateless,service,database.types}.ts
   resources/{types,mapping,group,schema}.ts
-  artist-page.ts                  getArtistPage() (server-only)
+  client-page.ts                  getClientPage() (server-only)
   admin/{auth,storage,upload}.ts
   validation.ts                   zod schemas shared by actions + migration
   slug.ts, email.ts, env.ts, form.ts, safe-redirect.ts, greeting.ts, cx.ts, format.ts
@@ -173,21 +173,21 @@ scripts/
 sanity/schema.json                frozen contract (kept)
 ```
 
-Two root layouts (`(site)` and `(admin)`) are fine: Next does a full page load when you cross them, and admin CSS never leaks into the artist pages. The static `admin` segment wins over `[slug]`, and `admin` is already in `RESERVED_SLUGS`.
+Two root layouts (`(site)` and `(admin)`) are fine: Next does a full page load when you cross them, and admin CSS never leaks into the client pages. The static `admin` segment wins over `[slug]`, and `admin` is already in `RESERVED_SLUGS`.
 
-### 3.3 Artist request flow (new)
+### 3.3 Client request flow (new)
 
 ```
 GET /lil-example
-  └─ proxy: updateSession() refreshes cookies. Artist paths are NEVER redirected.
-  └─ [slug]/page.tsx → getArtistPage('lil-example')    (React cache, shared with metadata)
+  └─ proxy: updateSession() refreshes cookies. Client paths are NEVER redirected.
+  └─ [slug]/page.tsx → getClientPage('lil-example')    (React cache, shared with metadata)
        ├─ slug fails SLUG_PATTERN / reserved     → null
        ├─ no claims (signed out)                 → null
-       └─ rpc('get_artist_page', {p_slug})        (security invoker → RLS)
-             ├─ artist row invisible (unknown / deleted / renamed / not linked) → null
-             └─ {artist:{id,name}, resources:[...main − hidden..., ...exclusive...]}
+       └─ rpc('get_client_page', {p_slug})        (security invoker → RLS)
+             ├─ client row invisible (unknown / deleted / renamed / not linked) → null
+             └─ {client:{id,name}, resources:[...main − hidden..., ...exclusive...]}
   ├─ null   → <PageShell><EnterEmail slug/></PageShell>     title "Welcome to Vydia"
-  └─ page   → <ViewModeProvider><PageShell artistName><ResourceViews groups/></…>
+  └─ page   → <ViewModeProvider><PageShell clientName><ResourceViews groups/></…>
 
 POST (server action sendLink {email, slug})
   ├─ invalid email                          → {status:'invalid'}
@@ -207,9 +207,9 @@ Email → GET /auth/confirm?token_hash…&redirect_to=https://welcometovydia.com
 
 `supabase/migrations/20261109212557_iteration_two.sql` is the source of truth. The SQL in this section was the design; building and testing it found the following changes, which the migration has and the snippets below don't:
 
-- `resources_read` calls a new `security definer` function, `can_view_main_resource(id)`. The inline `artist_emails` subquery shown in §4.4 would have hidden every main resource from artist users.
+- `resources_read` calls a new `security definer` function, `can_view_main_resource(id)`. The inline `client_emails` subquery shown in §4.4 would have hidden every main resource from client users.
 - `private.queue_resource_garbage` is `security definer` (§4.2).
-- `save_artist` deletes with `not exists` instead of `not in`, and rejects a payload with a missing email or resource id (§4.6).
+- `save_client` deletes with `not exists` instead of `not in`, and rejects a payload with a missing email or resource id (§4.6).
 - Every function is explicitly revoked from `public` and `anon` before it is granted to the roles that need it, and `is_admin()` coalesces a null email to false.
 - Config changes (like the auth hook) need `supabase stop && supabase start`, not `db reset`.
 
@@ -235,7 +235,7 @@ create table public.admins (
 );
 comment on table public.admins is 'Managed by hand in the Supabase table editor. Add the email; name/avatar fill in on first Google sign-in.';
 
-create table public.artists (
+create table public.clients (
   id         uuid primary key default gen_random_uuid(),
   name       text not null check (char_length(btrim(name)) between 1 and 100),
   slug       text not null unique
@@ -248,21 +248,21 @@ create table public.artists (
   updated_at timestamptz not null default now()
 );
 
-create table public.artist_emails (
+create table public.client_emails (
   id         uuid primary key default gen_random_uuid(),
-  artist_id  uuid not null references public.artists (id) on delete cascade,
+  client_id  uuid not null references public.clients (id) on delete cascade,
   email      public.email_address not null,
   label      text,
   is_primary boolean not null default false,
   created_at timestamptz not null default now(),
-  unique (artist_id, email)
+  unique (client_id, email)
 );
-create unique index artist_emails_one_primary on public.artist_emails (artist_id) where is_primary;
-create index artist_emails_email on public.artist_emails (email);
+create unique index client_emails_one_primary on public.client_emails (client_id) where is_primary;
+create index client_emails_email on public.client_emails (email);
 
 create table public.resources (
   id                  uuid primary key default gen_random_uuid(),
-  artist_id           uuid references public.artists (id) on delete cascade,  -- null = main resource
+  client_id           uuid references public.clients (id) on delete cascade,  -- null = main resource
   title               text not null check (char_length(btrim(title)) between 1 and 120),
   type                public.resource_type not null,
   file                text,   -- object path in bucket resource-files
@@ -289,14 +289,14 @@ create table public.resources (
   ),
   constraint resources_preview_only_pdf check (pdf_preview is null or type = 'pdf')
 );
-create index resources_main_order on public.resources (sort_order) where artist_id is null;
-create index resources_artist on public.resources (artist_id, sort_order) where artist_id is not null;
+create index resources_main_order on public.resources (sort_order) where client_id is null;
+create index resources_client on public.resources (client_id, sort_order) where client_id is not null;
 create index resources_category_key on public.resources (lower(category));
 
-create table public.artist_hidden_resources (
-  artist_id   uuid not null references public.artists (id) on delete cascade,
+create table public.client_hidden_resources (
+  client_id   uuid not null references public.clients (id) on delete cascade,
   resource_id uuid not null references public.resources (id) on delete cascade,
-  primary key (artist_id, resource_id)
+  primary key (client_id, resource_id)
 );
 
 -- D44: the two shared inboxes are admins from day one. Everyone else is added by hand in the table editor.
@@ -314,7 +314,7 @@ create schema if not exists private;  -- not exposed through PostgREST
 -- updated_at
 create or replace function private.touch_updated_at() returns trigger language plpgsql as $$
 begin new.updated_at := now(); return new; end $$;
-create trigger artists_touch   before update on public.artists   for each row execute function private.touch_updated_at();
+create trigger clients_touch   before update on public.clients   for each row execute function private.touch_updated_at();
 create trigger resources_touch before update on public.resources for each row execute function private.touch_updated_at();
 
 -- D38: reuse the existing spelling of a category that matches case-insensitively.
@@ -338,7 +338,7 @@ create or replace function private.default_sort_order() returns trigger language
 begin
   if new.sort_order = 0 then
     select coalesce(max(sort_order), 0) + 1 into new.sort_order
-      from public.resources where artist_id is not distinct from new.artist_id;
+      from public.resources where client_id is not distinct from new.client_id;
   end if;
   return new;
 end $$;
@@ -348,12 +348,12 @@ create trigger resources_sort before insert on public.resources
 -- Hides may only point at main resources.
 create or replace function private.check_hide_target() returns trigger language plpgsql as $$
 begin
-  if exists (select 1 from public.resources where id = new.resource_id and artist_id is not null) then
+  if exists (select 1 from public.resources where id = new.resource_id and client_id is not null) then
     raise exception 'Only main resources can be hidden' using errcode = '23514';
   end if;
   return new;
 end $$;
-create trigger hides_main_only before insert or update on public.artist_hidden_resources
+create trigger hides_main_only before insert or update on public.client_hidden_resources
   for each row execute function private.check_hide_target();
 
 -- D39: queue storage objects that are no longer referenced.
@@ -380,7 +380,7 @@ create trigger resources_garbage after update or delete on public.resources
   for each row execute function private.queue_resource_garbage();
 ```
 
-Row-level triggers also fire for rows removed by `on delete cascade`, so deleting an artist queues all of its exclusive files.
+Row-level triggers also fire for rows removed by `on delete cascade`, so deleting a client queues all of its exclusive files.
 
 ### 4.3 Identity helpers
 
@@ -401,24 +401,24 @@ language sql stable security definer set search_path = '' as $$
      )
 $$;
 
-create or replace function public.can_view_artist(target uuid) returns boolean
+create or replace function public.can_view_client(target uuid) returns boolean
 language sql stable security definer set search_path = '' as $$
   select public.is_admin()
-      or exists (select 1 from public.artist_emails ae
-                  where ae.artist_id = target and ae.email = public.jwt_email())
+      or exists (select 1 from public.client_emails ae
+                  where ae.client_id = target and ae.email = public.jwt_email())
 $$;
 ```
 
-`auth.jwt() ->> 'email'` only holds an email the user has verified: the magic link or Google proved it. Access is still computed from `artist_emails` at query time. The session only says *who* you are, never *what you can see*.
+`auth.jwt() ->> 'email'` only holds an email the user has verified: the magic link or Google proved it. Access is still computed from `client_emails` at query time. The session only says *who* you are, never *what you can see*.
 
 ### 4.4 Row Level Security
 
 ```sql
 alter table public.admins                  enable row level security;
-alter table public.artists                 enable row level security;
-alter table public.artist_emails           enable row level security;
+alter table public.clients                 enable row level security;
+alter table public.client_emails           enable row level security;
 alter table public.resources               enable row level security;
-alter table public.artist_hidden_resources enable row level security;
+alter table public.client_hidden_resources enable row level security;
 
 revoke all on all tables in schema public from anon;
 
@@ -426,29 +426,29 @@ revoke all on all tables in schema public from anon;
 create policy admins_self on public.admins for select to authenticated
   using (email = public.jwt_email() and public.is_admin());
 
--- artists
-create policy artists_read on public.artists for select to authenticated
-  using (public.can_view_artist(id));
-create policy artists_insert on public.artists for insert to authenticated with check (public.is_admin());
-create policy artists_update on public.artists for update to authenticated
+-- clients
+create policy clients_read on public.clients for select to authenticated
+  using (public.can_view_client(id));
+create policy clients_insert on public.clients for insert to authenticated with check (public.is_admin());
+create policy clients_update on public.clients for update to authenticated
   using (public.is_admin()) with check (public.is_admin());
-create policy artists_delete on public.artists for delete to authenticated using (public.is_admin());
+create policy clients_delete on public.clients for delete to authenticated using (public.is_admin());
 
--- artist_emails: artist users never read the list (their page never shows emails).
-create policy emails_admin_all on public.artist_emails for all to authenticated
+-- client_emails: client users never read the list (their page never shows emails).
+create policy emails_admin_all on public.client_emails for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
 
 -- resources
 create policy resources_read on public.resources for select to authenticated using (
   public.is_admin()
-  -- exclusive: only the owning artist's people
-  or (artist_id is not null and public.can_view_artist(artist_id))
-  -- main: visible if at least one of *your* artists doesn't hide it
-  or (artist_id is null and exists (
-        select 1 from public.artist_emails ae
+  -- exclusive: only the owning client's people
+  or (client_id is not null and public.can_view_client(client_id))
+  -- main: visible if at least one of *your* clients doesn't hide it
+  or (client_id is null and exists (
+        select 1 from public.client_emails ae
          where ae.email = public.jwt_email()
-           and not exists (select 1 from public.artist_hidden_resources h
-                            where h.artist_id = ae.artist_id and h.resource_id = resources.id)))
+           and not exists (select 1 from public.client_hidden_resources h
+                            where h.client_id = ae.client_id and h.resource_id = resources.id)))
 );
 create policy resources_insert on public.resources for insert to authenticated with check (public.is_admin());
 create policy resources_update on public.resources for update to authenticated
@@ -456,42 +456,42 @@ create policy resources_update on public.resources for update to authenticated
 create policy resources_delete on public.resources for delete to authenticated using (public.is_admin());
 
 -- hides
-create policy hides_read on public.artist_hidden_resources for select to authenticated
-  using (public.can_view_artist(artist_id));
-create policy hides_admin_write on public.artist_hidden_resources for all to authenticated
+create policy hides_read on public.client_hidden_resources for select to authenticated
+  using (public.can_view_client(client_id));
+create policy hides_admin_write on public.client_hidden_resources for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
 ```
 
-Someone linked only to Artist A, using the publishable key and their own JWT straight against PostgREST, gets: A's row, A's exclusives, and every main resource A doesn't hide. They don't get B's name, B's exclusives, or any email list. That matches "An artist user can read only the artists their email is attached to, and only those artists' resources."
+Someone linked only to Client A, using the publishable key and their own JWT straight against PostgREST, gets: A's row, A's exclusives, and every main resource A doesn't hide. They don't get B's name, B's exclusives, or any email list. That matches "A client user can read only the clients their email is attached to, and only those clients' resources."
 
 ### 4.5 RPCs
 
 ```sql
--- Artist page in one round trip. security INVOKER: RLS decides; no access ⇒ null.
-create or replace function public.get_artist_page(p_slug text) returns jsonb
+-- Client page in one round trip. security INVOKER: RLS decides; no access ⇒ null.
+create or replace function public.get_client_page(p_slug text) returns jsonb
 language sql stable security invoker set search_path = '' as $$
   select jsonb_build_object(
-    'artist', jsonb_build_object('id', a.id, 'name', a.name),
+    'client', jsonb_build_object('id', a.id, 'name', a.name),
     'resources', coalesce((
-      select jsonb_agg(to_jsonb(r) order by (r.artist_id is not null), r.sort_order, r.added_on, r.id)
+      select jsonb_agg(to_jsonb(r) order by (r.client_id is not null), r.sort_order, r.added_on, r.id)
         from public.resources r
-       where (r.artist_id = a.id)
-          or (r.artist_id is null and not exists (
-                select 1 from public.artist_hidden_resources h
-                 where h.artist_id = a.id and h.resource_id = r.id))
+       where (r.client_id = a.id)
+          or (r.client_id is null and not exists (
+                select 1 from public.client_hidden_resources h
+                 where h.client_id = a.id and h.resource_id = r.id))
     ), '[]'::jsonb))
-  from public.artists a
+  from public.clients a
   where a.slug = lower(btrim(p_slug))
 $$;
-revoke execute on function public.get_artist_page(text) from public, anon;
-grant  execute on function public.get_artist_page(text) to authenticated;
+revoke execute on function public.get_client_page(text) from public, anon;
+grant  execute on function public.get_client_page(text) to authenticated;
 
 -- Sign-in pre-check (D29). Never granted to anon/authenticated.
 create or replace function public.email_can_access_slug(p_slug text, p_email text) returns boolean
 language sql stable security definer set search_path = '' as $$
   select exists (
-           select 1 from public.artists a
-             join public.artist_emails ae on ae.artist_id = a.id
+           select 1 from public.clients a
+             join public.client_emails ae on ae.client_id = a.id
             where a.slug = lower(btrim(p_slug)) and ae.email = lower(btrim(p_email)))
      and not exists (select 1 from public.admins ad where ad.email = lower(btrim(p_email)))
 $$;
@@ -549,7 +549,7 @@ begin
   if not public.is_admin() then raise exception 'not authorized' using errcode = '42501'; end if;
   update public.resources r set sort_order = o.ord
     from unnest(ids) with ordinality as o(id, ord)
-   where r.id = o.id and r.artist_id is null;
+   where r.id = o.id and r.client_id is null;
 end $$;
 grant execute on function public.reorder_main_resources(uuid[]) to authenticated;
 
@@ -563,12 +563,12 @@ end $$;
 grant execute on function public.take_storage_garbage() to authenticated;
 ```
 
-### 4.6 `save_artist` (create + edit, all or nothing)
+### 4.6 `save_client` (create + edit, all or nothing)
 
 The payload uses the app's camelCase names, already validated by zod (§9.4). The RPC re-checks the invariants that can't be skipped.
 
 ```sql
-create or replace function public.save_artist(payload jsonb) returns uuid
+create or replace function public.save_client(payload jsonb) returns uuid
 language plpgsql volatile security invoker set search_path = '' as $$
 declare
   v_id      uuid := nullif(payload ->> 'id', '')::uuid;
@@ -582,42 +582,42 @@ begin
     raise exception 'exactly one primary email is required' using errcode = '23514';
   end if;
   if (select count(*) <> count(distinct lower(btrim(e ->> 'email'))) from jsonb_array_elements(v_emails) e) then
-    raise exception 'duplicate email' using errcode = '23505', constraint = 'artist_emails_artist_id_email_key';
+    raise exception 'duplicate email' using errcode = '23505', constraint = 'client_emails_client_id_email_key';
   end if;
 
-  -- 1. artist
+  -- 1. client
   if v_id is null then
-    insert into public.artists (name, slug, created_by)
+    insert into public.clients (name, slug, created_by)
     values (btrim(payload ->> 'name'), payload ->> 'slug', auth.uid())
     returning id into v_id;
   else
-    update public.artists set name = btrim(payload ->> 'name'), slug = payload ->> 'slug' where id = v_id;
-    if not found then raise exception 'artist not found' using errcode = 'P0002'; end if;
+    update public.clients set name = btrim(payload ->> 'name'), slug = payload ->> 'slug' where id = v_id;
+    if not found then raise exception 'client not found' using errcode = 'P0002'; end if;
   end if;
 
   -- 2. emails: replace the set. Clear primaries first so the partial unique index can't trip mid-statement.
-  delete from public.artist_emails
-   where artist_id = v_id
+  delete from public.client_emails
+   where client_id = v_id
      and email not in (select lower(btrim(e ->> 'email')) from jsonb_array_elements(v_emails) e);
-  update public.artist_emails set is_primary = false where artist_id = v_id;
-  insert into public.artist_emails (artist_id, email, label, is_primary)
+  update public.client_emails set is_primary = false where client_id = v_id;
+  insert into public.client_emails (client_id, email, label, is_primary)
   select v_id, lower(btrim(e ->> 'email')), nullif(btrim(e ->> 'label'), ''), (e ->> 'isPrimary')::boolean
     from jsonb_array_elements(v_emails) e
-  on conflict (artist_id, email) do update set label = excluded.label, is_primary = excluded.is_primary;
+  on conflict (client_id, email) do update set label = excluded.label, is_primary = excluded.is_primary;
 
   -- 3. hides: replace the set (the trigger rejects non-main ids).
-  delete from public.artist_hidden_resources where artist_id = v_id;
-  insert into public.artist_hidden_resources (artist_id, resource_id)
+  delete from public.client_hidden_resources where client_id = v_id;
+  insert into public.client_hidden_resources (client_id, resource_id)
   select v_id, h::uuid from jsonb_array_elements_text(v_hidden) h
   on conflict do nothing;
 
   -- 4. exclusive resources: delete the removed ones, upsert the rest (ids are generated client-side, D36).
   delete from public.resources
-   where artist_id = v_id
+   where client_id = v_id
      and id not in (select (r ->> 'id')::uuid from jsonb_array_elements(v_excl) r);
 
   insert into public.resources as t
-    (id, artist_id, title, type, file, url, cover_image, cover_image_alt, cover_image_lqip,
+    (id, client_id, title, type, file, url, cover_image, cover_image_alt, cover_image_lqip,
      pdf_preview, pdf_preview_lqip, category, sort_order, added_on)
   select (r ->> 'id')::uuid, v_id, btrim(r ->> 'title'), (r ->> 'type')::public.resource_type,
          nullif(r ->> 'file', ''), nullif(r ->> 'url', ''), nullif(r ->> 'coverImage', ''),
@@ -631,14 +631,14 @@ begin
     cover_image_lqip = excluded.cover_image_lqip, pdf_preview = excluded.pdf_preview,
     pdf_preview_lqip = excluded.pdf_preview_lqip, category = excluded.category,
     sort_order = excluded.sort_order, added_on = excluded.added_on
-  where t.artist_id = v_id;   -- never lets an artist payload overwrite a main resource or another artist's row
+  where t.client_id = v_id;   -- never lets a client payload overwrite a main resource or another client's row
 
   return v_id;
 end $$;
-grant execute on function public.save_artist(jsonb) to authenticated;
+grant execute on function public.save_client(jsonb) to authenticated;
 ```
 
-**Delete artist** needs no RPC: `delete from artists where id = $1` under RLS cascades to emails, hides, and exclusives, and the garbage trigger queues their files. The slug is free to reuse right away.
+**Delete client** needs no RPC: `delete from clients where id = $1` under RLS cascades to emails, hides, and exclusives, and the garbage trigger queues their files. The slug is free to reuse right away.
 
 ### 4.7 Auth hook: no self-signup (D30)
 
@@ -662,7 +662,7 @@ begin
     return '{}'::jsonb;
   end if;
   if v_provider = 'email' and not v_is_admin
-     and exists (select 1 from public.artist_emails where email = v_email) then
+     and exists (select 1 from public.client_emails where email = v_email) then
     return '{}'::jsonb;
   end if;
   return jsonb_build_object('error', jsonb_build_object('http_code', 403, 'message', 'Not approved'));
@@ -673,9 +673,9 @@ grant execute on function public.hook_before_user_created(jsonb) to supabase_aut
 revoke execute on function public.hook_before_user_created(jsonb) from authenticated, anon, public;
 
 -- The hook runs as supabase_auth_admin, so that role needs read access (both indexed lookups, well under 2 s).
-grant select on public.admins, public.artist_emails to supabase_auth_admin;
+grant select on public.admins, public.client_emails to supabase_auth_admin;
 create policy admins_auth_hook on public.admins for select to supabase_auth_admin using (true);
-create policy artist_emails_auth_hook on public.artist_emails for select to supabase_auth_admin using (true);
+create policy client_emails_auth_hook on public.client_emails for select to supabase_auth_admin using (true);
 ```
 
 ```toml
@@ -696,16 +696,16 @@ On the hosted project, enable it under **Auth → Hooks → Before User Created 
 | V3 a non-admin Google account | **Not yet verified.** Needs a real non-admin Google account. The callback treats every failure as "You don’t have access." whatever Supabase sends back, so no code depends on the answer. |
 | V4 a listed admin signs in with Google | **Works** (done by the owner): the `admins` row gets `user_id`, `display_name`, `avatar_url`, and `last_sign_in_at`. |
 | V5 the `amr` method of a magic-link session | **`otp`.** The confirm route accepts `otp` or `magiclink`; `is_admin()` accepts only `oauth`. A token refresh keeps the original methods (tested across two refreshes). |
-| V6 which paths fire the sign-up hook | An admin-API `createUser` **bypasses** the hook (local stack). `generate_link` for an email already attached to an artist works on the hosted project (the e2e suite relies on it). The fixtures attach emails before users are created, so they pass either way. |
+| V6 which paths fire the sign-up hook | An admin-API `createUser` **bypasses** the hook (local stack). `generate_link` for an email already attached to a client works on the hosted project (the e2e suite relies on it). The fixtures attach emails before users are created, so they pass either way. |
 
 Nothing in the code needed to change because of these results: it already tolerates both answers to every open question.
 
 The docs left three things unspecified, so they were checked on the new project (§12.3):
-1. Which sign-up paths fire the hook: `signInWithOtp` with `shouldCreateUser`, Google OAuth, and admin `createUser`/`generate_link`. The plan assumes the first two do. The e2e fixtures attach emails to artists *before* creating users, so they pass either way.
+1. Which sign-up paths fire the hook: `signInWithOtp` with `shouldCreateUser`, Google OAuth, and admin `createUser`/`generate_link`. The plan assumes the first two do. The e2e fixtures attach emails to clients *before* creating users, so they pass either way.
 2. How a rejected Google sign-in reaches our redirect URL. `/admin/auth/callback` treats any request without a `code` as "You don't have access.", so the exact query parameters don't matter.
 3. Whether `signInWithOtp` sessions carry `amr` method `otp` or `magiclink`. Both are documented values, and the code accepts either (§7.5). `is_admin()` only accepts `oauth`.
 
-The hook only runs when a user is **created**. Existing users who've been removed from every artist can still get a link by calling the Auth API directly, but RLS shows them nothing, so all they reach is the Enter your email screen.
+The hook only runs when a user is **created**. Existing users who've been removed from every client can still get a link by calling the Auth API directly, but RLS shows them nothing, so all they reach is the Enter your email screen.
 
 ### 4.8 Storage buckets and policies
 
@@ -771,7 +771,7 @@ Label services then fill in **category** for every resource on Website → Resou
 | `addedOn` | datetime, required, default now | `added_on timestamptz not null default now()` | `addedOn: string` |
 | `category` *(new)* | string, required | `category text not null` | `category: string` |
 | `sortOrder` *(new)* | integer ≥ 0 | `sort_order integer not null` | `sortOrder: number` |
-| *(relationship)* | Sanity modelled this as `artist.resourceOverride[]` | `artist_id uuid null` (null = main) | `artistId: string \| null` |
+| *(relationship)* | Sanity modelled this as `client.resourceOverride[]` | `client_id uuid null` (null = main) | `clientId: string \| null` |
 
 `pdfPreview.source` is internal to Studio and isn't migrated. Sanity's `lqip` is asset metadata (`asset->metadata.lqip`), not a document field. It's carried over as the `*_lqip` columns so covers look the same (D42). Image dimensions aren't used by any component and aren't stored.
 
@@ -785,8 +785,8 @@ The spec says the schema wins over the sample data. Two samples disagree with it
 ```js
 // Main resource
 { title: "Vydia Dashboard Walkthrough", type: "video", file: "walkthrough.mp4", category: "Getting Started", coverImage: "walkthrough.jpg", sortOrder: 1 }
-// Exclusive resource (artist relationship + schema fields)
-{ artist: "lil-example", title: "Q1 Release Plan", type: "pdf", file: "q1-plan.pdf", category: "Your Releases" }
+// Exclusive resource (client relationship + schema fields)
+{ client: "lil-example", title: "Q1 Release Plan", type: "pdf", file: "q1-plan.pdf", category: "Your Releases" }
 ```
 
 Task 1.7 updates the spec doc to match.
@@ -808,7 +808,7 @@ export type Hotspot = {x: number; y: number}
 /** Field names match sanity/schema.json exactly (D27). */
 export type Resource = {
   id: string
-  artistId: string | null
+  clientId: string | null
   title: string
   type: ResourceType
   file: string | null
@@ -820,7 +820,7 @@ export type Resource = {
   addedOn: string
 }
 
-/** What the artist-side components render. Storage details are resolved on the server. */
+/** What the client-side components render. Storage details are resolved on the server. */
 export type ResourceCardData = {
   id: string
   title: string
@@ -863,7 +863,7 @@ export const publicImageUrl = (path: string) =>
 export function fromRow(row: Row): Resource {
   return {
     id: row.id,
-    artistId: row.artist_id,
+    clientId: row.client_id,
     title: row.title,
     type: row.type,
     file: row.file,
@@ -942,7 +942,7 @@ import type {Database} from './database.types'
 const secret = process.env.SUPABASE_SECRET_KEY
 if (!secret) throw new Error('Missing env var SUPABASE_SECRET_KEY')
 
-/** Only for email_can_access_slug, hit_rate_limit and claim_link_send. Never for reading artist data. */
+/** Only for email_can_access_slug, hit_rate_limit and claim_link_send. Never for reading client data. */
 export const createServiceClient = () =>
   createClient<Database>(SUPABASE_URL, secret, {
     auth: {persistSession: false, autoRefreshToken: false, detectSessionInUrl: false},
@@ -990,7 +990,7 @@ export async function updateSession(request: NextRequest) {
     response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie))
     return redirect
   }
-  // Artist paths are never redirected: /[slug] decides between resources and Enter your email.
+  // Client paths are never redirected: /[slug] decides between resources and Enter your email.
   return response
 }
 ```
@@ -1036,12 +1036,12 @@ export const normalizeEmail = (email: string) => email.trim().toLowerCase()
 
 ---
 
-## 7. Artist side
+## 7. Client side
 
 ### 7.1 Data access
 
 ```ts
-// lib/artist-page.ts
+// lib/client-page.ts
 import 'server-only'
 import {cache} from 'react'
 import {groupByCategory, type CategoryGroup} from '@/lib/resources/group'
@@ -1051,13 +1051,13 @@ import {isValidSlug, normalizeSlug} from '@/lib/slug'
 import type {Database} from '@/lib/supabase/database.types'
 import {createClient} from '@/lib/supabase/server'
 
-export type ArtistPage = {artistName: string; groups: CategoryGroup<ResourceCardData>[]}
+export type ClientPage = {clientName: string; groups: CategoryGroup<ResourceCardData>[]}
 
 /**
  * null for every "no access" case (signed out, unknown, deleted, renamed, not linked). Callers must not
  * branch on why. Shared by generateMetadata and the page, so each request runs the RPC once.
  */
-export const getArtistPage = cache(async (rawSlug: string): Promise<ArtistPage | null> => {
+export const getClientPage = cache(async (rawSlug: string): Promise<ClientPage | null> => {
   const slug = normalizeSlug(rawSlug)
   if (!isValidSlug(slug)) return null
 
@@ -1065,16 +1065,16 @@ export const getArtistPage = cache(async (rawSlug: string): Promise<ArtistPage |
   const {data: auth} = await supabase.auth.getClaims()
   if (!auth?.claims) return null
 
-  const {data, error} = await supabase.rpc('get_artist_page', {p_slug: slug})
+  const {data, error} = await supabase.rpc('get_client_page', {p_slug: slug})
   if (error) {
-    console.error('get_artist_page failed:', error.code)
+    console.error('get_client_page failed:', error.code)
     return null // fail closed: same screen as no access
   }
   if (!data) return null
 
-  const page = data as {artist: {id: string; name: string}; resources: Database['public']['Tables']['resources']['Row'][]}
+  const page = data as {client: {id: string; name: string}; resources: Database['public']['Tables']['resources']['Row'][]}
   const cards = page.resources.map(fromRow).map(toCard).filter((c): c is ResourceCardData => c !== null)
-  return {artistName: page.artist.name, groups: groupByCategory(cards)}
+  return {clientName: page.client.name, groups: groupByCategory(cards)}
 })
 ```
 
@@ -1104,7 +1104,7 @@ import type {Metadata} from 'next'
 import {PageShell} from '@/components/PageShell'
 import {ResourceViews} from '@/components/ResourceViews'
 import {ViewModeProvider} from '@/components/ViewMode'
-import {getArtistPage} from '@/lib/artist-page'
+import {getClientPage} from '@/lib/client-page'
 import {greeting} from '@/lib/greeting'
 import {normalizeSlug} from '@/lib/slug'
 import {EnterEmail} from './EnterEmail'
@@ -1112,14 +1112,14 @@ import {EnterEmail} from './EnterEmail'
 export const instant = false
 
 export async function generateMetadata({params}: PageProps<'/[slug]'>): Promise<Metadata> {
-  const page = await getArtistPage((await params).slug)
-  // No access ⇒ plain title: the artist's name must never appear (spec: "Never shows the artist's name").
-  return {title: greeting(page?.artistName), robots: {index: false, follow: false}}
+  const page = await getClientPage((await params).slug)
+  // No access ⇒ plain title: the client's name must never appear (spec: "Never shows the client's name").
+  return {title: greeting(page?.clientName), robots: {index: false, follow: false}}
 }
 
-export default async function ArtistRoute({params}: PageProps<'/[slug]'>) {
+export default async function ClientRoute({params}: PageProps<'/[slug]'>) {
   const {slug} = await params
-  const page = await getArtistPage(slug)
+  const page = await getClientPage(slug)
 
   if (!page) {
     return (
@@ -1131,7 +1131,7 @@ export default async function ArtistRoute({params}: PageProps<'/[slug]'>) {
 
   return (
     <ViewModeProvider>
-      <PageShell fullscreen artistName={page.artistName}>
+      <PageShell fullscreen clientName={page.clientName}>
         <ResourceViews groups={page.groups} />
       </PageShell>
     </ViewModeProvider>
@@ -1139,7 +1139,7 @@ export default async function ArtistRoute({params}: PageProps<'/[slug]'>) {
 }
 ```
 
-`not-found.tsx` is deleted, since nothing on the artist side calls `notFound()` any more. Unknown and denied visitors get **byte-identical** HTML for a given URL: same component, same title, same status (200), and the same single RPC round trip for signed-in visitors.
+`not-found.tsx` is deleted, since nothing on the client side calls `notFound()` any more. Unknown and denied visitors get **byte-identical** HTML for a given URL: same component, same title, same status (200), and the same single RPC round trip for signed-in visitors.
 
 ### 7.3 `sendLink` server action
 
@@ -1292,7 +1292,7 @@ export function EnterEmail({slug}: {slug: string}) {
 
 ### 7.5 Confirm (direct sign-in) and expired
 
-The email link signs the artist in on the GET itself (D33). Delete `app/(site)/auth/confirm/page.tsx` and `actions.ts`: a segment can't have both a `page.tsx` and a `route.ts`. The email template's link doesn't change (§11), so links already sitting in inboxes keep working.
+The email link signs the client in on the GET itself (D33). Delete `app/(site)/auth/confirm/page.tsx` and `actions.ts`: a segment can't have both a `page.tsx` and a `route.ts`. The email template's link doesn't change (§11), so links already sitting in inboxes keep working.
 
 ```ts
 // app/(site)/auth/confirm/route.ts
@@ -1378,7 +1378,7 @@ export async function GET(_: Request, ctx: RouteContext<'/api/resources/[id]/fil
 }
 ```
 
-`<video src="/api/resources/{id}/file">` follows the redirect, and range requests go to the signed URL. The 404 reveals nothing about artists, because ids are random UUIDs.
+`<video src="/api/resources/{id}/file">` follows the redirect, and range requests go to the signed URL. The 404 reveals nothing about clients, because ids are random UUIDs.
 
 ### 7.7 Resource views: categories and type
 
@@ -1588,7 +1588,7 @@ export const requireAdmin = cache(async () => {
 })
 ```
 
-An admin removed from the table loses access on their next request, the same way artists do.
+An admin removed from the table loses access on their next request, the same way clients do.
 
 ### 8.2 Panel layout
 
@@ -1619,7 +1619,7 @@ export default async function PanelLayout({children}: {children: React.ReactNode
   return (
     <div className={styles.shell}>
       <nav className={styles.nav}>
-        <Link href="/admin">Artists</Link>
+        <Link href="/admin">Clients</Link>
         <Link href="/admin/resources">Resources</Link>
         <span className={styles.me}>
           {admin.avatar_url && <img src={admin.avatar_url} alt="" width={24} height={24} referrerPolicy="no-referrer" />}
@@ -1635,21 +1635,21 @@ export default async function PanelLayout({children}: {children: React.ReactNode
 
 > Per the Cache Components auth guide, a top-level session read in a layout blocks the whole segment. That's fine here: every admin page needs the check anyway, and `instant = false` follows the repo's existing pattern (D15). Every admin **page** still calls `requireAdmin()` itself (it's `cache()`d, so this costs nothing), because layouts don't re-run on every client navigation.
 
-### 8.3 Artist index
+### 8.3 Client index
 
 ```tsx
 // app/(admin)/admin/(panel)/page.tsx
 import Link from 'next/link'
-import {ArtistTable} from '@/components/admin/ArtistTable'
+import {ClientTable} from '@/components/admin/ClientTable'
 import {requireAdmin} from '@/lib/admin/auth'
 
 export const instant = false
 
-export default async function ArtistIndex() {
+export default async function ClientIndex() {
   const {supabase} = await requireAdmin()
   const {data} = await supabase
-    .from('artists')
-    .select('id, name, slug, created_at, artist_emails(email, is_primary)')
+    .from('clients')
+    .select('id, name, slug, created_at, client_emails(email, is_primary)')
     .order('created_at', {ascending: false})
 
   const rows = (data ?? []).map((a) => ({
@@ -1657,21 +1657,21 @@ export default async function ArtistIndex() {
     name: a.name,
     slug: a.slug,
     createdAt: a.created_at,
-    primaryEmail: a.artist_emails.find((e) => e.is_primary)?.email ?? '',
-    auxCount: a.artist_emails.filter((e) => !e.is_primary).length,
-    allEmails: a.artist_emails.map((e) => e.email),
+    primaryEmail: a.client_emails.find((e) => e.is_primary)?.email ?? '',
+    auxCount: a.client_emails.filter((e) => !e.is_primary).length,
+    allEmails: a.client_emails.map((e) => e.email),
   }))
 
   return (
     <>
-      <header><h1>Artists</h1><Link href="/admin/artists/new">New artist</Link></header>
-      <ArtistTable rows={rows} />
+      <header><h1>Clients</h1><Link href="/admin/clients/new">New client</Link></header>
+      <ClientTable rows={rows} />
     </>
   )
 }
 ```
 
-`ArtistTable` is a client component with a search box that filters on name **or any** email (case-insensitive) in memory. The roster is small, so search is instant with no round trips. Columns: name (links to detail), primary email, auxiliary count, slug, `<CopyLinkButton slug/>`, created date (`lib/format.ts`).
+`ClientTable` is a client component with a search box that filters on name **or any** email (case-insensitive) in memory. The roster is small, so search is instant with no round trips. Columns: name (links to detail), primary email, auxiliary count, slug, `<CopyLinkButton slug/>`, created date (`lib/format.ts`).
 
 ```tsx
 // components/admin/CopyLinkButton.tsx
@@ -1737,10 +1737,10 @@ export const resourceInput = z
     if (r.type === 'slides' && r.file && r.url) fail('url', 'Use either an upload or a link, not both.')
   })
 
-export const artistPayload = z
+export const clientPayload = z
   .object({
     id: z.uuid().optional(),
-    name: z.string().trim().min(1, 'Artist name is required.').max(100, 'Keep the name under 100 characters.'),
+    name: z.string().trim().min(1, 'Client name is required.').max(100, 'Keep the name under 100 characters.'),
     slug: z.string().trim().toLowerCase()
       .min(SLUG_MIN, `At least ${SLUG_MIN} characters.`).max(SLUG_MAX, `At most ${SLUG_MAX} characters.`)
       .refine(isValidSlug, 'Lowercase letters, numbers, and single hyphens only (and not a reserved word).'),
@@ -1758,49 +1758,49 @@ export const artistPayload = z
     })
   })
 
-export type ArtistPayload = z.infer<typeof artistPayload>
+export type ClientPayload = z.infer<typeof clientPayload>
 ```
 
-### 8.5 Artist actions
+### 8.5 Client actions
 
 ```ts
-// app/(admin)/admin/(panel)/artists/actions.ts
+// app/(admin)/admin/(panel)/clients/actions.ts
 'use server'
 import {redirect} from 'next/navigation'
 import {requireAdmin} from '@/lib/admin/auth'
 import {sweepStorage} from '@/lib/admin/storage'
-import {artistPayload} from '@/lib/validation'
+import {clientPayload} from '@/lib/validation'
 
 export type SaveResult = {ok: false; fieldErrors: Record<string, string>; formError?: string}
 
 const PG_ERRORS: Record<string, {field: string; message: string}> = {
-  artists_slug_key: {field: 'slug', message: 'Another artist already uses this URL. Pick a different one.'},
-  artist_emails_artist_id_email_key: {field: 'emails', message: 'This email is listed twice.'},
+  clients_slug_key: {field: 'slug', message: 'Another client already uses this URL. Pick a different one.'},
+  client_emails_client_id_email_key: {field: 'emails', message: 'This email is listed twice.'},
 }
 
-export async function saveArtist(input: unknown): Promise<SaveResult> {
+export async function saveClient(input: unknown): Promise<SaveResult> {
   const {supabase} = await requireAdmin()
-  const parsed = artistPayload.safeParse(input)
+  const parsed = clientPayload.safeParse(input)
   if (!parsed.success) {
     return {ok: false, fieldErrors: Object.fromEntries(parsed.error.issues.map((i) => [i.path.join('.'), i.message]))}
   }
 
-  const {data: id, error} = await supabase.rpc('save_artist', {payload: parsed.data})
+  const {data: id, error} = await supabase.rpc('save_client', {payload: parsed.data})
   if (error) {
     const known = Object.entries(PG_ERRORS).find(([constraint]) => error.message.includes(constraint) || error.details?.includes(constraint))
     if (known) return {ok: false, fieldErrors: {[known[1].field]: known[1].message}}
-    console.error('save_artist failed:', error.code, error.message)
+    console.error('save_client failed:', error.code, error.message)
     return {ok: false, fieldErrors: {}, formError: 'Couldn’t save. Nothing was changed. Try again.'}
   }
 
   await sweepStorage(supabase) // removed or replaced files, best effort
-  redirect(`/admin/artists/${id}?saved=1`)
+  redirect(`/admin/clients/${id}?saved=1`)
 }
 
-export async function deleteArtist(id: string) {
+export async function deleteClient(id: string) {
   const {supabase} = await requireAdmin()
-  const {error} = await supabase.from('artists').delete().eq('id', id)
-  if (error) throw new Error('Couldn’t delete the artist.')
+  const {error} = await supabase.from('clients').delete().eq('id', id)
+  if (error) throw new Error('Couldn’t delete the client.')
   await sweepStorage(supabase)
   redirect('/admin')
 }
@@ -1976,15 +1976,15 @@ main().catch((error) => {
 })
 ```
 
-### 8.7 The artist form
+### 8.7 The client form
 
-A single client component handles both `/admin/artists/new` and `/admin/artists/[id]`.
+A single client component handles both `/admin/clients/new` and `/admin/clients/[id]`.
 
 ```tsx
-// components/admin/ArtistForm.tsx
+// components/admin/ClientForm.tsx
 'use client'
 import {useMemo, useRef, useState, useTransition} from 'react'
-import {saveArtist, type SaveResult} from '@/app/(admin)/admin/(panel)/artists/actions'
+import {saveClient, type SaveResult} from '@/app/(admin)/admin/(panel)/clients/actions'
 import {groupByCategory} from '@/lib/resources/group'
 import type {Resource} from '@/lib/resources/types'
 import {slugify} from '@/lib/slug'
@@ -1992,7 +1992,7 @@ import {ConfirmDialog} from './ConfirmDialog'
 import {EmailRows, type EmailRow} from './EmailRows'
 import {ResourceEditor, type ResourceDraft} from './ResourceEditor'
 
-export type ArtistFormInitial = {
+export type ClientFormInitial = {
   id?: string
   name: string
   slug: string
@@ -2002,8 +2002,8 @@ export type ArtistFormInitial = {
   exclusiveResources: ResourceDraft[]
 }
 
-export function ArtistForm({initial, mainResources, categories}: {
-  initial: ArtistFormInitial
+export function ClientForm({initial, mainResources, categories}: {
+  initial: ClientFormInitial
   mainResources: Resource[]
   categories: string[]
 }) {
@@ -2037,14 +2037,14 @@ export function ArtistForm({initial, mainResources, categories}: {
 
   const submit = () =>
     startSaving(async () => {
-      // On success saveArtist redirects, so only failures come back.
+      // On success saveClient redirects, so only failures come back.
       setResult(
-        await saveArtist({
+        await saveClient({
           id: initial.id,
           name,
           slug,
           emails: [
-            {email: primaryEmail, label: 'Artist', isPrimary: true},
+            {email: primaryEmail, label: 'Client', isPrimary: true},
             ...auxEmails.filter((r) => r.email.trim()).map((r) => ({email: r.email, label: r.label, isPrimary: false})),
           ],
           hiddenResourceIds: [...hidden],
@@ -2061,7 +2061,7 @@ export function ArtistForm({initial, mainResources, categories}: {
         else submit()
       }}
     >
-      <label>Artist name
+      <label>Client name
         <input value={name} onChange={(e) => onName(e.target.value)} maxLength={100} required />
         {errors.name && <span role="alert">{errors.name}</span>}
       </label>
@@ -2069,7 +2069,7 @@ export function ArtistForm({initial, mainResources, categories}: {
       <label>URL slug
         <span>welcometovydia.com/</span>
         <input value={slug} onChange={(e) => { setSlugTouched(true); setSlug(e.target.value.toLowerCase()) }} minLength={3} maxLength={60} required />
-        {slugChanged && <p role="status">The old link will stop working - send the artist the new one.</p>}
+        {slugChanged && <p role="status">The old link will stop working - send the client the new one.</p>}
         {errors.slug && <span role="alert">{errors.slug}</span>}
       </label>
 
@@ -2110,8 +2110,8 @@ export function ArtistForm({initial, mainResources, categories}: {
 
       <ConfirmDialog
         ref={slugDialog}
-        title="Change this artist’s link?"
-        body={`The old link will stop working - send the artist the new one: welcometovydia.com/${slug}`}
+        title="Change this client’s link?"
+        body={`The old link will stop working - send the client the new one: welcometovydia.com/${slug}`}
         confirmLabel="Save and change link"
         onConfirm={submit}
       />
@@ -2143,16 +2143,16 @@ export function CategoryInput({value, onChange, categories, id}: {
 ### 8.8 New and detail pages
 
 ```tsx
-// app/(admin)/admin/(panel)/artists/new/page.tsx
+// app/(admin)/admin/(panel)/clients/new/page.tsx
 export const instant = false
 
-export default async function NewArtist() {
+export default async function NewClient() {
   const {supabase} = await requireAdmin()
   const {mainResources, categories} = await loadResourceContext(supabase)
   return (
     <>
-      <h1>New artist</h1>
-      <ArtistForm
+      <h1>New client</h1>
+      <ClientForm
         initial={{name: '', slug: '', primaryEmail: '', auxEmails: [], hiddenResourceIds: [], exclusiveResources: []}}
         mainResources={mainResources}
         categories={categories}
@@ -2163,42 +2163,42 @@ export default async function NewArtist() {
 ```
 
 ```tsx
-// app/(admin)/admin/(panel)/artists/[id]/page.tsx
+// app/(admin)/admin/(panel)/clients/[id]/page.tsx
 export const instant = false
 
-export default async function ArtistDetail({params, searchParams}: PageProps<'/admin/artists/[id]'>) {
+export default async function ClientDetail({params, searchParams}: PageProps<'/admin/clients/[id]'>) {
   const {id} = await params
   const {saved} = await searchParams
   const {supabase} = await requireAdmin()
-  const [{data: artist}, ctx] = await Promise.all([
+  const [{data: client}, ctx] = await Promise.all([
     supabase
-      .from('artists')
-      .select('id, name, slug, artist_emails(email, label, is_primary), artist_hidden_resources(resource_id), resources(*)')
+      .from('clients')
+      .select('id, name, slug, client_emails(email, label, is_primary), client_hidden_resources(resource_id), resources(*)')
       .eq('id', id)
       .maybeSingle(),
     loadResourceContext(supabase),
   ])
-  if (!artist) notFound() // admin side: a normal 404 is fine
+  if (!client) notFound() // admin side: a normal 404 is fine
 
   return (
     <>
       <section className={styles.welcome}>
         {saved && <p role="status">Saved.</p>}
-        <h1>{artist.name}</h1>
-        <code>{welcomeLink(artist.slug)}</code>
-        <CopyLinkButton slug={artist.slug} />
-        <a href={`/${artist.slug}`} target="_blank" rel="noopener">Open page</a>
+        <h1>{client.name}</h1>
+        <code>{welcomeLink(client.slug)}</code>
+        <CopyLinkButton slug={client.slug} />
+        <a href={`/${client.slug}`} target="_blank" rel="noopener">Open page</a>
       </section>
 
-      <ArtistForm key={artist.slug} initial={toFormInitial(artist)} {...ctx} />
+      <ClientForm key={client.slug} initial={toFormInitial(client)} {...ctx} />
 
-      <DeleteArtistButton id={artist.id} name={artist.name} />
+      <DeleteClientButton id={client.id} name={client.name} />
     </>
   )
 }
 ```
 
-`DeleteArtistButton` opens a `ConfirmDialog` ("Delete {name}? Their page, emails, hidden resources, and exclusive resources are permanently deleted.") and calls `deleteArtist(id)`.
+`DeleteClientButton` opens a `ConfirmDialog` ("Delete {name}? Their page, emails, hidden resources, and exclusive resources are permanently deleted.") and calls `deleteClient(id)`.
 
 ### 8.9 Main resources page
 
@@ -2208,12 +2208,12 @@ export const instant = false
 
 export default async function MainResources() {
   const {supabase} = await requireAdmin()
-  const {data} = await supabase.from('resources').select('*').is('artist_id', null).order('sort_order')
+  const {data} = await supabase.from('resources').select('*').is('client_id', null).order('sort_order')
   const resources = (data ?? []).map(fromRow)
   return (
     <>
       <header><h1>Main resources</h1><NewMainResourceButton categories={distinctCategories(resources)} /></header>
-      <p>Changes here apply to every artist immediately.</p>
+      <p>Changes here apply to every client immediately.</p>
       <SortableResourceList groups={groupByCategory(resources)} />
     </>
   )
@@ -2230,7 +2230,7 @@ import {sweepStorage} from '@/lib/admin/storage'
 import {resourceInput} from '@/lib/validation'
 
 const toRow = (r: z.infer<typeof resourceInput>) => ({
-  id: r.id, artist_id: null, title: r.title, type: r.type, file: r.file, url: r.url,
+  id: r.id, client_id: null, title: r.title, type: r.type, file: r.file, url: r.url,
   cover_image: r.coverImage, cover_image_alt: r.coverImageAlt, cover_image_lqip: r.coverImageLqip,
   pdf_preview: r.pdfPreview, pdf_preview_lqip: r.pdfPreviewLqip, category: r.category, ...(r.addedOn ? {added_on: r.addedOn} : {}),
 })
@@ -2248,7 +2248,7 @@ export async function upsertMainResource(input: unknown) {
 
 export async function deleteMainResource(id: string) {
   const {supabase} = await requireAdmin()
-  await supabase.from('resources').delete().eq('id', z.uuid().parse(id)).is('artist_id', null)
+  await supabase.from('resources').delete().eq('id', z.uuid().parse(id)).is('client_id', null)
   await sweepStorage(supabase)
   refresh()
 }
@@ -2267,7 +2267,7 @@ export async function reorderMainResources(ids: string[]) {
 - **Categories themselves**: drag the category header. The category order is the position of its first resource.
 - Both produce one flattened id list in display order → `reorderMainResources(ids)`, applied optimistically with `useOptimistic`, then `refresh()`.
 
-Deleting a main resource also removes every artist's hide row for it (FK cascade), and its file is queued for cleanup.
+Deleting a main resource also removes every client's hide row for it (FK cascade), and its file is queued for cleanup.
 
 ---
 
@@ -2301,7 +2301,7 @@ Old magic-link emails still sitting in inboxes point to `/auth/confirm?…&redir
 
 Inputs: `NEXT_PUBLIC_SANITY_PROJECT_ID`, `NEXT_PUBLIC_SANITY_DATASET`, `SANITY_API_READ_TOKEN`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SECRET_KEY`. Flags: `--dry-run`, `--default-category "Resources"` (escape hatch if categories weren't filled in).
 
-What it migrates: **main resources only**, meaning the Website singleton's `resources[]` in order. Sanity artists (mostly test records) and override-only resources are **not** migrated. Label services recreate artists in the admin (spec: Seismic artists are out of scope, and the same applies to Sanity's). Skipped documents are listed in the report.
+What it migrates: **main resources only**, meaning the Website singleton's `resources[]` in order. Sanity clients (mostly test records) and override-only resources are **not** migrated. Label services recreate clients in the admin (spec: Seismic clients are out of scope, and the same applies to Sanity's). Skipped documents are listed in the report.
 
 ```ts
 // scripts/migrate-sanity.ts
@@ -2415,7 +2415,7 @@ async function main() {
 
     if (!dryRun) {
       const {error} = await supabase.from('resources').upsert({
-        id, artist_id: null, title: parsed.data.title, type: parsed.data.type,
+        id, client_id: null, title: parsed.data.title, type: parsed.data.type,
         file: parsed.data.file, url: parsed.data.url,
         cover_image: coverPath, cover_image_alt: parsed.data.coverImageAlt, cover_image_hotspot: cover?.hotspot ?? null,
         cover_image_lqip: parsed.data.coverImageLqip, pdf_preview: previewPath,
@@ -2463,13 +2463,13 @@ The new project was set up to match the old one. Several settings that magic lin
 
 | # | Where | Setting | Why it matters on a new project |
 |---|---|---|---|
-| E1 | Auth → **SMTP Settings** | Enable custom SMTP: `smtp.resend.com`, port `465`, user `resend`, password = Resend API key, sender `welcome@vydia.com` (placeholder, §11), name "Vydia" | A new project starts on Supabase's built-in sender, which only delivers to project team members and only a few emails an hour. Artists get nothing until this is set. |
+| E1 | Auth → **SMTP Settings** | Enable custom SMTP: `smtp.resend.com`, port `465`, user `resend`, password = Resend API key, sender `welcome@vydia.com` (placeholder, §11), name "Vydia" | A new project starts on Supabase's built-in sender, which only delivers to project team members and only a few emails an hour. Clients get nothing until this is set. |
 | E2 | Resend | Domain verified (SPF/DKIM). API key with sending access only. You can reuse the old project's key, but a separate key per project is cleaner to revoke. | The SMTP password above |
 | E3 | Auth → **Email Templates → Magic Link** and **Confirm signup** | Paste the subject (first line) and body from `supabase/templates/magic-link.html` and `confirm-signup.html` (updated per §11) | Templates don't carry over between projects. Both must link to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&redirect_to={{ .RedirectTo }}`. The default template uses `{{ .ConfirmationURL }}`, which goes through Supabase's own verify endpoint and doesn't work with our `/auth/confirm` route. |
-| E4 | Auth → **URL Configuration** | Site URL `https://welcometovydia.com` (`http://localhost:3000` is fine while only developing). Redirect URLs: `http://localhost:3000/**`, `https://welcometovydia.com/**`, the Vercel preview pattern (`https://*-<team>.vercel.app/**`) | `emailRedirectTo` = `SITE_URL/{slug}` must match an allowed URL, or Supabase silently falls back to the Site URL and artists land on `/` instead of their page |
+| E4 | Auth → **URL Configuration** | Site URL `https://welcometovydia.com` (`http://localhost:3000` is fine while only developing). Redirect URLs: `http://localhost:3000/**`, `https://welcometovydia.com/**`, the Vercel preview pattern (`https://*-<team>.vercel.app/**`) | `emailRedirectTo` = `SITE_URL/{slug}` must match an allowed URL, or Supabase silently falls back to the Site URL and clients land on `/` instead of their page |
 | E5 | Auth → **Rate Limits** | "Emails sent" per hour: raise (e.g. 100) once custom SMTP is on. Keep the 60 s per-user OTP interval. | The default email limit is tiny, and the 60 s interval matches the spec's resend cooldown |
 | E6 | Auth → **Providers → Email** | Enabled. Email OTP expiry `3600`. "Confirm email" can stay on. | Matches "expires in 1 hour" in the template |
-| E7 | Auth → **Sign In / Providers** | "Allow new users to sign up" **on** | First-time artists are created by `signInWithOtp`. The hook (E8) is what keeps strangers out. |
+| E7 | Auth → **Sign In / Providers** | "Allow new users to sign up" **on** | First-time clients are created by `signInWithOtp`. The hook (E8) is what keeps strangers out. |
 | E8 | Auth → **Hooks → Before User Created** | Postgres → `public.hook_before_user_created` (exists after the migration, §4.7) | Without it, D30 doesn't hold |
 
 ### 12.2 Everything else on the new project
@@ -2490,17 +2490,17 @@ The new project was set up to match the old one. Several settings that magic lin
 
 Run these once with the migration applied and E1–E8 done, then write the results back into §4.7:
 
-- [x] V1 (API level; email delivery and template pending 0.9/0.10 and 4.7) `signInWithOtp` for an email on an artist → user created, email arrives from Resend with the Vydia template, link → `/auth/confirm` → lands on `/{slug}` signed in.
+- [x] V1 (API level; email delivery and template pending 0.9/0.10 and 4.7) `signInWithOtp` for an email on a client → user created, email arrives from Resend with the Vydia template, link → `/auth/confirm` → lands on `/{slug}` signed in.
 - [x] V2 `signInWithOtp` called **directly** (curl with the publishable key) for an unknown email → hook rejects, **no row in `auth.users`**, no email.
 - [ ] V3 (to do by you) Google sign-in with a non-admin account → no `auth.users` row. Note what Supabase appends to `/admin/auth/callback` (it should end at "You don't have access." either way).
 - [x] V4 (done by the owner 2026-11-09: `display_name`, `avatar_url`, `user_id`, and `last_sign_in_at` were filled in the `admins` row) Google sign-in with a seeded admin → `/admin`, `admins.user_id`/`display_name`/`avatar_url` filled in.
-- [x] V5 (`otp`) Decode an artist access token: record whether `amr` is `otp` or `magiclink` (both are accepted).
+- [x] V5 (`otp`) Decode a client access token: record whether `amr` is `otp` or `magiclink` (both are accepted).
 - [ ] V6 (partial: admin `createUser` bypasses the hook locally) Admin API `generate_link` / `createUser` for an unattached email: does the hook fire? This only affects the e2e fixtures, which attach emails first either way.
 
 ### 12.4 Cutover from the old project
 
 - Vercel Production (previews of `iteration-two` already use the new project, task 0.13): switch `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to the new project, and add `SUPABASE_SECRET_KEY`. GitHub Actions: update the `NEXT_PUBLIC_SUPABASE_URL` variable and replace the `SUPABASE_SERVICE_ROLE_KEY` secret with `SUPABASE_SECRET_KEY`.
-- Sessions don't move between projects. The auth cookie name includes the project ref (`sb-<ref>-auth-token`), so old cookies are simply ignored and everyone signs in once more. That's harmless, because artists are being recreated and sent new links anyway.
+- Sessions don't move between projects. The auth cookie name includes the project ref (`sb-<ref>-auth-token`), so old cookies are simply ignored and everyone signs in once more. That's harmless, because clients are being recreated and sent new links anyway.
 - Old magic links in inboxes were issued by the old project and will fail with "This link has expired". Expected.
 - After a week or so on the new project, pause the old project, and delete it once nobody needs it.
 
@@ -2551,18 +2551,18 @@ select plan(13);
 
 -- fixtures
 insert into public.admins (email) values ('ops@vydia.com');
-insert into public.artists (id, name, slug) values
-  ('00000000-0000-0000-0000-00000000000a', 'Artist A', 'artist-a'),
-  ('00000000-0000-0000-0000-00000000000b', 'Artist B', 'artist-b');
-insert into public.artist_emails (artist_id, email, label, is_primary) values
-  ('00000000-0000-0000-0000-00000000000a', 'lil@example.com', 'Artist', true),
+insert into public.clients (id, name, slug) values
+  ('00000000-0000-0000-0000-00000000000a', 'Client A', 'client-a'),
+  ('00000000-0000-0000-0000-00000000000b', 'Client B', 'client-b');
+insert into public.client_emails (client_id, email, label, is_primary) values
+  ('00000000-0000-0000-0000-00000000000a', 'lil@example.com', 'Client', true),
   ('00000000-0000-0000-0000-00000000000a', 'manager@mgmt.com', 'Manager', false),
-  ('00000000-0000-0000-0000-00000000000b', 'b@example.com', 'Artist', true);
-insert into public.resources (id, artist_id, title, type, url, category) values
+  ('00000000-0000-0000-0000-00000000000b', 'b@example.com', 'Client', true);
+insert into public.resources (id, client_id, title, type, url, category) values
   ('00000000-0000-0000-0000-0000000000c1', null, 'Main 1', 'link', 'https://a.test', 'Getting Started'),
   ('00000000-0000-0000-0000-0000000000c2', null, 'Main 2', 'link', 'https://b.test', 'getting started'),
   ('00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-00000000000a', 'A only', 'link', 'https://c.test', 'Your Releases');
-insert into public.artist_hidden_resources values
+insert into public.client_hidden_resources values
   ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-0000000000c2');
 
 select is((select category from public.resources where title = 'Main 2'), 'Getting Started', 'categories normalize case-insensitively');
@@ -2571,57 +2571,57 @@ select is((select category from public.resources where title = 'Main 2'), 'Getti
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111","email":"manager@mgmt.com","role":"authenticated","amr":[{"method":"otp","timestamp":0}]}';
 
-select ok(public.get_artist_page('artist-a') is not null, 'linked email sees artist A');
-select ok(public.get_artist_page('artist-b') is null, 'linked to A ⇒ B is invisible (same as unknown)');
-select ok(public.get_artist_page('does-not-exist') is null, 'unknown slug ⇒ null');
-select is(jsonb_array_length(public.get_artist_page('artist-a') -> 'resources'), 2, 'A sees Main 1 + its exclusive, not the hidden Main 2');
-select is((select count(*)::int from public.artist_emails), 0, 'artist users cannot read email lists');
+select ok(public.get_client_page('client-a') is not null, 'linked email sees client A');
+select ok(public.get_client_page('client-b') is null, 'linked to A ⇒ B is invisible (same as unknown)');
+select ok(public.get_client_page('does-not-exist') is null, 'unknown slug ⇒ null');
+select is(jsonb_array_length(public.get_client_page('client-a') -> 'resources'), 2, 'A sees Main 1 + its exclusive, not the hidden Main 2');
+select is((select count(*)::int from public.client_emails), 0, 'client users cannot read email lists');
 select ok(not public.is_admin(), 'a magic-link session is never admin');
-select throws_ok($$ select public.save_artist('{}'::jsonb) $$, '42501', null, 'artist users cannot write');
+select throws_ok($$ select public.save_client('{}'::jsonb) $$, '42501', null, 'client users cannot write');
 
 -- as B
 set local request.jwt.claims = '{"sub":"22222222-2222-2222-2222-222222222222","email":"b@example.com","role":"authenticated","amr":[{"method":"otp","timestamp":0}]}';
-select is((select count(*)::int from public.resources where title = 'A only'), 0, 'exclusive resources never leak to other artists');
+select is((select count(*)::int from public.resources where title = 'A only'), 0, 'exclusive resources never leak to other clients');
 select is((select count(*)::int from public.resources where title = 'Main 2'), 1, 'a hide on A does not affect B');
 
 -- removing an email revokes on the next query, despite a live JWT
 reset role;
-delete from public.artist_emails where email = 'manager@mgmt.com';
+delete from public.client_emails where email = 'manager@mgmt.com';
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111","email":"manager@mgmt.com","role":"authenticated","amr":[{"method":"otp","timestamp":0}]}';
-select ok(public.get_artist_page('artist-a') is null, 'removed email loses access immediately');
+select ok(public.get_client_page('client-a') is null, 'removed email loses access immediately');
 
 -- admin via Google
 set local request.jwt.claims = '{"sub":"33333333-3333-3333-3333-333333333333","email":"ops@vydia.com","role":"authenticated","amr":[{"method":"oauth","timestamp":0}]}';
 select ok(public.is_admin(), 'listed @vydia.com Google session is admin');
-select ok(public.get_artist_page('artist-b') is not null, 'admins see every artist page directly (D32)');
+select ok(public.get_client_page('client-b') is not null, 'admins see every client page directly (D32)');
 
 select * from finish();
 rollback;
 ```
 
-Add `supabase/tests/hook.test.sql`: `hook_before_user_created` allows email users on `artist_emails`, rejects unknown emails, rejects admin emails on the email provider, allows Google for admins, and rejects Google for everyone else. Also `email_can_access_slug` returns `false` for an unknown slug and a wrong email, and `true` only for the linked pair.
+Add `supabase/tests/hook.test.sql`: `hook_before_user_created` allows email users on `client_emails`, rejects unknown emails, rejects admin emails on the email provider, allows Google for admins, and rejects Google for everyone else. Also `email_can_access_slug` returns `false` for an unknown slug and a wrong email, and `true` only for the linked pair.
 
 ### 13.3 End-to-end (Playwright)
 
-**Fixtures** (`scripts/e2e-fixtures.ts`, secret key): create `e2e-artist-a` (primary `delivered+a@resend.dev`, aux `delivered+mgr@resend.dev`) and `e2e-artist-b` (primary `delivered+b@resend.dev`). Add one main resource, one hidden on A, and one exclusive on A. Using Resend's `delivered@resend.dev` test addresses means real sends never bounce and never hurt sender reputation. Teardown deletes the artists (cascade) and the auth users.
+**Fixtures** (`scripts/e2e-fixtures.ts`, secret key): create `e2e-client-a` (primary `delivered+a@resend.dev`, aux `delivered+mgr@resend.dev`) and `e2e-client-b` (primary `delivered+b@resend.dev`). Add one main resource, one hidden on A, and one exclusive on A. Using Resend's `delivered@resend.dev` test addresses means real sends never bounce and never hurt sender reputation. Teardown deletes the clients (cascade) and the auth users.
 
-**Sessions** (`global-setup.ts`): `generate_link` (now with the secret key), then `page.goto('/auth/confirm?token_hash=…&type=email&redirect_to=/')`. There's no Continue click any more: the GET signs in and redirects. Wait for `/`, then save the storage state for personas `artistA`, `manager`, `artistB`.
+**Sessions** (`global-setup.ts`): `generate_link` (now with the secret key), then `page.goto('/auth/confirm?token_hash=…&type=email&redirect_to=/')`. There's no Continue click any more: the GET signs in and redirects. Wait for `/`, then save the storage state for personas `clientA`, `manager`, `clientB`.
 
 | Spec success state | Test |
 |---|---|
-| Made-up slug shows the same screen | Signed out: `/e2e-artist-a` and `/does-not-exist-<rand>` → status 200, `main` innerHTML equal, title "Welcome to Vydia", no artist name in the HTML |
-| Wrong email: not-approved, nothing sent, no user | On `/e2e-artist-a` enter `nobody-<rand>@example.com` → not-approved text. Same on `/does-not-exist` with **any** email → identical text. Admin API `GET /auth/v1/admin/users` has no such user. |
-| Approved email: sent + 60 s resend | On `/e2e-artist-a` enter the aux address → "Email sent, check your inbox", `Resend email (5\ds)` disabled |
-| Primary + 2 aux all see the page | Personas `artistA`, `manager` (and a third aux) each see `region "Resources"` and the header greeting "Artist A" |
-| Signed in for A, opens B | `artistA` → `/e2e-artist-b` → Enter your email, "Artist B" absent from the HTML |
-| Exclusive on A only | `artistA` sees "A only"; `artistB` doesn't |
+| Made-up slug shows the same screen | Signed out: `/e2e-client-a` and `/does-not-exist-<rand>` → status 200, `main` innerHTML equal, title "Welcome to Vydia", no client name in the HTML |
+| Wrong email: not-approved, nothing sent, no user | On `/e2e-client-a` enter `nobody-<rand>@example.com` → not-approved text. Same on `/does-not-exist` with **any** email → identical text. Admin API `GET /auth/v1/admin/users` has no such user. |
+| Approved email: sent + 60 s resend | On `/e2e-client-a` enter the aux address → "Email sent, check your inbox", `Resend email (5\ds)` disabled |
+| Primary + 2 aux all see the page | Personas `clientA`, `manager` (and a third aux) each see `region "Resources"` and the header greeting "Client A" |
+| Signed in for A, opens B | `clientA` → `/e2e-client-b` → Enter your email, "Client B" absent from the HTML |
+| Exclusive on A only | `clientA` sees "A only"; `clientB` doesn't |
 | Hide on A only | Hidden title absent on A, present on B |
-| Removing an email revokes immediately | Fixture deletes the `manager` row → `manager` reloads `/e2e-artist-a` → Enter your email |
-| Link signs in directly | A fresh `generate_link` token: `GET /auth/confirm?…&redirect_to=/e2e-artist-a` → 302 to `/e2e-artist-a` with `sb-` cookies → resources page. Replaces iteration one's "opening a link does not sign in until Continue" test, which is deleted. |
-| Expired link | `GET /auth/confirm?token_hash=bogus&redirect_to=/e2e-artist-a` → "This link has expired" → button href `/e2e-artist-a`. The same happens when a used token is opened again in a new browser context. |
+| Removing an email revokes immediately | Fixture deletes the `manager` row → `manager` reloads `/e2e-client-a` → Enter your email |
+| Link signs in directly | A fresh `generate_link` token: `GET /auth/confirm?…&redirect_to=/e2e-client-a` → 302 to `/e2e-client-a` with `sb-` cookies → resources page. Replaces iteration one's "opening a link does not sign in until Continue" test, which is deleted. |
+| Expired link | `GET /auth/confirm?token_hash=bogus&redirect_to=/e2e-client-a` → "This link has expired" → button href `/e2e-client-a`. The same happens when a used token is opened again in a new browser context. |
 | Admin gate | Signed out `/admin` → `/admin/login`. A magic-link persona on `/admin` → "You don't have access." |
-| Grid groups by category | `artistA` toggles to grid → `h2` per category. "Getting Started" appears once even with mixed case. |
+| Grid groups by category | `clientA` toggles to grid → `h2` per category. "Getting Started" appears once even with mixed case. |
 
 Google sign-in can't be automated. Admin CRUD flows run against a local Supabase in a follow-up (seed an admin user with an `oauth` amr through a test-only token mint), or stay in manual QA for v1.
 
@@ -2630,11 +2630,11 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - Label services **and** creative services members each sign in to `/admin` with Google. A personal Gmail is rejected ("You don't have access."), and no row appears in `auth.users`.
 - Create "Lil Example" with three emails, hide one main resource, add an exclusive PDF with a cover. Then Save, Copy link, open it in a private window, and do the magic-link flow for each email.
 - Rename the slug: the warning shows, the confirm dialog appears, the old URL shows Enter your email, and the new URL works.
-- Delete the artist: their page shows Enter your email, the slug can be reused, and the storage objects are gone.
-- Resources page: create, edit, delete, drag within and across categories. Changes show on every artist's page on reload.
+- Delete the client: their page shows Enter your email, the slug can be reused, and the storage objects are gone.
+- Resources page: create, edit, delete, drag within and across categories. Changes show on every client's page on reload.
 - Mobile Safari and Chrome: Enter your email, the sent state, the carousel, and the grid grouping.
-- Magic-link email in Gmail/Outlook: branding, logo rendering, and the link landing straight on the artist's page. Test once with an Outlook/Microsoft 365 recipient to see whether Safe Links spends the token (§16).
-- An admin signed in with Google opens several artist pages directly from "Open page" and sees resources, not the Enter your email screen (D32).
+- Magic-link email in Gmail/Outlook: branding, logo rendering, and the link landing straight on the client's page. Test once with an Outlook/Microsoft 365 recipient to see whether Safe Links spends the token (§16).
+- An admin signed in with Google opens several client pages directly from "Open page" and sees resources, not the Enter your email screen (D32).
 
 ---
 
@@ -2656,9 +2656,9 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 | 1 Sanity contract (on `main`) | — | 0, 2 |
 | 2 Database | 0.1–0.4 | 1 |
 | 3 Shared libraries | 2.13 (DB types) | — |
-| 4 Artist side | 3, 0.9–0.12 (email) | 5 |
+| 4 Client side | 3, 0.9–0.12 (email) | 5 |
 | 5 Admin auth and shell | 3, 0.8 (Google) | 4 |
-| 6 Admin: artists | 5 | — |
+| 6 Admin: clients | 5 | — |
 | 7 Admin: main resources | 6.12 (`ResourceEditor`) | 8 |
 | 8 Sanity → Supabase migration | 1.4 (categories filled), 2.14, 3.6 | 7 |
 | 9 Remove Sanity and old sign-in | 4, 8.5 | 10 |
@@ -2743,27 +2743,27 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [x] **2.1** `[dev]` `supabase migration new iteration_two`.
   - Created `supabase/migrations/20261109212557_iteration_two.sql` (the CLI's timestamp, not the `20261110…` in §4).
 
-- [x] **2.2** `[dev]` Domain `email_address`, enum `resource_type`, tables `admins`, `artists`, `artist_emails`, `resources` (including the `*_lqip` columns), `artist_hidden_resources`, plus indexes and the `admins` seed for the two shared inboxes (§4.1, D44).
+- [x] **2.2** `[dev]` Domain `email_address`, enum `resource_type`, tables `admins`, `clients`, `client_emails`, `resources` (including the `*_lqip` columns), `client_hidden_resources`, plus indexes and the `admins` seed for the two shared inboxes (§4.1, D44).
   - Done as §4.1, plus the two admin seeds.
 
 - [x] **2.3** `[dev]` `private` schema and triggers: `touch_updated_at`, `normalize_category`, `default_sort_order`, `check_hide_target`, `storage_garbage` + `queue_resource_garbage` (§4.2).
   - Done as §4.2, with one fix: `private.queue_resource_garbage` is now `security definer`. As written in §4.2 it would fail for admins, because the `authenticated` role has no access to the `private` schema.
 
-- [x] **2.4** `[dev]` `jwt_email()`, `is_admin()` (Google `amr` + listed + `@vydia.com`), `can_view_artist()` (§4.3).
+- [x] **2.4** `[dev]` `jwt_email()`, `is_admin()` (Google `amr` + listed + `@vydia.com`), `can_view_client()` (§4.3).
   - Done as §4.3. `is_admin()` also coalesces a null email to false. New helper `can_view_main_resource(uuid)` (see 2.5). All four helper functions are revoked from `public`/`anon` and granted to `authenticated` and `service_role`.
 
 - [x] **2.5** `[dev]` Enable RLS on all five tables, `revoke all … from anon`, and every policy from §4.4.
-  - Done as §4.4 with one fix that matters: the plan's `resources_read` policy checked `artist_emails` inside the policy, but that subquery runs under the *artist's* RLS and artists can't read `artist_emails`, so artist users would have seen **no main resources**. The policy now calls the new `security definer` function `can_view_main_resource(id)`. The RLS test covers it ("artist users can read the main resources their artist does not hide").
+  - Done as §4.4 with one fix that matters: the plan's `resources_read` policy checked `client_emails` inside the policy, but that subquery runs under the *client's* RLS and clients can't read `client_emails`, so client users would have seen **no main resources**. The policy now calls the new `security definer` function `can_view_main_resource(id)`. The RLS test covers it ("client users can read the main resources their client does not hide").
 
-- [x] **2.6** `[dev]` RPCs and their grants: `get_artist_page`, `email_can_access_slug` (`service_role` only), `hit_rate_limit`, `claim_link_send` (+ `private.rate_limits`, `private.link_sends`), `claim_admin_profile`, `reorder_main_resources`, `take_storage_garbage` (§4.5).
+- [x] **2.6** `[dev]` RPCs and their grants: `get_client_page`, `email_can_access_slug` (`service_role` only), `hit_rate_limit`, `claim_link_send` (+ `private.rate_limits`, `private.link_sends`), `claim_admin_profile`, `reorder_main_resources`, `take_storage_garbage` (§4.5).
   - Done as §4.5. Every function is revoked from `public` and `anon` first, then granted to exactly the roles in §4.5 (the platform's default privileges would otherwise leave `anon` able to call them).
 
-- [x] **2.7** `[dev]` `save_artist(payload jsonb)` (§4.6), including the lqip columns.
+- [x] **2.7** `[dev]` `save_client(payload jsonb)` (§4.6), including the lqip columns.
   - Done as §4.6, with the email and exclusive-resource deletes rewritten with `not exists`. As written (`not in (select …)`) a null id or email in the payload made the delete remove nothing, silently. A payload with a missing email or resource id is now rejected (`23502`).
 
 - [x] **2.8** `[dev]` `hook_before_user_created`, its grants to `supabase_auth_admin`, the two `supabase_auth_admin` select policies, and the `[auth.hook.before_user_created]` block in `config.toml` (§4.7).
   - Done as §4.7. The `[auth.hook.before_user_created]` block is in `supabase/config.toml`.
-  - **Config changes need `supabase stop && supabase start`.** `supabase db reset` only restarts the existing containers, so the first end-to-end check found the hook not enforced at all (an unknown email and an admin address both got users). After a full restart, verified against the running local Auth service: an artist email → 200 and a user; an unknown email → 403 `Not approved`, no user; `labelservices@vydia.com` through the email provider → 403, no user.
+  - **Config changes need `supabase stop && supabase start`.** `supabase db reset` only restarts the existing containers, so the first end-to-end check found the hook not enforced at all (an unknown email and an admin address both got users). After a full restart, verified against the running local Auth service: a client email → 200 and a user; an unknown email → 403 `Not approved`, no user; `labelservices@vydia.com` through the email provider → 403, no user.
 
 - [x] **2.9** `[dev]` Storage buckets `resource-files` (private, 1 GB, file MIME allow-list) and `resource-images` (public, 5 MB, JPG/PNG/WebP), plus the two `storage.objects` policies (§4.8).
   - Done as §4.8. Both buckets and both policies are created by the migration.
@@ -2775,14 +2775,14 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
   - `supabase/tests/rls.test.sql`: 15 assertions (the plan's 13, plus main-resource visibility and "a magic-link session for an admin address is not admin"). `supabase test db` passes.
 
 - [x] **2.12** `[dev]` `supabase/tests/functions.test.sql`. Cover:
-  - `supabase/tests/functions.test.sql`: 32 assertions covering the hook (5), `email_can_access_slug` (4), `claim_link_send` (3), `hit_rate_limit` (3), `save_artist` create/edit/rollback/primary/overwrite (13), hiding an exclusive, reorder (2), and the garbage trigger (2). 47 assertions pass across both files.
+  - `supabase/tests/functions.test.sql`: 32 assertions covering the hook (5), `email_can_access_slug` (4), `claim_link_send` (3), `hit_rate_limit` (3), `save_client` create/edit/rollback/primary/overwrite (13), hiding an exclusive, reorder (2), and the garbage trigger (2). 47 assertions pass across both files.
 
 - [x] **2.13** `[dev]` Add the `db:types`, `db:test`, `db:push` scripts. Run `npm run db:types` and commit `lib/supabase/database.types.ts`.
   - Added `db:types`, `db:test`, `db:push` to `package.json`. `db:types` generates from the **local** database (`--local`, no login needed; the schema is identical to the hosted one) and runs prettier on the output so `format:check` stays green. `lib/supabase/database.types.ts` is generated. `tsc`, lint, and the unit tests pass.
 
 - [x] **2.14** `[dev]` `supabase db push` to `lsihwkbnrheczirlkswo`. — *Done when:* the tables, buckets, and seeded admins are visible in the dashboard.
   - Pushed with `supabase db push --remote --yes` after your go-ahead. `supabase migration list --remote` shows `20261109212557` on both sides.
-  - Verified on the hosted project: both admins are seeded; buckets `resource-files` (private, 1 GB) and `resource-images` (public, 5 MB) exist; the publishable key gets `permission denied` on `artists`, `email_can_access_slug`, and `get_artist_page`.
+  - Verified on the hosted project: both admins are seeded; buckets `resource-files` (private, 1 GB) and `resource-images` (public, 5 MB) exist; the publishable key gets `permission denied` on `clients`, `email_can_access_slug`, and `get_client_page`.
   - **Gotcha:** `supabase db push` with no flag targets the **local** stack. The hosted project needs `--remote`, and in agent mode it also needs `--yes`, which I only used after you approved it.
 
 - [x] **2.15** `[ops]` Auth → Hooks → Before User Created → Postgres → `public.hook_before_user_created` (E8).
@@ -2796,7 +2796,7 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 ### Phase 3: Shared libraries (2026-11-09: done; typecheck, lint, build, and 139 unit tests pass)
 
 - [x] **3.1** `[dev]` `lib/email.ts` (`EMAIL_PATTERN`, `normalizeEmail`). Repoint the existing imports from `lib/access.ts` and `sanity/schemaTypes/shared.ts`.
-  - `lib/email.ts` is the only home of `EMAIL_PATTERN` and `normalizeEmail`. `lib/access.ts`, `app/(site)/login/actions.ts`, and the Sanity `artist` and `website` schemas import from it, and `sanity/schemaTypes/shared.ts` is deleted.
+  - `lib/email.ts` is the only home of `EMAIL_PATTERN` and `normalizeEmail`. `lib/access.ts`, `app/(site)/login/actions.ts`, and the Sanity `client` and `website` schemas import from it, and `sanity/schemaTypes/shared.ts` is deleted.
 
 - [x] **3.2** `[dev]` `lib/slug.ts`: `SLUG_MIN`/`SLUG_MAX` (3–60), the 60-char `slugify` cap, `isValidSlug`, `normalizeSlug`, and an updated `RESERVED_SLUGS` matching the SQL check. Update `tests/slug.test.ts`.
   - `SLUG_MIN`/`SLUG_MAX`, the 60-char `slugify` cap, `isValidSlug`, and `normalizeSlug` are in. `RESERVED_SLUGS` is now exactly the eight words in the SQL check (`admin`, `api`, `auth`, `login`, `logout`, `account`, `studio`, `static`); the other entries in the old list (`_next`, `favicon.ico`, …) can't match `SLUG_PATTERN` anyway.
@@ -2812,7 +2812,7 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [x] **3.5** `[dev]` `lib/resources/group.ts` + `tests/group.test.ts` (case-insensitive grouping, first-seen order and spelling).
   - `tests/group.test.ts`: case-insensitive grouping under the first spelling seen, first-appearance order, whitespace collapsing.
 
-- [x] **3.6** `[dev]` `lib/validation.ts` (`resourceInput`, `artistPayload`, the lqip regex) + `tests/validation.test.ts` (every Sanity per-type rule, all field limits, email dedupe, exactly one primary).
+- [x] **3.6** `[dev]` `lib/validation.ts` (`resourceInput`, `clientPayload`, the lqip regex) + `tests/validation.test.ts` (every Sanity per-type rule, all field limits, email dedupe, exactly one primary).
   - As §8.4, minus the tuple cast, plus a rule matching the database constraint that only PDFs can have a preview, and an exported `ResourceInput` type. `tests/validation.test.ts` covers every per-type rule and message, the 120/100/60/40 limits, the slug rules, lqip, http(s)-only links, email dedupe, and exactly one primary. Test ids use `crypto.randomUUID()` because zod 4's `z.uuid()` rejects made-up ids like `…0f1`.
 
 - [x] **3.7** `[dev]` `tests/schema-parity.test.ts` (§13.1). — *Done when:* it fails if a field is added to `schema.json` without a mapping.
@@ -2826,14 +2826,14 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [x] **3.9** `[dev]` `.env.example`: add `SUPABASE_SECRET_KEY` and `SUPABASE_PROJECT_ID`. The Sanity variables stay until Phase 9.
   - `.env.example` has `SUPABASE_SECRET_KEY` and `SUPABASE_PROJECT_ID`. The Sanity variables stay until Phase 9.
 
-### Phase 4: Artist side (2026-11-09: built and verified live against the hosted project; 4.7's hosted half is a dashboard step for you)
+### Phase 4: Client side (2026-11-09: built and verified live against the hosted project; 4.7's hosted half is a dashboard step for you)
 
-- [x] **4.1** `[dev]` `lib/artist-page.ts` (`getArtistPage`, `cache()`d, null for every no-access case, fails closed on RPC error).
-  - `lib/artist-page.ts`: returns null for an invalid slug, no session, an RPC error, a null result, or an unexpected shape (it fails closed). The RPC result is parsed with zod rather than cast. The shared `cache()` means the page and its metadata make one RPC per request.
+- [x] **4.1** `[dev]` `lib/client-page.ts` (`getClientPage`, `cache()`d, null for every no-access case, fails closed on RPC error).
+  - `lib/client-page.ts`: returns null for an invalid slug, no session, an RPC error, a null result, or an unexpected shape (it fails closed). The RPC result is parsed with zod rather than cast. The shared `cache()` means the page and its metadata make one RPC per request.
 
 - [x] **4.2** `[dev]` Rewrite `app/(site)/[slug]/page.tsx` and its `generateMetadata` (§7.2). Delete `app/(site)/[slug]/not-found.tsx` and `components/NoAccess.tsx`. — *Done when:* signed out, a real slug and a made-up slug produce identical `<main>` HTML, a status of 200, and the title "Welcome to Vydia".
   - Old `not-found.tsx` and `components/NoAccess.tsx` are deleted. Added a visually hidden `<h1>` on the resources page (axe `page-has-heading-one`).
-  - Checked against the running dev server, signed out: a real slug and a made-up slug both return **200** with the title "Welcome to Vydia", and their `<main>` HTML is identical once the visitor's own requested slug (echoed into the form's hidden input) is normalized. The artist name never appears.
+  - Checked against the running dev server, signed out: a real slug and a made-up slug both return **200** with the title "Welcome to Vydia", and their `<main>` HTML is identical once the visitor's own requested slug (echoed into the form's hidden input) is normalized. The client name never appears.
 
 - [x] **4.3** `[dev]` `app/(site)/[slug]/actions.ts` `sendLink` (§7.3) + `tests/send-link.test.ts`. The test checks that an unknown slug and a wrong email give the same result with no send, a cooldown returns `sent` with no send, `over_email_send_rate_limit` counts as sent, and a rate limit returns `rate-limited`.
   - `tests/send-link.test.ts` (9 tests): a wrong email and an unknown slug return the same `not-approved` and send nothing; reserved or malformed slugs are never approved; the cooldown returns `sent` without sending; `over_email_send_rate_limit` counts as sent and any other error is `error`; a rate limit returns `rate-limited` after one call; the limit keys on the first forwarded address; an RPC error fails closed.
@@ -2869,7 +2869,7 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [x] **4.12** `[dev]` `ResourceViews({groups})` and the grouped `ResourceGrid` with category `<h2>`s and id-safe keys (§7.7). Remove the `additionalInfo` prop. Add CSS for the category headings and the spacing between groups.
   - `ResourceViews({groups})` and a grouped `ResourceGrid`: one `<h2>` per category with unique ids (`category-<index>`, so categories that differ only by punctuation can't collide). Verified live: mixed-case categories rendered as one "Getting Started" group, groups in first-appearance order with main resources before exclusives; axe is clean in both views.
 
-- [x] **4.13** `[dev]` `lib/supabase/proxy.ts`: no redirects for artist paths; `/admin/*` (except login and callback) redirects to `/admin/login` without a session. Update the `proxy.ts` matcher. — *Done when:* signed out, `/x` returns 200 and `/admin` returns 307 to `/admin/login`.
+- [x] **4.13** `[dev]` `lib/supabase/proxy.ts`: no redirects for client paths; `/admin/*` (except login and callback) redirects to `/admin/login` without a session. Update the `proxy.ts` matcher. — *Done when:* signed out, `/x` returns 200 and `/admin` returns 307 to `/admin/login`.
   - Signed out, `/x` returns **200** and `/admin` returns **307 → `/admin/login`**. (`/admin/login` is a 404 until Phase 5 builds it.) `isPublicPath` is replaced by `needsAdminSession`, and the matcher no longer excludes `studio` or `api/revalidate`.
 
 - [x] **4.14** `[dev]` `next.config.ts`: replace the Sanity CDN `remotePatterns` with the Supabase public `resource-images` path.
@@ -2878,17 +2878,17 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [x] **4.15** `[dev]` `app/(site)/page.tsx`: copy for the new flow ("open the link label services sent you, then enter your email").
   - The `/` copy now says to open the link label services sent, then enter the email Vydia has on file.
 
-- [x] **4.16** `[dev]` `[ops]` On the new project, insert a throwaway artist and email in the SQL editor, then run **V1, V2, V5** (§12.3). Record the results in §4.7 and delete the throwaway rows.
-  - Done against the hosted project with throwaway rows, all deleted afterwards (artists, resources, hides, files, and the test users; the tables are empty again):
+- [x] **4.16** `[dev]` `[ops]` On the new project, insert a throwaway client and email in the SQL editor, then run **V1, V2, V5** (§12.3). Record the results in §4.7 and delete the throwaway rows.
+  - Done against the hosted project with throwaway rows, all deleted afterwards (clients, resources, hides, files, and the test users; the tables are empty again):
     - **V2 ✔** `POST /auth/v1/otp` with the publishable key: an unknown email and `labelservices@vydia.com` both get **403 "Not approved"**, and no user is created. This also shows the hook (2.15) is enabled on the hosted project.
     - **V1 ✔ (API level)** an approved email gets 200 and a user is created. Delivery and the received template couldn't be observed (the sink address can't be read, and the hosted templates are still to be pasted, see 4.7).
-    - **V5 ✔** the artist access token has `amr: [{method: "otp"}]`, so `/auth/confirm` accepts `otp`, and `is_admin()` rejects it as intended.
-    - Also verified end to end on the hosted project: the session shows the artist's page (hidden main resource gone, exclusive present), another slug with the same session shows only "Enter your email" and never the name, and removing the email revokes the page and the file on the next request.
+    - **V5 ✔** the client access token has `amr: [{method: "otp"}]`, so `/auth/confirm` accepts `otp`, and `is_admin()` rejects it as intended.
+    - Also verified end to end on the hosted project: the session shows the client's page (hidden main resource gone, exclusive present), another slug with the same session shows only "Enter your email" and never the name, and removing the email revokes the page and the file on the next request.
 
 ### Phase 5: Admin auth and shell (2026-11-09: built and verified, with an admin session reproduced locally; 5.8 needs a real Google sign-in from you)
 
 - [x] **5.1** `[dev]` `app/(admin)/layout.tsx` (second root layout) + `admin.css` (light, desktop-first tokens: surface, border, text, accent, danger; a 1200 px content width).
-  - `app/(admin)/layout.tsx` (a third root layout next to `(site)` and Studio) and `admin.css`: light `--admin-*` tokens, a 1200 px content width, its own reset and `.visually-hidden`. Admin styles can't reach the artist pages.
+  - `app/(admin)/layout.tsx` (a third root layout next to `(site)` and Studio) and `admin.css`: light `--admin-*` tokens, a 1200 px content width, its own reset and `.visually-hidden`. Admin styles can't reach the client pages.
 
 - [x] **5.2** `[dev]` `app/(admin)/admin/login/page.tsx` + `actions.ts` (`signInWithGoogle` with `hd=vydia.com` and `prompt=select_account`) + `login.module.css`. `?error=no-access` → "You don't have access."
   - `/admin/login` shows the Google button; `?error=no-access` → "You don’t have access.", `?error=google` → the retry message, and any other value shows nothing (checked with an injected value). axe is clean. The button starts the real flow: Google, `prompt=select_account`, the `vydia.com` hint, and the hosted project's callback.
@@ -2898,37 +2898,37 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
   - Every failure (no code, Supabase error params from the hook rejecting someone, a bad code, a non-admin) lands on `/admin/login?error=no-access`; a non-admin is signed out first. A listed admin goes to `/admin` after `claim_admin_profile()`.
 
 - [x] **5.4** `[dev]` `app/(admin)/admin/auth/signout/route.ts` (POST → sign out → 303 to `/admin/login`).
-  - POST signs out and 303s to `/admin/login`. Checked as an admin and as an artist: afterwards `/admin` redirects to login and the artist page shows the email screen.
+  - POST signs out and 303s to `/admin/login`. Checked as an admin and as a client: afterwards `/admin` redirects to login and the client page shows the email screen.
 
 - [x] **5.5** `[dev]` `lib/admin/auth.ts` `requireAdmin()` (`cache()`d; returns `{supabase, admin}`).
   - `lib/admin/auth.ts`: `getAdmin()` (cached, no redirect) and `requireAdmin()`. A signed-in non-admin is sent to `/admin/login?error=no-access`; a signed-out visitor to plain `/admin/login`. The admin row is read from `admins` with the caller's own JWT, so the typed row replaces the plan's `as AdminProfile` cast.
 
-- [x] **5.6** `[dev]` `app/(admin)/admin/(panel)/layout.tsx` + `panel.module.css`: nav (Artists, Resources, active state), avatar + display name, Sign out.
-  - `(panel)/layout.tsx` plus a client `AdminNav` (Artists, Resources, `aria-current` active state), the admin's avatar and name, and Sign out. The avatar uses `next/image` with `unoptimized` (Google avatar hosts vary). `(panel)/page.tsx` is a **placeholder** until task 6.1 builds the real index.
+- [x] **5.6** `[dev]` `app/(admin)/admin/(panel)/layout.tsx` + `panel.module.css`: nav (Clients, Resources, active state), avatar + display name, Sign out.
+  - `(panel)/layout.tsx` plus a client `AdminNav` (Clients, Resources, `aria-current` active state), the admin's avatar and name, and Sign out. The avatar uses `next/image` with `unoptimized` (Google avatar hosts vary). `(panel)/page.tsx` is a **placeholder** until task 6.1 builds the real index.
 
 - [x] **5.7** `[dev]` `npm run build`. — *Done when:* both root layouts build, `/admin` isn't captured by `[slug]`, and `admin` can't be saved as a slug (SQL check + `isValidSlug`).
-  - `npm run build` passes with all three root layouts. `/admin`, `/admin/login`, and the auth routes are separate from `/[slug]`. The database refuses the slugs `admin`, `api`, `login`, and `Admin` (`artists_slug_check`), and `isValidSlug` rejects them (`tests/slug.test.ts`).
-  - Checked live: signed out, `/admin`, `/admin/resources`, and `/admin/artists/new` all 307 to `/admin/login`; `/api` (a reserved slug) shows the email screen, not a 404. `/admin/resources` and `/admin/artists/new` return 404 once signed in, until Phases 6–7 build them.
+  - `npm run build` passes with all three root layouts. `/admin`, `/admin/login`, and the auth routes are separate from `/[slug]`. The database refuses the slugs `admin`, `api`, `login`, and `Admin` (`clients_slug_check`), and `isValidSlug` rejects them (`tests/slug.test.ts`).
+  - Checked live: signed out, `/admin`, `/admin/resources`, and `/admin/clients/new` all 307 to `/admin/login`; `/api` (a reserved slug) shows the email screen, not a 404. `/admin/resources` and `/admin/clients/new` return 404 once signed in, until Phases 6–7 build them.
 
 - [ ] **5.8** `[ops]` Run **V3, V4** (§12.3). Record the results in §4.7.
-  - Also check, as a listed admin signed in with Google: open an artist page you are **not** attached to (any slug) and see its resources, not the Enter your email screen (D32). Then confirm it still works after the session has been refreshed (wait past the 1 hour token expiry, or sign in the day before).
+  - Also check, as a listed admin signed in with Google: open a client page you are **not** attached to (any slug) and see its resources, not the Enter your email screen (D32). Then confirm it still works after the session has been refreshed (wait past the 1 hour token expiry, or sign in the day before).
   - **Reproduced locally in place of Google** (a real Google account can't be driven from here). GoTrue builds `amr` from the `auth.mfa_amr_claims` table, so I added an `oauth` entry for a local test user (`labelservices@vydia.com`, seeded as an admin), refreshed the session, and ran a production build against the local stack on port 3100. Results:
     - `/admin` renders the panel: title, nav, active state, the seeded name, a Sign out form.
-    - **D32 ✔** the admin opens an artist it is **not** attached to and sees its main and exclusive resources; an unknown slug and a signed-out visitor still get only the email screen, with no name leak.
-    - **Refresh ✔** a session whose access token had expired was refreshed by the proxy, `oauth` stayed in `amr`, and `/admin` and the artist page still worked.
-    - A signed-in **non-admin** (artist session) on `/admin` gets "You don’t have access."
+    - **D32 ✔** the admin opens a client it is **not** attached to and sees its main and exclusive resources; an unknown slug and a signed-out visitor still get only the email screen, with no name leak.
+    - **Refresh ✔** a session whose access token had expired was refreshed by the proxy, `oauth` stayed in `amr`, and `/admin` and the client page still worked.
+    - A signed-in **non-admin** (client session) on `/admin` gets "You don’t have access."
     - All test data and the 3100 server are gone; the hosted project is empty.
   - **V6 (partial):** an admin-API `createUser` for an admin address **bypasses** the sign-up hook (local stack). The e2e fixtures can therefore create users directly.
-  - **V4 ✔ done by you:** the admin sign-in worked and filled in your `admins` row. Opening an artist page as that admin needs an artist to exist: the new project has none yet (Sanity's `test-artist` isn't migrated), so `/test-artist` correctly shows the email screen until one is created in Phase 6.
-  - **Still for you (needs a real Google account):** V3 (a non-admin Google account → "You don’t have access.", no `auth.users` row) and V4 (a seeded admin → `/admin`, with `display_name` and `avatar_url` filled in the `admins` row). The Google redirect URI and hook are already set up. When you do V4, also open an artist you aren't attached to, and again after the session has been refreshed.
+  - **V4 ✔ done by you:** the admin sign-in worked and filled in your `admins` row. Opening a client page as that admin needs a client to exist: the new project has none yet (Sanity's `test-client` isn't migrated), so `/test-client` correctly shows the email screen until one is created in Phase 6.
+  - **Still for you (needs a real Google account):** V3 (a non-admin Google account → "You don’t have access.", no `auth.users` row) and V4 (a seeded admin → `/admin`, with `display_name` and `avatar_url` filled in the `admins` row). The Google redirect URI and hook are already set up. When you do V4, also open a client you aren't attached to, and again after the session has been refreshed.
 
-### Phase 6: Admin: artists (2026-11-09: built and verified end to end in a browser against a local stack; the database fix is pushed to the hosted project)
+### Phase 6: Admin: clients (2026-11-09: built and verified end to end in a browser against a local stack; the database fix is pushed to the hosted project)
 
-- [x] **6.1** `[dev]` `app/(admin)/admin/(panel)/page.tsx`: the artist + emails query and the row mapping (§8.3).
+- [x] **6.1** `[dev]` `app/(admin)/admin/(panel)/page.tsx`: the client + emails query and the row mapping (§8.3).
   - Index query and row mapping; the `(panel)/page.tsx` placeholder from Phase 5 is replaced.
 
-- [x] **6.2** `[dev]` `components/admin/ArtistTable.tsx`: columns name / primary email / auxiliary count / slug / Copy link / created date. Client-side search over name and every email, case-insensitive. **New artist** button. Empty state.
-  - `ArtistTable`: name (links to the detail page), primary email, auxiliary count, slug, Copy link, created date. Search matches the name or **any** email, case-insensitively. Empty state, "No artists match" state, and a **New artist** button. Verified: searching `manager@mgmt` finds the artist.
+- [x] **6.2** `[dev]` `components/admin/ClientTable.tsx`: columns name / primary email / auxiliary count / slug / Copy link / created date. Client-side search over name and every email, case-insensitive. **New client** button. Empty state.
+  - `ClientTable`: name (links to the detail page), primary email, auxiliary count, slug, Copy link, created date. Search matches the name or **any** email, case-insensitively. Empty state, "No clients match" state, and a **New client** button. Verified: searching `manager@mgmt` finds the client.
 
 - [x] **6.3** `[dev]` `components/admin/CopyLinkButton.tsx` + `welcomeLink()` ("Copied" feedback, falls back to selecting the text if the clipboard API is blocked).
   - `CopyLinkButton` ("Copied" for 1.5 s, falls back to a selected read-only field if the clipboard is blocked) and `welcomeLink()`. `welcomeLink` lives in `lib/admin/welcome-link.ts`, not the client component: calling a function exported from a `'use client'` file in a Server Component crashes the page (found in testing). Verified the clipboard holds the link.
@@ -2940,7 +2940,7 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
   - Add/remove rows, email plus optional label with Manager/Alt/Assistant suggestions, per-row errors. Each row has a stable key so removing one doesn't scramble the others.
 
 - [x] **6.6** `[dev]` Main resource picker inside the form: grouped by category, **Remove** grays the row out, **Restore** brings it back, plus a count of hidden resources.
-  - Inside `ArtistForm`: grouped by category, **Remove**/**Restore**, a count of hidden resources. Hidden rows use a strike-through and a tinted background, not reduced opacity (opacity failed axe contrast at 2.1:1).
+  - Inside `ClientForm`: grouped by category, **Remove**/**Restore**, a count of hidden resources. Hidden rows use a strike-through and a tinted background, not reduced opacity (opacity failed axe contrast at 2.1:1).
 
 - [x] **6.7** `[dev]` `lib/admin/resource-context.ts` `loadResourceContext(supabase)` → `{mainResources, categories}` (distinct, case-insensitive). `components/admin/CategoryInput.tsx` (`<datalist>`).
   - `loadResourceContext()` returns the main resources plus the distinct categories (case-insensitive, first spelling wins, sorted; `distinctCategories` is unit-tested). `CategoryInput` uses a `<datalist>`.
@@ -2968,28 +2968,28 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
   - `ResourceFields` is shared by the exclusive-resource editor and the main-resource dialog. Per-type file/URL rules match Sanity's; changing the type clears fields that no longer apply. Drafts track `uploads` (a count, so a cover and a file can upload at once) and Save is disabled while it's above 0. "Added on" sits under a disclosure and an untouched date is preserved.
   - **Done-when verified in a browser:** an empty PDF shows "Upload a PDF.", an empty video "Upload the video file.", a link without a URL "Add the link URL.", a deck with nothing "Upload the deck or add a link.", both "Use either an upload or a link, not both.", plus the title and category messages (`tests/admin-lib.test.ts` covers the same rules).
 
-- [x] **6.13** `[dev]` `components/admin/ArtistForm.tsx` (§8.7):
-  - Slug auto-fills on new artists until edited.
+- [x] **6.13** `[dev]` `components/admin/ClientForm.tsx` (§8.7):
+  - Slug auto-fills on new clients until edited.
   - On edit, a slug change shows the warning, and Save opens the confirm dialog.
   - Builds the payload, shows field and form errors, and has a disabled saving state.
-  - Slug auto-fills from the name until edited (new artists only); on an existing artist a changed slug shows "The old link will stop working - send the artist the new one." and Save opens the confirm dialog; Escape cancels without saving. Client-side zod validation runs before the server action. The form is keyed on `artists.updated_at`, so after a save it reloads the server's normalized values (for example merged category spelling).
+  - Slug auto-fills from the name until edited (new clients only); on an existing client a changed slug shows "The old link will stop working - send the client the new one." and Save opens the confirm dialog; Escape cancels without saving. Client-side zod validation runs before the server action. The form is keyed on `clients.updated_at`, so after a save it reloads the server's normalized values (for example merged category spelling).
 
-- [x] **6.14** `[dev]` `app/(admin)/admin/(panel)/artists/actions.ts` `saveArtist` (zod → `save_artist` → constraint → field error mapping → `sweepStorage` → redirect) and `deleteArtist`.
-  - `saveArtist`/`deleteArtist` take typed inputs (`ArtistInput`) instead of the plan's `unknown`. Errors map to fields (`lib/admin/errors.ts`, unit-tested). If the network drops, the form shows "Couldn’t reach the server. Nothing was changed." instead of hitting the error boundary (same in the delete button, the resource dialog, and the sortable list).
+- [x] **6.14** `[dev]` `app/(admin)/admin/(panel)/clients/actions.ts` `saveClient` (zod → `save_client` → constraint → field error mapping → `sweepStorage` → redirect) and `deleteClient`.
+  - `saveClient`/`deleteClient` take typed inputs (`ClientInput`) instead of the plan's `unknown`. Errors map to fields (`lib/admin/errors.ts`, unit-tested). If the network drops, the form shows "Couldn’t reach the server. Nothing was changed." instead of hitting the error boundary (same in the delete button, the resource dialog, and the sortable list).
 
 - [x] **6.15** `[dev]` `lib/admin/storage.ts` `sweepStorage`.
   - `sweepStorage` takes the queued paths and removes them. **Bug found and fixed:** the database function it calls, `take_storage_garbage`, deleted the whole queue with no `WHERE`, and Supabase's API layer runs `pg_safeupdate`, which rejects that (`21000: DELETE requires a WHERE clause`). Direct database tests never loaded that extension, so every cleanup silently did nothing. Fixed in a **new migration**, `20261110001352_fix_take_storage_garbage.sql` (`where true`). A new test, `supabase/tests/safe-statements.test.sql`, fails if any `DELETE` or `UPDATE` in our functions lacks a `WHERE` (it failed on exactly this function before the fix).
   - The fix is applied locally and on the hosted project (see the note under 6.19).
 
-- [x] **6.16** `[dev]` `app/(admin)/admin/(panel)/artists/new/page.tsx`.
-  - `/admin/artists/new`.
+- [x] **6.16** `[dev]` `app/(admin)/admin/(panel)/clients/new/page.tsx`.
+  - `/admin/clients/new`.
 
-- [x] **6.17** `[dev]` `app/(admin)/admin/(panel)/artists/[id]/page.tsx`:
+- [x] **6.17** `[dev]` `app/(admin)/admin/(panel)/clients/[id]/page.tsx`:
   - The Welcome link at the top, with Copy link and Open page.
   - A "Saved." status after `?saved=1`.
   - `toFormInitial()`.
-  - `DeleteArtistButton` (confirm → `deleteArtist`) at the bottom.
-  - Welcome link with **Copy link** and **Open page**, a "Saved." status after `?saved=1`, the form, and **Delete artist** at the bottom behind a confirm dialog. **Bug found and fixed:** `resources(*)` in the query is ambiguous to PostgREST (`PGRST201`: `resources` links to `artists` both directly and through the hides table), and the page turned that error into a 404. It now uses `resources!resources_artist_id_fkey(*)`, and a query error throws instead of showing "not found".
+  - `DeleteClientButton` (confirm → `deleteClient`) at the bottom.
+  - Welcome link with **Copy link** and **Open page**, a "Saved." status after `?saved=1`, the form, and **Delete client** at the bottom behind a confirm dialog. **Bug found and fixed:** `resources(*)` in the query is ambiguous to PostgREST (`PGRST201`: `resources` links to `clients` both directly and through the hides table), and the page turned that error into a 404. It now uses `resources!resources_client_id_fkey(*)`, and a query error throws instead of showing "not found".
 
 - [x] **6.18** `[dev]` `scripts/storage-sweep.ts` + `npm run storage:sweep` (D43, §8.6). — *Done when:* a dry run lists a deliberately abandoned upload older than 24 h, and `--delete` removes it.
   - `scripts/storage-sweep.ts` and `npm run storage:sweep` (dry run unless `--delete`). Added `--min-age-hours <n>` (default 24) so the age rule can be tested without waiting. Verified against local Storage: a fresh upload isn't listed by default; with `--min-age-hours 0` only the two unreferenced objects are listed; `--delete` removes just those; a file referenced by a resource is untouched. Note: `tsx --env-file` does not override variables already set in the shell.
@@ -2997,32 +2997,32 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [x] **6.19** `[dev]` Manual pass on a preview:
   - Create "Lil Example" from the spec's sample data (three emails, one hidden main resource, one exclusive PDF with a cover).
   - Force a duplicate email and confirm nothing was saved.
-  - Rename the slug, then delete the artist.
+  - Rename the slug, then delete the client.
   - *Done when:* storage objects are cleaned up after the delete.
   - Done in a browser (Playwright) against a **local Supabase stack** with an admin session reproduced locally (see 5.8), instead of a Vercel preview. The run: create "Lil Example" from the spec's sample data (primary plus two auxiliary emails, one hidden main resource, an exclusive PDF with a cover; the PDF preview and both blur placeholders were generated); check the rows and storage objects; copy the link; force a duplicate email and confirm nothing was saved; change the slug (warning, dialog, Escape cancels, then saved; the old slug now shows only the email screen); search; delete (every row gone, storage files removed, slug reusable). 36 checks pass, and axe is clean on the index and the form.
   - **Cache Components keeps the previous route mounted but hidden**, so after saving, the page briefly holds two copies of the form. Users can't see or focus the hidden one, but test selectors must filter to visible elements.
-  - **Pushed to the hosted project** (with your go-ahead): `20261110001352_fix_take_storage_garbage.sql` is applied on `lsihwkbnrheczirlkswo` (`supabase migration list --remote` shows both migrations on both sides; the dry run listed only that file). I did not read the function back from the hosted database, since that would have needed a further hosted-database consent. To confirm it on the real admin: create a throwaway artist with an uploaded file, delete it, then check the file is gone from Storage (or run `npm run storage:sweep` against hosted: it should list nothing).
+  - **Pushed to the hosted project** (with your go-ahead): `20261110001352_fix_take_storage_garbage.sql` is applied on `lsihwkbnrheczirlkswo` (`supabase migration list --remote` shows both migrations on both sides; the dry run listed only that file). I did not read the function back from the hosted database, since that would have needed a further hosted-database consent. To confirm it on the real admin: create a throwaway client with an uploaded file, delete it, then check the file is gone from Storage (or run `npm run storage:sweep` against hosted: it should list nothing).
 
 ### Phase 7: Admin: main resources (2026-11-09: built and verified end to end in a browser against a local stack)
 
-- [x] **7.1** `[dev]` `app/(admin)/admin/(panel)/resources/page.tsx` (grouped list, "applies to every artist immediately" note, empty state).
-  - `/admin/resources`: category cards in display order, rows with type and added date, empty state, and the "applies to every artist immediately" note.
+- [x] **7.1** `[dev]` `app/(admin)/admin/(panel)/resources/page.tsx` (grouped list, "applies to every client immediately" note, empty state).
+  - `/admin/resources`: category cards in display order, rows with type and added date, empty state, and the "applies to every client immediately" note.
 
 - [x] **7.2** `[dev]` `resources/actions.ts`: `upsertMainResource`, `deleteMainResource`, `reorderMainResources` (zod, `requireAdmin`, `sweepStorage`, `refresh()`).
-  - `upsertMainResource` (refuses an id that belongs to an artist's exclusive resource), `deleteMainResource`, `reorderMainResources` — all typed, validated with zod, admin-checked, sweeping storage and calling `refresh()`.
+  - `upsertMainResource` (refuses an id that belongs to a client's exclusive resource), `deleteMainResource`, `reorderMainResources` — all typed, validated with zod, admin-checked, sweeping storage and calling `refresh()`.
 
 - [x] **7.3** `[dev]` Create/edit dialog using `ResourceFields` (same uploads, preview, lqip, and category suggestions as exclusives).
   - `ResourceDialog` reuses `ResourceFields`, so uploads, the PDF preview, blur placeholders, and category suggestions behave the same as for exclusives. Verified: every validation message appears, a slide deck offers upload **and** link, a link hides the upload, and a lowercase category typed as `getting started` was saved as `Getting Started`.
 
 - [x] **7.4** `[dev]` `components/admin/SortableResourceList.tsx`: dnd-kit sortable rows within a category and sortable category groups. Pointer **and** keyboard sensors with screen-reader announcements. `useOptimistic` + `reorderMainResources(flatIds)`. A rollback message on failure.
   - `SortableResourceList`: separate drag contexts for categories and for rows within a category, mouse and keyboard sensors, handles with labels, announcements that use titles ("Dropped Sync Pitch Form over Pitch Form."), `useOptimistic`, and a rollback message.
-  - Verified in a browser: a keyboard move updates immediately and is saved as the flattened display order; a category move is saved and reaches artist pages; the order survives a reload; a real mouse drag swaps two rows; with the browser **offline**, a reorder shows "Couldn’t save the new order. It has been put back.", restores the order, and the page keeps working.
+  - Verified in a browser: a keyboard move updates immediately and is saved as the flattened display order; a category move is saved and reaches client pages; the order survives a reload; a real mouse drag swaps two rows; with the browser **offline**, a reorder shows "Couldn’t save the new order. It has been put back.", restores the order, and the page keeps working.
 
-- [x] **7.5** `[dev]` Delete with `ConfirmDialog` ("removed from every artist's page; per-artist hides for it are removed too").
-  - Delete uses `ConfirmDialog` ("removed from every artist’s page … per-artist hides for it are removed too"). Verified: Escape cancels; confirming removes the row, every artist's page, the hide rows, and the storage files.
+- [x] **7.5** `[dev]` Delete with `ConfirmDialog` ("removed from every client's page; per-client hides for it are removed too").
+  - Delete uses `ConfirmDialog` ("removed from every client’s page … per-client hides for it are removed too"). Verified: Escape cancels; confirming removes the row, every client's page, the hide rows, and the storage files.
 
-- [x] **7.6** `[dev]` Manual check: a new main resource appears on every existing artist's page. Reordering and recategorizing show on artist pages on the next load.
-  - Verified with an admin session that can read any artist page: a new main resource appeared on artist A's and artist B's pages immediately; an edit and a delete reached them on the next load; moving a category changed the order on their pages; a resource hidden for artist A stayed hidden for A only.
+- [x] **7.6** `[dev]` Manual check: a new main resource appears on every existing client's page. Reordering and recategorizing show on client pages on the next load.
+  - Verified with an admin session that can read any client page: a new main resource appeared on client A's and client B's pages immediately; an edit and a delete reached them on the next load; moving a category changed the order on their pages; a resource hidden for client A stayed hidden for A only.
 
 ### Phase 8: Sanity → Supabase migration (2026-11-10: built, tested, and run; 9 of 13 resources are on the hosted project, the 4 videos wait for the Pro plan)
 
@@ -3038,9 +3038,9 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [x] **8.3** `[dev]` `--dry-run` against local Supabase. Fix or explain every ✗ line.
   - Dry run against local Supabase: it wrote nothing. Published content only: **11 migrate, 2 skipped**, both because the resource has **no published category**: *LS Best Practices for Pitching* and *Sync Submission for Pitching Consideration*. Both have the right category (*Playlisting and Sync Pitch Forms*) in an **unpublished draft** in Studio, so 1.4 looks done but those two edits were never published. With `--include-drafts`: **13 of 13**. The one note is *Broadcast Distribution Pricing*, a PDF carrying a stale link URL that is ignored.
 
-- [x] **8.4** `[dev]` A real run against local Supabase. Create a test artist in the local admin and QA its page: order, categories, covers with blur-up, PDFs open, videos play, slides link vs file.
+- [x] **8.4** `[dev]` A real run against local Supabase. Create a test client in the local admin and QA its page: order, categories, covers with blur-up, PDFs open, videos play, slides link vs file.
   - Real run against local Supabase with `--include-drafts` (~720 MB of video; it took under a minute): 13 rows, sort order 1–13 in the Website order, three categories, all 10 files stored at exactly the sizes Sanity reports (323 / 220 / 94 / 81 MB for the videos), and PDF previews with blur placeholders for all 6 PDFs. A second run took 1 s, changed nothing, and queued nothing for cleanup.
-  - QA as an artist (browser, admin session): order matches the Website; the grid shows 3 groups of 6 / 4 / 3 with correct type labels; all 6 PDFs redirect to signed URLs that serve real PDFs; the 3 pitch forms point at their Google Forms; the video dialog loads (97 s duration) and supports range requests (206); the real PDF first-page covers render with blurred backdrops; axe is clean.
+  - QA as a client (browser, admin session): order matches the Website; the grid shows 3 groups of 6 / 4 / 3 with correct type labels; all 6 PDFs redirect to signed URLs that serve real PDFs; the 3 pitch forms point at their Google Forms; the video dialog loads (97 s duration) and supports range requests (206); the real PDF first-page covers render with blurred backdrops; axe is clean.
   - Found while doing this: `next.config.ts` hardcoded `https` and ignored the port in the image `remotePattern`, so any non-default API (local, a staging project) was rejected. It now uses the API URL's protocol and port. Next also refuses private-IP image hosts, so covers can't show on a local stack without `dangerouslyAllowLocalIP` (verified once with a temporary build, then reverted); the hosted project's public hostname works.
 
 - [ ] **8.5** `[dev]` `--dry-run`, then a real run against `lsihwkbnrheczirlkswo`. — *Done when:* the migrated count equals `count(*[_id=="website"][0].resources)` minus any explained skips, and the report is pasted into the PR.
@@ -3049,10 +3049,10 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
   - **Report:** migrated: Vydia Guide Book, ISRC and UPC Guide, LS Best Practices for Pitching, Video Pitch Form, Audio Pitch Form, Sync Submission for Pitching Consideration, Pub Admin One Sheet, Physical Distribution & E-Commerce Pricing, Broadcast Distribution Pricing (a stale link URL ignored). Skipped (over the 50 MB upload limit): How to Upload Content, How to Create a New Album, How to Add a Payee, How to Set Up a Recoupment.
   - **Left open until the Pro upgrade (0.6) raises the global limit to at least 1 GB:** re-run `npm run migrate:sanity -- --include-drafts` (no `--max-file-mb`). It is idempotent, it skips the nine already done, and it fills in sort positions 2–5. Then this task is complete.
   - I used `--include-drafts` so the two unpublished category edits come across. If you'd rather publish them in Studio first, drop the flag.
-  - **Audit (2026-11-10), Sanity vs hosted, field by field:** the 9 migrated rows match Sanity on title, type, category, link URL, added date, and stored file size. The only resources missing are the 4 videos. Everything else Sanity holds is accounted for: 13 resources (all on the Website, plus 2 unpublished drafts that were included), **no artists**, **no cover images**, no resources outside the Website, and 5 unreferenced old file versions that don't need moving. **Not migrated, by design of the new app:** Sanity's `internalViewerEmails` (`erica.johnson@vydia.com`, `mason.omara@vydia.com`). Mason is an admin on the hosted project; **Erica is not**, so she can't see artist pages until she's added to `admins` (a Google `@vydia.com` account is required).
+  - **Audit (2026-11-10), Sanity vs hosted, field by field:** the 9 migrated rows match Sanity on title, type, category, link URL, added date, and stored file size. The only resources missing are the 4 videos. Everything else Sanity holds is accounted for: 13 resources (all on the Website, plus 2 unpublished drafts that were included), **no clients**, **no cover images**, no resources outside the Website, and 5 unreferenced old file versions that don't need moving. **Not migrated, by design of the new app:** Sanity's `internalViewerEmails` (`erica.johnson@vydia.com`, `mason.omara@vydia.com`). Mason is an admin on the hosted project; **Erica is not**, so she can't see client pages until she's added to `admins` (a Google `@vydia.com` account is required).
 
-- [ ] **8.6** `[dev]` `[LS]` Spot-check on the `iteration-two` preview with a real-looking test artist: every resource opens, covers match the live site, and the categories look right.
-  - **Developer half done on the hosted data** (a throwaway artist, since deleted): the 9 migrated resources show in the Website order under the three categories, every PDF cover renders through Next's image optimizer (0 broken images), all 6 PDFs open through signed URLs, the 3 pitch forms link to Google Forms, and axe is clean.
+- [ ] **8.6** `[dev]` `[LS]` Spot-check on the `iteration-two` preview with a real-looking test client: every resource opens, covers match the live site, and the categories look right.
+  - **Developer half done on the hosted data** (a throwaway client, since deleted): the 9 migrated resources show in the Website order under the three categories, every PDF cover renders through Next's image optimizer (0 broken images), all 6 PDFs open through signed URLs, the 3 pitch forms link to Google Forms, and axe is clean.
   - **Still for label services:** compare covers and titles with the live site, and re-check once the videos are migrated.
 
 ### Phase 9: Remove Sanity and the old sign-in (§9) (2026-11-10: done; lint, typecheck, 157 unit tests, and the production build all pass)
@@ -3063,8 +3063,8 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [x] **9.2** `[dev]` Keep `sanity/schema.json`. Add `sanity/README.md` (frozen-contract note, §9).
   - `sanity/README.md` states that `schema.json` is the frozen contract and what must change together with it.
 
-- [x] **9.3** `[dev]` Delete the obsolete unit tests: `tests/access.test.ts`, `tests/artist-page.test.ts`, `tests/cover-source.test.ts`, `tests/image.test.ts`. Keep `format`, `safe-redirect`, `slug`.
-  - Deleted `access`, `artist-page`, `cover-source`, and `image` tests. 10 files and 157 tests remain (the new migration, mapping, validation, send-link, and admin tests make up the difference).
+- [x] **9.3** `[dev]` Delete the obsolete unit tests: `tests/access.test.ts`, `tests/client-page.test.ts`, `tests/cover-source.test.ts`, `tests/image.test.ts`. Keep `format`, `safe-redirect`, `slug`.
+  - Deleted `access`, `client-page`, `cover-source`, and `image` tests. 10 files and 157 tests remain (the new migration, mapping, validation, send-link, and admin tests make up the difference).
 
 - [x] **9.4** `[dev]` `npm uninstall sanity next-sanity @sanity/icons @sanity/image-url @sanity/ui @sanity/vision @sanity/webhook @portabletext/react styled-components`.
   - All nine packages are uninstalled. **`@sanity/client` stays** as an explicit devDependency, because the migration still needs it (the video re-run after the Pro upgrade, and the content-freeze re-run in 12.5). Verified: with the packages gone, `npm run migrate:sanity -- --dry-run --include-drafts` still reads Sanity and reports 13 of 13.
@@ -3083,35 +3083,35 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 
 ### Phase 10: End-to-end tests and CI (2026-11-10: the suite passes locally, 41 tests plus one that needs an admin token; 10.11 needs the PR pushed)
 
-- [x] **10.1** `[dev]` `tests/e2e/users.ts`: personas `artistA` (`delivered+a@resend.dev`), `manager` (`delivered+mgr@resend.dev`), `aux2` (`delivered+a2@resend.dev`), `artistB` (`delivered+b@resend.dev`).
-  - `tests/e2e/users.ts`: the four personas, the artist slugs and names, and the fixture titles. `tests/e2e/admin-client.ts` is a typed Supabase admin client (`Database` generic, secret key) shared by the fixtures, global setup, and specs.
+- [x] **10.1** `[dev]` `tests/e2e/users.ts`: personas `clientA` (`delivered+a@resend.dev`), `manager` (`delivered+mgr@resend.dev`), `aux2` (`delivered+a2@resend.dev`), `clientB` (`delivered+b@resend.dev`).
+  - `tests/e2e/users.ts`: the four personas, the client slugs and names, and the fixture titles. `tests/e2e/admin-client.ts` is a typed Supabase admin client (`Database` generic, secret key) shared by the fixtures, global setup, and specs.
 
 - [x] **10.2** `[dev]` Rewrite `scripts/e2e-fixtures.ts` on the secret key:
-  - `e2e-artist-a` (3 emails) and `e2e-artist-b`.
+  - `e2e-client-a` (3 emails) and `e2e-client-b`.
   - 2 main resources, one of them hidden on A, mixed-case categories.
   - One exclusive on A.
-  - A teardown that deletes the artists (cascade) and the auth users.
+  - A teardown that deletes the clients (cascade) and the auth users.
   - Remove the legacy-key and Sanity code.
   - Also add the new `e2e:setup` and `e2e:teardown` npm scripts here (`tsx --env-file-if-exists=.env.local scripts/e2e-fixtures.ts [teardown]`). They were removed in 9.5 with the Sanity ones.
-  - `scripts/e2e-fixtures.ts`: artist A (primary, manager, and `aux2` emails) and artist B; two main resources with mixed-case categories (`Getting Started` / `getting started`), the second hidden for A; on A an exclusive link and an exclusive **video** (a small uploaded file, so the dialog and file route can be tested). Setup tears down first, so it's safe to re-run; teardown deletes the artists, the `E2E %` main resources, the stored file, and the persona auth users. `npm run e2e:setup` and `e2e:teardown` are back.
+  - `scripts/e2e-fixtures.ts`: client A (primary, manager, and `aux2` emails) and client B; two main resources with mixed-case categories (`Getting Started` / `getting started`), the second hidden for A; on A an exclusive link and an exclusive **video** (a small uploaded file, so the dialog and file route can be tested). Setup tears down first, so it's safe to re-run; teardown deletes the clients, the `E2E %` main resources, the stored file, and the persona auth users. `npm run e2e:setup` and `e2e:teardown` are back.
 
 - [x] **10.3** `[dev]` `tests/e2e/global-setup.ts`: `generate_link` with the secret key, then a **GET** of `/auth/confirm` (no Continue click), then save each persona's storage state.
-  - Global setup uses `generate_link` and a plain GET of `/auth/confirm` (no Continue click), then saves each persona's storage state. Emails are attached to artists before users are created, so the sign-up hook allows them whether or not it fires for admin-generated links.
+  - Global setup uses `generate_link` and a plain GET of `/auth/confirm` (no Continue click), then saves each persona's storage state. Emails are attached to clients before users are created, so the sign-up hook allows them whether or not it fires for admin-generated links.
 
 - [x] **10.4** `[dev]` `tests/e2e/access.spec.ts`: the parity rows from §13.3 (signed-out real vs fake slug; A opening B; the removed email revoked on reload; admins gate).
-  - `access.spec.ts` (9 tests): a real and a made-up slug render the same `<main>` (status 200, title "Welcome to Vydia", no artist name); `/` is public; security headers; A opening B's URL shows only the email screen with no trace of B; an unknown slug looks identical to an inaccessible one; no sign-out, account menu, or links on the artist page.
+  - `access.spec.ts` (9 tests): a real and a made-up slug render the same `<main>` (status 200, title "Welcome to Vydia", no client name); `/` is public; security headers; A opening B's URL shows only the email screen with no trace of B; an unknown slug looks identical to an inaccessible one; no sign-out, account menu, or links on the client page.
 
 - [x] **10.5** `[dev]` `tests/e2e/sign-in.spec.ts`: wrong email vs unknown slug give the identical message; no `auth.users` row is created; the approved email shows the sent state and a disabled countdown; the link signs in directly; a bogus or used link goes to expired.
-  - `sign-in.spec.ts` (10 tests): the wrong-email and unknown-slug messages are identical, the input stays filled, and **no `auth.users` row is created** (checked through the admin API); another artist's email on the wrong slug is also not approved; the auxiliary email (typed in capitals) shows the sent state and a disabled `Resend email (Ns)`; a fresh link signs in directly (307 with `sb-` cookies); bogus, missing, and already-used links go to the expired screen with a way back; signing in as a different email replaces the old session.
+  - `sign-in.spec.ts` (10 tests): the wrong-email and unknown-slug messages are identical, the input stays filled, and **no `auth.users` row is created** (checked through the admin API); another client's email on the wrong slug is also not approved; the auxiliary email (typed in capitals) shows the sent state and a disabled `Resend email (Ns)`; a fresh link signs in directly (307 with `sb-` cookies); bogus, missing, and already-used links go to the expired screen with a way back; signing in as a different email replaces the old session.
 
-- [x] **10.6** `[dev]` `tests/e2e/resources.spec.ts`: exclusive on A only; hide on A only; all three of A's emails see the page; grid groups by category (mixed case → one heading); link cards use `target=_blank rel=noopener noreferrer`; the video dialog opens and closes and returns focus; the file route 302s for a viewer and 404s for another artist.
+- [x] **10.6** `[dev]` `tests/e2e/resources.spec.ts`: exclusive on A only; hide on A only; all three of A's emails see the page; grid groups by category (mixed case → one heading); link cards use `target=_blank rel=noopener noreferrer`; the video dialog opens and closes and returns focus; the file route 302s for a viewer and 404s for another client.
   - Add an API-level check for the storage queue: as an admin session, call `take_storage_garbage` through the REST API (not directly in the database). That path runs `pg_safeupdate`, which direct database tests can't reproduce.
-  - `resources.spec.ts` (11 tests): exclusive on A only; hide on A only (B sees the resource A hides); all three of A's emails see the same page greeted by the artist; link cards are `_blank`/`noopener noreferrer`; the video dialog opens, closes on Escape, and returns focus; the file route 302s to a signed URL for a viewer and returns 404 (`no-store`) for another artist and when signed out. The mixed-case grid check uses artist **B**, because A hides one of the two resources.
+  - `resources.spec.ts` (11 tests): exclusive on A only; hide on A only (B sees the resource A hides); all three of A's emails see the same page greeted by the client; link cards are `_blank`/`noopener noreferrer`; the video dialog opens, closes on Escape, and returns focus; the file route 302s to a signed URL for a viewer and returns 404 (`no-store`) for another client and when signed out. The mixed-case grid check uses client **B**, because A hides one of the two resources.
   - `revoke.spec.ts`: removing an email revokes access on the next load with a still-valid session, then the row is restored.
   - **API-level storage queue check:** `storage-queue.spec.ts` calls `take_storage_garbage` through the REST API with an admin (Google-method) access token, which runs under `pg_safeupdate`. A real Google token can't be produced in CI, so it **skips unless `E2E_ADMIN_ACCESS_TOKEN` is set**. Verified locally with a minted admin token: it passed and emptied the queue.
 
 - [x] **10.7** `[dev]` `tests/e2e/admin.spec.ts`: signed out `/admin` → `/admin/login`; a magic-link persona on `/admin` → "You don't have access."; the login page shows only **Sign in with Google**.
-  - `admin.spec.ts` (7 tests): signed out, every admin page goes to `/admin/login`; the login page has only the Google button (no email or password); only the known error code shows a message; every callback failure lands on "You don’t have access."; the button starts the Google flow with `prompt=select_account`; a magic-link persona on the panel pages gets "You don’t have access." while their artist page keeps working. For the Google redirect to be testable on a local stack, `supabase/config.toml` now enables a **placeholder** Google client (local only; no real credentials).
+  - `admin.spec.ts` (7 tests): signed out, every admin page goes to `/admin/login`; the login page has only the Google button (no email or password); only the known error code shows a message; every callback failure lands on "You don’t have access."; the button starts the Google flow with `prompt=select_account`; a magic-link persona on the panel pages gets "You don’t have access." while their client page keeps working. For the Google redirect to be testable on a local stack, `supabase/config.toml` now enables a **placeholder** Google client (local only; no real credentials).
 
 - [x] **10.8** `[dev]` `tests/e2e/a11y.spec.ts`: axe on Enter your email (idle, sent, not-approved), the resources page (both views), `/auth/expired`, and `/admin/login`.
   - `a11y.spec.ts` (axe, WCAG 2.0 to 2.2 AA): the instructions page, Enter your email (idle, not approved, sent), the expired screen, the admin login, and the resources page in both views. **It found a real bug:** the shared `Notice` component (instructions and expired screens) used muted gray text that failed contrast on the dark page. It now uses a lighter text color.
@@ -3129,10 +3129,10 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 ### Phase 11: Docs (2026-11-10: done)
 
 - [x] **11.1** `[dev]` Rewrite `README.md`: how it works (Supabase + RLS, admin panel), stack, env table, scripts (`db:*`, `migrate:sanity`, `storage:sweep`, `e2e:*`), dashboards (Supabase `lsihwkbnrheczirlkswo`, Resend, Google Cloud, Vercel, GitHub; Sanity removed), deploy flow, and rotating secrets (secret key, Resend key).
-  - `README.md` is rewritten for the Supabase design: how it works (artist side, sign-in, admin panel, RLS), stack, local setup (including the local port range and `supabase start`), the environment table, every script, the database-change procedure with the project's known pitfalls, e2e instructions, CI, deploy flow, dashboards (Supabase `lsihwkbnrheczirlkswo`, Resend, Google Cloud, Vercel, GitHub; Sanity removed), rotating the Supabase secret key and the Resend key, how to add admins, and the project layout.
+  - `README.md` is rewritten for the Supabase design: how it works (client side, sign-in, admin panel, RLS), stack, local setup (including the local port range and `supabase start`), the environment table, every script, the database-change procedure with the project's known pitfalls, e2e instructions, CI, deploy flow, dashboards (Supabase `lsihwkbnrheczirlkswo`, Resend, Google Cloud, Vercel, GitHub; Sanity removed), rotating the Supabase secret key and the Resend key, how to add admins, and the project layout.
 
-- [x] **11.2** `[dev]` `docs/admin-guide.md`, replacing `docs/editor-guide.md`: signing in; creating an artist; emails and labels; hiding main resources; exclusive resources and uploads (file types, 5 MB covers, 1080p MP4); copying and sending the Welcome link; renaming a slug; deleting; main resources and reordering; categories; what artists see; adding an admin in the table editor; running the storage sweep.
-  - `docs/admin-guide.md` is written for label services and creative services (sign-in, creating and editing an artist, emails and labels, hiding main resources, exclusive resources and uploads with the real file rules, copying and sending the Welcome link, renaming a slug, deleting, main resources and reordering, categories, what artists see, a troubleshooting table, adding an admin, and the monthly storage sweep). `docs/editor-guide.md` is removed; the older plans still mention it as history.
+- [x] **11.2** `[dev]` `docs/admin-guide.md`, replacing `docs/editor-guide.md`: signing in; creating a client; emails and labels; hiding main resources; exclusive resources and uploads (file types, 5 MB covers, 1080p MP4); copying and sending the Welcome link; renaming a slug; deleting; main resources and reordering; categories; what clients see; adding an admin in the table editor; running the storage sweep.
+  - `docs/admin-guide.md` is written for label services and creative services (sign-in, creating and editing a client, emails and labels, hiding main resources, exclusive resources and uploads with the real file rules, copying and sending the Welcome link, renaming a slug, deleting, main resources and reordering, categories, what clients see, a troubleshooting table, adding an admin, and the monthly storage sweep). `docs/editor-guide.md` is removed; the older plans still mention it as history.
 
 - [x] **11.3** `[dev]` `docs/plan.md` §1: add D23–D44 with a pointer here, and mark D18 superseded by D33 and D6/D22 by D44. `docs/sign-in-plan.md`: a header note that iteration two supersedes it.
   - `docs/plan.md` §1 now has D23–D44, a banner listing which earlier decisions are superseded and which still hold, and D6, D18, and D22 are marked superseded (by D44, D33, and D44). `docs/sign-in-plan.md` has a header note that iteration two supersedes it.
@@ -3143,19 +3143,19 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 ### Phase 12: QA, cutover, launch (2026-11-10: everything that can be verified from here is verified; the rest is people, dashboards, and the production cutover, which need your go-ahead)
 
 - [ ] **12.1** `[dev]` `[LS]` Manual QA (§13.4) on the `iteration-two` preview, including **both** shared inboxes and one individual admin signing in with Google, and a personal Gmail being rejected.
-  - **Needs people.** Automated stand-ins are in place and pass (see 12.2): the full e2e suite ran against the **hosted** project via the dev server, 40 of 41 on the first pass (the one failure was the Next dev-tools badge being counted as a button, fixed) and 7 of 7 on the rerun of that file. Test data was created and removed around the run; your own `mason` artist and the 9 real resources were untouched.
-  - **Still to do by hand (§13.4):** sign in to `/admin` with Google as **`labelservices@` and `creativeservices@`** (shared inboxes, if they're real Google Workspace accounts) and as an individual admin; confirm a **personal Gmail is rejected** with no `auth.users` row (V3); create "Lil Example" from the spec's sample data in the real admin; run each artist email through the real magic-link email on a preview; and walk the admin guide once.
+  - **Needs people.** Automated stand-ins are in place and pass (see 12.2): the full e2e suite ran against the **hosted** project via the dev server, 40 of 41 on the first pass (the one failure was the Next dev-tools badge being counted as a button, fixed) and 7 of 7 on the rerun of that file. Test data was created and removed around the run; your own `mason` client and the 9 real resources were untouched.
+  - **Still to do by hand (§13.4):** sign in to `/admin` with Google as **`labelservices@` and `creativeservices@`** (shared inboxes, if they're real Google Workspace accounts) and as an individual admin; confirm a **personal Gmail is rejected** with no `auth.users` row (V3); create "Lil Example" from the spec's sample data in the real admin; run each client email through the real magic-link email on a preview; and walk the admin guide once.
 
 - [ ] **12.2** `[dev]` Success-state sign-off: tick each item from the spec's **Success State** with evidence (test name or screenshot):
   - Evidence is the e2e suite (`tests/e2e`, 41 tests, run against both a local stack and the **hosted** project), plus the database tests and unit tests where noted. Real Google accounts can't be automated, so the last item is not ticked.
-  - [x] Primary + two aux emails each sign in and see the same page: `resources.spec.ts` › "artistA, manager, aux2 … sees the same page, greeted by the artist" (each persona signs in through a real admin-generated magic link and the confirm route).
+  - [x] Primary + two aux emails each sign in and see the same page: `resources.spec.ts` › "clientA, manager, aux2 … sees the same page, greeted by the client" (each persona signs in through a real admin-generated magic link and the confirm route).
   - [x] An unattached email gets not-approved, receives no email, and creates no Supabase user: `sign-in.spec.ts` › "a wrong email and any email on an unknown slug get the identical message, and no user is created" (checked against `auth.users`); no send happens because the approval check returns before Supabase is asked (`tests/send-link.test.ts`); direct sign-ups are also blocked by the hook (V2, 403).
   - [x] `/does-not-exist` is identical to a real slug, and any email gets not-approved: `access.spec.ts` › "a real and a made-up slug render the same screen" and `sign-in.spec.ts` (same message on both).
-  - [x] Signed in for A, B's URL shows Enter your email with no trace of B: `access.spec.ts` › "opening artist B's URL shows Enter your email, never B's name or resources".
-  - [x] Exclusive on A is visible on A only: `resources.spec.ts` (artist A sees it, artist B does not; the file route returns 404 for B), and `supabase/tests/rls.test.sql`.
+  - [x] Signed in for A, B's URL shows Enter your email with no trace of B: `access.spec.ts` › "opening client B's URL shows Enter your email, never B's name or resources".
+  - [x] Exclusive on A is visible on A only: `resources.spec.ts` (client A sees it, client B does not; the file route returns 404 for B), and `supabase/tests/rls.test.sql`.
   - [x] Hide on A affects A only: `resources.spec.ts` (A lacks the hidden resource, B has it).
   - [x] A removed aux email shows Enter your email on the next load: `revoke.spec.ts` (session stays valid, the page is gone, then the row is restored); also `supabase/tests/rls.test.sql`.
-  - [ ] Label services and creative services admins can sign in, and a non-admin Google account is rejected: **partly verified.** A listed admin sees the panel and every artist page, a non-admin session gets "You don’t have access.", the callback rejects every failure (`admin.spec.ts`, and a locally reproduced Google-method session in 5.8), and the database tests cover `is_admin()`. Your own Google sign-in works (V4). **Not yet verified with real accounts:** the two shared inboxes and a non-admin Google account (V3).
+  - [ ] Label services and creative services admins can sign in, and a non-admin Google account is rejected: **partly verified.** A listed admin sees the panel and every client page, a non-admin session gets "You don’t have access.", the callback rejects every failure (`admin.spec.ts`, and a locally reproduced Google-method session in 5.8), and the database tests cover `is_admin()`. Your own Google sign-in works (V4). **Not yet verified with real accounts:** the two shared inboxes and a non-admin Google account (V3).
 
 - [ ] **12.3** `[dev]` Device and email-client QA: iOS Safari, Android Chrome, desktop Safari/Chrome/Firefox. Open the magic-link email in Gmail web and app, Apple Mail, and Outlook/Microsoft 365 (watch for Safe Links spending the token, §16).
   - **Browser engines tested (automated, `tests/e2e/cross-browser.spec.ts`, opt in with `E2E_ALL_BROWSERS=1`):** desktop **Chromium**, desktop **WebKit** (Safari's engine), **iPhone 14** emulation (mobile Safari's engine), and **Pixel 7** emulation (mobile Chrome). On each: the Enter your email screen fits with no horizontal scroll and shows the not-approved message with the input kept; the carousel, the grouped grid, and the video dialog (open, Escape closes) work; the carousel returns; no page errors; the admin login renders. All 12 pass. This covers the engines most likely to differ for the carousel's 3D transforms, scroll snap, and view transitions.
@@ -3163,7 +3163,7 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 
 - [ ] **12.4** `[ops]` Final sender address: replace the `welcome@vydia.com` placeholder in Resend (domain) and Supabase SMTP once it's decided. If it's still undecided at launch, launch on the placeholder and log it here.
   - The final address is on the domain being purchased (0.9). Note the SMTP sender must be on a domain verified in Resend.
-  - **Waiting on the domain** (0.9/0.10). Until then the hosted project sends from the `welcome@vydia.com` placeholder, which is **not verified in Resend**, so a real artist's magic link may not be delivered or may land in spam. This is a launch blocker, not a cosmetic one.
+  - **Waiting on the domain** (0.9/0.10). Until then the hosted project sends from the `welcome@vydia.com` placeholder, which is **not verified in Resend**, so a real client's magic link may not be delivered or may land in spam. This is a launch blocker, not a cosmetic one.
 
 - [ ] **12.5** `[LS]` `[dev]` Content freeze in Studio, then re-run `npm run migrate:sanity` against the new project (idempotent; picks up edits since 8.5). Resources deleted in Sanity since then are deleted by hand in `/admin/resources`.
   - **Waiting on label services and the Pro plan.** The migration is idempotent and was re-checked on 2026-11-10 (a dry run lists the same 13 resources; 9 are on the hosted project). Do this after the Studio content freeze: `npm run migrate:sanity -- --include-drafts`, with no `--max-file-mb` once the Storage limit is at least 1 GB (0.6). Resources deleted in Sanity since the first run must be deleted by hand in `/admin/resources`.
@@ -3177,10 +3177,10 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [ ] **12.8** `[dev]` Merge `iteration-two` → `main`. — *Done when:* the production deploy succeeds.
   - **Needs your go-ahead** (see 12.6). Before merging: 10.11 (CI and preview e2e green on the PR), 12.1, the Pro upgrade for the videos, and a working sender (12.4).
 
-- [ ] **12.9** `[dev]` Production smoke test on `welcometovydia.com`: admin Google sign-in, create a real artist, copy the link, run the magic link end to end in a private window, check `/does-not-exist`, then delete the smoke-test artist.
-  - **After 12.8.** The e2e suite can be pointed at production for part of this (`E2E_BASE_URL`), but it creates and deletes real rows, so use it only with fixtures you are happy to create there; the Google sign-in and a real artist's magic link must be done by hand.
+- [ ] **12.9** `[dev]` Production smoke test on `welcometovydia.com`: admin Google sign-in, create a real client, copy the link, run the magic link end to end in a private window, check `/does-not-exist`, then delete the smoke-test client.
+  - **After 12.8.** The e2e suite can be pointed at production for part of this (`E2E_BASE_URL`), but it creates and deletes real rows, so use it only with fixtures you are happy to create there; the Google sign-in and a real client's magic link must be done by hand.
 
-- [ ] **12.10** `[LS]` Recreate active artists in `/admin` and send each one their new Welcome link.
+- [ ] **12.10** `[LS]` Recreate active clients in `/admin` and send each one their new Welcome link.
   - **Label services**, after launch. The admin guide (`docs/admin-guide.md`) is the how-to.
 
 ### Phase 13: Post-launch cleanup (about a week after 12.8)
@@ -3190,7 +3190,7 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [ ] **13.3** `[dev]` Remove `scripts/migrate-sanity.ts`, the `migrate:sanity` script, and the `@sanity/client` devDependency. Remove the legacy `SUPABASE_SERVICE_ROLE_KEY` and the Sanity variables from `.env.local`.
 - [ ] **13.4** `[ops]` Google Cloud: remove the old project's redirect URI from the OAuth client. Resend: revoke the old project's API key if it was separate.
 - [ ] **13.5** `[dev]` First `npm run storage:sweep` dry run. Add a reminder to the admin guide for the monthly run.
-- [ ] **13.6** `[dev]` Review the logs for `get_artist_page failed`, `email_can_access_slug failed`, and `Magic link not sent`, plus the rate-limit hits, from the first week.
+- [ ] **13.6** `[dev]` Review the logs for `get_client_page failed`, `email_can_access_slug failed`, and `Magic link not sent`, plus the rate-limit hits, from the first week.
 
 ---
 
@@ -3200,31 +3200,31 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 |---|---|
 | Admins: Google only, `@vydia.com`, in `admins` | D30, D31, `is_admin()`, hook, `/admin/auth/callback`, `requireAdmin` |
 | Admin account fields (email, name, avatar) | `admins` columns, `claim_admin_profile()`, panel nav |
-| Artist users: magic link only, no self-signup | `sendLink`, hook (D30), `email_can_access_slug` excludes admins |
-| Email can belong to many artists | `artist_emails` unique per `(artist_id, email)` only; RLS by email |
+| Client users: magic link only, no self-signup | `sendLink`, hook (D30), `email_can_access_slug` excludes admins |
+| Email can belong to many clients | `client_emails` unique per `(client_id, email)` only; RLS by email |
 | Sessions never expire; access checked live | D11 settings, D24/D25: RLS on every request, no cache |
-| Artists never feel signed in | No sign-out/account UI; `NoAccess` and `/auth/signout` deleted |
-| Create artist: slug auto-fill, emails, Remove/Restore, exclusives, all-or-nothing | `ArtistForm`, `save_artist` RPC |
-| Land on detail with Welcome link + Copy | `redirect('/admin/artists/{id}')`, `CopyLinkButton` |
+| Clients never feel signed in | No sign-out/account UI; `NoAccess` and `/auth/signout` deleted |
+| Create client: slug auto-fill, emails, Remove/Restore, exclusives, all-or-nothing | `ClientForm`, `save_client` RPC |
+| Land on detail with Welcome link + Copy | `redirect('/admin/clients/{id}')`, `CopyLinkButton` |
 | Server checks email × slug before sending | `sendLink` → `email_can_access_slug` → then `signInWithOtp` |
 | Approved: "Email sent…" + 60 s Resend | `EnterEmail` sent state, `claim_link_send` |
 | Not approved message, input stays | `MESSAGES['not-approved']`, controlled input |
-| Unknown slug ≡ wrong email ≡ no access | One RPC path in `sendLink`, `getArtistPage` → null for all, identical render, 200 |
+| Unknown slug ≡ wrong email ≡ no access | One RPC path in `sendLink`, `getClientPage` → null for all, identical render, 200 |
 | Click magic link → session → `/[slug]` | `/auth/confirm` GET route handler (D33) |
 | New session replaces old | `verifyOtp` overwrites cookies; tightened double-click fallback |
 | Remove email revokes immediately | RLS live join (pgTAP + e2e) |
 | Slug change warning, no redirects | `slugChanged` warning + `ConfirmDialog`; no `previousSlugs` |
-| Delete cascades, slug reusable | FK `on delete cascade`, garbage trigger, `deleteArtist` |
+| Delete cascades, slug reusable | FK `on delete cascade`, garbage trigger, `deleteClient` |
 | Main resources CRUD + reorder, apply to all | `/admin/resources`, `reorder_main_resources`, no cache |
 | Resources page: name, list, cover/title/type, list↔grid, grid by category | `ResourceViews(groups)`, grouped `ResourceGrid`, type label |
-| Enter your email: centered input, never the artist name | `EnterEmail`, `generateMetadata` plain title |
+| Enter your email: centered input, never the client name | `EnterEmail`, `generateMetadata` plain title |
 | Magic link expired screen | `/auth/expired` (every `/auth/confirm` failure lands here) |
-| Admins see artist pages | D32, `is_admin()` in RLS |
+| Admins see client pages | D32, `is_admin()` in RLS |
 | Admin screens (login, index + search, new, detail, resources) | §8 |
 | Field constraints | DB checks (§4.1) + `lib/validation.ts` (§8.4) + bucket limits (§4.8) |
 | Category suggestions + case-insensitive | `CategoryInput` datalist, D38 trigger, `groupByCategory` |
 | RLS, not just UI | §4.4, storage policies §4.8, pgTAP §13.2 |
-| Mobile artist pages; desktop admin | Existing responsive CSS + `EnterEmail` mobile CSS; admin CSS desktop-first |
+| Mobile client pages; desktop admin | Existing responsive CSS + `EnterEmail` mobile CSS; admin CSS desktop-first |
 | Only email sent is the magic link, via Resend | §11 |
 | Sanity read once; schema.json 1:1 | §5, §10, `tests/schema-parity.test.ts` |
 
@@ -3236,15 +3236,15 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 |---|---|
 | The sign-in form confirms *email × slug* pairs (required by the spec) | Per-IP and per-email limits (D34). The RPC is unreachable with the publishable key (D29). It reveals nothing unless the attacker already knows both the slug and the email. |
 | Public `resource-images` bucket: a cover or PDF first-page preview of an exclusive resource is reachable by anyone holding its URL | **Accepted (owner decision, D35).** Paths are random UUIDs and never listed (no public listing policy). |
-| Email scanners open magic links before the artist does (no Continue page, D33) | **Accepted (owner decision).** The artist lands on "This link has expired" and requests a new one. The 60 s cooldown is the only wait. If this shows up in practice (Microsoft 365 recipients), restoring a one-click confirm page is a small change: the iteration-one page and action are in git history. |
+| Email scanners open magic links before the client does (no Continue page, D33) | **Accepted (owner decision).** The client lands on "This link has expired" and requests a new one. The 60 s cooldown is the only wait. If this shows up in practice (Microsoft 365 recipients), restoring a one-click confirm page is a small change: the iteration-one page and action are in git history. |
 | Large video uploads fail over a single signed PUT | Bucket limit 1 GB on Pro. If it's flaky, switch `uploadAsset` to resumable uploads (`tus-js-client` against `/storage/v1/upload/resumable`), and keep the 1080p MP4 guidance from the old editor guide. |
 | Signed file URLs expire while a page stays open for days | Card links always go through `/api/resources/[id]/file`, which re-signs on each click. Only an already-playing video past 1 h could fail, and reopening fixes it. |
 | Hook or `amr` behaviour the Supabase docs leave open (sign-up paths, OAuth rejection redirect, `otp` vs `magiclink`) | Payload shape and return format are confirmed from the docs (§4.7). The rest is checked once on the new project (§12.3 V1–V6), and the code tolerates either answer. pgTAP pins the SQL side. |
 | New-project auth setup missed (SMTP, templates, redirect URLs, Google redirect URI) | Checklist §12.1–12.2, verified by V1–V4 before any code depends on it |
 | Admin layout blocks on the session read (Cache Components) | Acceptable for an internal desktop tool. `instant = false` as elsewhere. |
 | Orphaned uploads from abandoned forms | Garbage queue for deletes and replacements (D39), plus the manual `npm run storage:sweep` (D43) |
-| Cutover: everyone signs in again on the new Supabase project | Expected and harmless (§12.4). Artists are recreated and sent new links anyway. |
-| Cutover: existing Sanity artist links stop working | Expected (spec: label services recreate artists). Coordinate the date with label services and send new links. |
+| Cutover: everyone signs in again on the new Supabase project | Expected and harmless (§12.4). Clients are recreated and sent new links anyway. |
+| Cutover: existing Sanity client links stop working | Expected (spec: label services recreate clients). Coordinate the date with label services and send new links. |
 
 ---
 
@@ -3254,9 +3254,9 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 
 | Question | Answer | Where it lands |
 |---|---|---|
-| Should admins see artist pages directly? | Yes. Re-confirmed 2026-11-09: **Google sign-in only**, no magic-link access for admins, even view-only | D32, `is_admin()` in `can_view_artist` / `resources_read`, pgTAP test, "Open page" link, manual QA |
+| Should admins see client pages directly? | Yes. Re-confirmed 2026-11-09: **Google sign-in only**, no magic-link access for admins, even view-only | D32, `is_admin()` in `can_view_client` / `resources_read`, pgTAP test, "Open page" link, manual QA |
 | Keep the Continue page or go straight from link to session? | Straight to session | D33 (reverses D18), §3.3, §7.5 `route.ts`, e2e §13.3, risk §16 |
-| Keep per-artist additional info? | Drop it | D41, §0, §9 deletions |
+| Keep per-client additional info? | Drop it | D41, §0, §9 deletions |
 | Sender address | Placeholder `welcome@vydia.com` for now | §11, tasks 0.10 and 12.4 |
 | Public, unguessable URLs for exclusive covers/previews? | Yes | D35, §4.8, risk §16 |
 | Covers / LQIP | "The style should be the same": keep the blur-up placeholders | D42, §4.1 `*_lqip` columns, §5.2, §7.8, §8.6 `makeLqip`, §10 copies Sanity's LQIP |
