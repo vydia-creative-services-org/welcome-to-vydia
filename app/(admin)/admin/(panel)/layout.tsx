@@ -7,7 +7,7 @@ import styles from './panel.module.css'
 export const instant = false
 
 export default async function PanelLayout({children}: {children: React.ReactNode}) {
-  const {admin} = await requireAdmin()
+  const {admin, isSuper} = await requireAdmin()
   const name = admin.display_name ?? admin.email
 
   return (
@@ -28,6 +28,7 @@ export default async function PanelLayout({children}: {children: React.ReactNode
               />
             )}
             <span className={styles.name}>{name}</span>
+            {isSuper && <span className={styles.roleBadge}>Super admin</span>}
             <form action="/admin/auth/signout" method="post">
               <button className={controls.button}>Sign out</button>
             </form>

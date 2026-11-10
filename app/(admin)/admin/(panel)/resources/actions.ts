@@ -7,8 +7,11 @@ import {resourceInput, type ResourceInputValue} from '@/lib/validation'
 
 export type ResourceResult = {ok: true} | {ok: false; errors: Record<string, string>}
 
+const SUPER_ONLY = 'Only super admins can change core resources.'
+
 export async function upsertMainResource(input: ResourceInputValue): Promise<ResourceResult> {
-  const {supabase} = await requireAdmin()
+  const {supabase, isSuper} = await requireAdmin()
+  if (!isSuper) return {ok: false, errors: {form: SUPER_ONLY}}
   const parsed = resourceInput.safeParse(input)
   if (!parsed.success) {
     const errors: Record<string, string> = {}
@@ -46,7 +49,8 @@ export async function upsertMainResource(input: ResourceInputValue): Promise<Res
 }
 
 export async function deleteMainResource(id: string): Promise<{ok: boolean}> {
-  const {supabase} = await requireAdmin()
+  const {supabase, isSuper} = await requireAdmin()
+  if (!isSuper) return {ok: false}
   const parsed = z.uuid().safeParse(id)
   if (!parsed.success) return {ok: false}
   const {error} = await supabase.from('resources').delete().eq('id', parsed.data).is('client_id', null)
@@ -57,7 +61,8 @@ export async function deleteMainResource(id: string): Promise<{ok: boolean}> {
 }
 
 export async function reorderMainResources(ids: string[]): Promise<{ok: boolean}> {
-  const {supabase} = await requireAdmin()
+  const {supabase, isSuper} = await requireAdmin()
+  if (!isSuper) return {ok: false}
   const parsed = z.array(z.uuid()).safeParse(ids)
   if (!parsed.success) return {ok: false}
   const {error} = await supabase.rpc('reorder_main_resources', {ids: parsed.data})

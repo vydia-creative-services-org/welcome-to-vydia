@@ -27,6 +27,7 @@ export type Database = {
           display_name: string | null
           email: string
           last_sign_in_at: string | null
+          role: Database['public']['Enums']['admin_role']
           user_id: string | null
         }
         ComputedFields: never
@@ -36,6 +37,7 @@ export type Database = {
           display_name?: string | null
           email: string
           last_sign_in_at?: string | null
+          role?: Database['public']['Enums']['admin_role']
           user_id?: string | null
         }
         Update: {
@@ -44,6 +46,7 @@ export type Database = {
           display_name?: string | null
           email?: string
           last_sign_in_at?: string | null
+          role?: Database['public']['Enums']['admin_role']
           user_id?: string | null
         }
         Relationships: []
@@ -117,6 +120,7 @@ export type Database = {
       }
       clients: {
         Row: {
+          assigned_admin: string | null
           created_at: string
           created_by: string | null
           id: string
@@ -126,6 +130,7 @@ export type Database = {
         }
         ComputedFields: never
         Insert: {
+          assigned_admin?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
@@ -134,6 +139,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          assigned_admin?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
@@ -141,7 +147,15 @@ export type Database = {
           slug?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'clients_assigned_admin_fkey'
+            columns: ['assigned_admin']
+            isOneToOne: false
+            referencedRelation: 'admins'
+            referencedColumns: ['email']
+          },
+        ]
       }
       resources: {
         Row: {
@@ -217,6 +231,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_manage_client: {Args: {target: string}; Returns: boolean}
       can_view_client: {Args: {target: string}; Returns: boolean}
       can_view_main_resource: {Args: {target: string}; Returns: boolean}
       claim_admin_profile: {Args: Record<PropertyKey, never>; Returns: boolean}
@@ -226,6 +241,8 @@ export type Database = {
       hit_rate_limit: {Args: {p_key: string; p_limit: number; p_window: string}; Returns: boolean}
       hook_before_user_created: {Args: {event: Json}; Returns: Json}
       is_admin: {Args: Record<PropertyKey, never>; Returns: boolean}
+      is_client_contact: {Args: {target: string}; Returns: boolean}
+      is_super_admin: {Args: Record<PropertyKey, never>; Returns: boolean}
       jwt_email: {Args: Record<PropertyKey, never>; Returns: string}
       reorder_main_resources: {Args: {ids: string[]}; Returns: undefined}
       save_client: {Args: {payload: Json}; Returns: string}
@@ -238,6 +255,7 @@ export type Database = {
       }
     }
     Enums: {
+      admin_role: 'super' | 'regular'
       resource_type: 'pdf' | 'video' | 'link' | 'slides'
     }
     CompositeTypes: {
@@ -349,6 +367,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      admin_role: ['super', 'regular'],
       resource_type: ['pdf', 'video', 'link', 'slides'],
     },
   },

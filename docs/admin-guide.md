@@ -9,6 +9,26 @@ For label services and creative services. It covers everything you do in the adm
 
 You stay signed in. **Sign out** is at the top right of the panel.
 
+## Super admins and admins
+
+There are two kinds of admin.
+
+| | Super admin | Admin |
+| --- | --- | --- |
+| See clients | Every client | Only clients assigned to you |
+| Open a client's page | Any client | Only your clients |
+| Create a client | Yes | Yes (it's assigned to you) |
+| Edit or delete a client | Any client | Only your clients |
+| Add exclusive resources to a client | Any client | Only your clients |
+| Hide a main resource for a client | Any client | Only your clients |
+| View main resources | Yes | Yes, read-only |
+| Add, edit, delete, or reorder main resources | Yes | No |
+| Reassign a client to another admin | Yes | No |
+
+A client is assigned to the admin who creates it. Only one admin owns a client at a time. If you can't find a client, it belongs to someone else: ask a super admin. Super admins have a **Super admin** badge next to their name.
+
+Super admins can reassign a client from its page with the **Assigned to** menu. They can switch the client list between **Mine**, **All**, and **Unassigned**, and the **Owner** column shows who owns each client. Choosing **Unassigned** hides the client from every regular admin until it's assigned again.
+
 ## How it fits together
 
 - A **main resource** is a card everyone sees: a guide, a tutorial video, a pitch form. You manage them under **Resources**.
@@ -58,7 +78,7 @@ Open the client, scroll to the bottom, and click **Delete client**, then confirm
 
 ## Main resources (everyone sees these)
 
-Open **Resources** in the top bar. Changes here apply to **every client immediately**.
+Open **Resources** in the top bar. Changes here apply to **every client immediately**. Only super admins can change main resources. Other admins see the list read-only and can hide a main resource for their own clients from the client's page.
 
 - **New main resource** adds one. A new one appears on every client's page automatically (you can hide it per client afterwards).
 - **Edit** and **Delete** are on each row. Deleting removes it from every client, and any per-client hides for it too.
@@ -87,6 +107,8 @@ The page has a carousel and a grid view (grouped by category). The client's name
 ## Adding an admin
 
 Admins are managed in Supabase, not in this panel. In the Supabase dashboard open **Table editor → `admins`** and add a row with the person's **@vydia.com** email. Their name and picture fill in the first time they sign in with Google. Delete the row to remove them. They need a real Google Workspace account.
+
+New rows are regular admins. To make someone a super admin, set their **`role`** to `super`; set it back to `regular` to undo. Deleting an admin leaves their clients unassigned, so only super admins can see them until they're reassigned.
 
 ## For developers: cleaning up uploads
 

@@ -1,4 +1,5 @@
 import {notFound} from 'next/navigation'
+import {AssignAdminSelect} from '@/components/admin/AssignAdminSelect'
 import {ClientForm} from '@/components/admin/ClientForm'
 import controls from '@/components/admin/controls.module.css'
 import {CopyLinkButton} from '@/components/admin/CopyLinkButton'
@@ -14,17 +15,20 @@ export const instant = false
 export default async function ClientDetail({params, searchParams}: PageProps<'/admin/clients/[id]'>) {
   const {id} = await params
   const {saved} = await searchParams
-  const {supabase} = await requireAdmin()
+  const {supabase, isSuper} = await requireAdmin()
 
-  const [{data: client, error}, context] = await Promise.all([
+  const [{data: client, error}, context, {data: admins}] = await Promise.all([
     supabase
       .from('clients')
       .select(
-        'id, name, slug, updated_at, client_emails(email, label, is_primary), client_hidden_resources(resource_id), resources!resources_client_id_fkey(*)',
+        'id, name, slug, updated_at, assigned_admin, client_emails(email, label, is_primary), client_hidden_resources(resource_id), resources!resources_client_id_fkey(*)',
       )
       .eq('id', id)
       .maybeSingle(),
     loadResourceContext(supabase),
+    isSuper
+      ? supabase.from('admins').select('email, display_name').order('display_name', {nullsFirst: false})
+      : Promise.resolve({data: null}),
   ])
   if (error) throw new Error(`Couldn’t load the client: ${error.message}`)
   if (!client) notFound()
@@ -47,6 +51,8 @@ export default async function ClientDetail({params, searchParams}: PageProps<'/a
           </a>
         </div>
       </header>
+
+      {isSuper && admins && <AssignAdminSelect clientId={client.id} current={client.assigned_admin} admins={admins} />}
 
       <ClientForm key={`${client.id}:${client.updated_at}`} initial={toFormInitial(client)} {...context} />
 

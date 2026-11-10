@@ -2,7 +2,8 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(32);
 
-insert into public.admins (email) values ('ops@vydia.com') on conflict do nothing;
+insert into public.admins (email, role) values ('ops@vydia.com', 'super')
+  on conflict (email) do update set role = 'super';
 insert into auth.users (id, email) values ('33333333-3333-3333-3333-333333333333', 'ops@vydia.com');
 
 insert into public.clients (id, name, slug) values
