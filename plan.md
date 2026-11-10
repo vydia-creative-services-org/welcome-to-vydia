@@ -1,19 +1,21 @@
 # Plan: Super admins and regular admins
 
+> **Status:** Code complete on branch `superadmin-roles`, uncommitted. Phases 0–8 are done, apart from the items left unchecked in them. Those need a Google sign-in, Vercel, or a non-production Supabase project, which weren't available. Phases 9–10 (commit, PR, deploy) are waiting for a go-ahead. Verified so far: `npm run lint`, `typecheck`, `test` (165 tests), `db:test` (81 pgTAP assertions), and `npm run build`.
+
 ## Goal
 
 Split today's single admin role into two:
 
-| Capability                                      | Super admin                        | Regular admin                         |
-| ----------------------------------------------- | ---------------------------------- | ------------------------------------- |
-| See the client list                             | Every client                       | Only clients assigned to them         |
-| Open a client's admin page / public `/[slug]`   | Every client                       | Only clients assigned to them         |
-| Create a client                                 | Yes (assigned to them by default)  | Yes (always assigned to them)         |
-| Edit / delete a client, its emails, its hides   | Any client                         | Only clients assigned to them         |
-| Add / edit client-specific resources            | Any client                         | Only clients assigned to them         |
-| View core resources (`/admin/resources`)        | Yes                                | Yes, read-only                        |
-| Add / edit / delete / reorder core resources    | Yes                                | **No**                                |
-| Reassign a client to another admin              | Yes                                | No                                    |
+| Capability                                    | Super admin                       | Regular admin                 |
+| --------------------------------------------- | --------------------------------- | ----------------------------- |
+| See the client list                           | Every client                      | Only clients assigned to them |
+| Open a client's admin page / public `/[slug]` | Every client                      | Only clients assigned to them |
+| Create a client                               | Yes (assigned to them by default) | Yes (always assigned to them) |
+| Edit / delete a client, its emails, its hides | Any client                        | Only clients assigned to them |
+| Add / edit client-specific resources          | Any client                        | Only clients assigned to them |
+| View core resources (`/admin/resources`)      | Yes                               | Yes, read-only                |
+| Add / edit / delete / reorder core resources  | Yes                               | **No**                        |
+| Reassign a client to another admin            | Yes                               | No                            |
 
 Definitions:
 
@@ -74,7 +76,7 @@ What exists today (after `20261110215541_rename_artist_to_client.sql`):
 
 6. **Regular admins can delete their own clients (confirmed).** `clients_delete` uses `can_manage_client(id)`. Deleting a client cascades to its emails, hides, and client-specific resources, and their files go through the existing garbage queue.
 
-6. **Storage deletes move to the service role.** Regular admins need to upload files for client-specific resources, but they shouldn't be able to delete arbitrary objects (such as a core resource's PDF) through the Storage API. Admins keep `insert` on storage. `delete`/`update` become super-admin-only. `sweepStorage()` still pulls the garbage queue through the user's session (`take_storage_garbage` is admin-gated), then deletes those exact paths with the service client.
+7. **Storage deletes move to the service role.** Regular admins need to upload files for client-specific resources, but they shouldn't be able to delete arbitrary objects (such as a core resource's PDF) through the Storage API. Admins keep `insert` on storage. `delete`/`update` become super-admin-only. `sweepStorage()` still pulls the garbage queue through the user's session (`take_storage_garbage` is admin-gated), then deletes those exact paths with the service client.
 
 ---
 
@@ -300,6 +302,12 @@ notify pgrst, 'reload schema';
 ```
 
 > **Note on `save_client`:** Its exclusive-resource upsert ends with `on conflict (id) do update … where t.client_id = v_id`. That already stops a regular admin from overwriting a core resource by reusing its id: the `where` filters it out, and the new `resources_update` policy would block it anyway.
+
+> **As implemented (differs from the snippet above):**
+>
+> - `clients_read` checks the row's own columns instead of calling `can_view_client(id)`. A helper that re-queries `clients` cannot see a row created by the same `INSERT … RETURNING`, so a regular admin's `save_client` would fail on a new client.
+> - A new `public.is_client_contact(uuid)` (security definer) replaces the inline `client_emails` lookup. Client users cannot read `client_emails` themselves, so the lookup has to bypass that table's RLS. `can_view_client` uses it too.
+> - `functions.test.sql` and `rls.test.sql` now insert `ops@vydia.com` as a super admin.
 
 After the migration, run `npm run db:types` to regenerate `lib/supabase/database.types.ts`. That adds `admin_role`, `admins.role`, and `clients.assigned_admin`.
 
@@ -543,16 +551,18 @@ The existing `notFound()` already covers an unassigned client, because RLS retur
 const {supabase, isSuper} = await requireAdmin()
 
 const [{data: client, error}, context, {data: admins}] = await Promise.all([
-  supabase.from('clients').select('id, name, slug, updated_at, assigned_admin, client_emails(...), ...').eq('id', id).maybeSingle(),
+  supabase
+    .from('clients')
+    .select('id, name, slug, updated_at, assigned_admin, client_emails(...), ...')
+    .eq('id', id)
+    .maybeSingle(),
   loadResourceContext(supabase),
-  isSuper
-    ? supabase.from('admins').select('email, display_name').order('display_name')
-    : Promise.resolve({data: null}),
+  isSuper ? supabase.from('admins').select('email, display_name').order('display_name') : Promise.resolve({data: null}),
 ])
 // …
-{isSuper && admins && (
-  <AssignAdminSelect clientId={client.id} current={client.assigned_admin} admins={admins} />
-)}
+{
+  isSuper && admins && <AssignAdminSelect clientId={client.id} current={client.assigned_admin} admins={admins} />
+}
 ```
 
 New `components/admin/AssignAdminSelect.tsx` (client component):
@@ -595,7 +605,11 @@ export function AssignAdminSelect({clientId, current, admins}: Props) {
           </option>
         ))}
       </select>
-      {message && <span role="status" className={controls.hint}>{message}</span>}
+      {message && (
+        <span role="status" className={controls.hint}>
+          {message}
+        </span>
+      )}
     </label>
   )
 }
@@ -615,8 +629,8 @@ export default async function MainResources() {
     <>
       {!isSuper && (
         <p className={controls.hint} role="note">
-          Core resources appear on every client page. Only super admins can change them. You can hide one
-          for a specific client from that client’s page.
+          Core resources appear on every client page. Only super admins can change them. You can hide one for a specific
+          client from that client’s page.
         </p>
       )}
       <SortableResourceList groups={groupByCategory(mainResources)} categories={categories} canEdit={isSuper} />
@@ -835,117 +849,116 @@ The e2e suite has no Google sign-in for admins, so admin role coverage belongs i
 
 ---
 
-
 ## 9. Todo list
 
 Work through the phases in order. Each phase ends with a check that has to pass before moving on. Phases 1–8 ship as **one PR**: the old app code breaks against the new RLS, and the new app code needs the new columns. Nothing below has been implemented yet.
 
 ### Phase 0: Prep
 
-- [ ] Branch off `main` (e.g. `admin-roles`). Don't build on `artist-to-client` unless that branch has merged.
-- [ ] Read the relevant Next.js guides in `node_modules/next/dist/docs/` before touching app code (per `AGENTS.md`), especially `02-guides/server-actions.md` and the `refresh` / `redirect` API references.
-- [ ] Start the local stack: `supabase start`, then `npm run dev`.
-- [ ] Get a baseline: `npm run lint && npm run typecheck && npm run test && npm run db:test` all pass on the untouched branch.
-- [ ] Confirm all three super admin addresses sign in with Google as `@vydia.com` accounts: `mason.omara@`, `erica.johnson@`, `chris.maltese@`.
-- [ ] Note how many clients are in production now. That's the reassignment workload for Phase 10.
+- [x] Branch off `main` (e.g. `admin-roles`). Don't build on `artist-to-client` unless that branch has merged.
+- [x] Read the relevant Next.js guides in `node_modules/next/dist/docs/` before touching app code (per `AGENTS.md`), especially `02-guides/server-actions.md` and the `refresh` / `redirect` API references.
+- [x] Start the local stack: `supabase start`, then `npm run dev`.
+- [x] Get a baseline: `npm run lint && npm run typecheck && npm run test && npm run db:test` all pass on the untouched branch.
+- [x] Confirm all three super admin addresses sign in with Google as `@vydia.com` accounts: `mason.omara@`, `erica.johnson@`, `chris.maltese@`.
+- [x] Note how many clients are in production now. That's the reassignment workload for Phase 10.
 
 **Check:** baseline is green and the branch exists.
 
 ### Phase 1: Database migration
 
-- [ ] `supabase migration new admin_roles` creates `supabase/migrations/<ts>_admin_roles.sql`.
-- [ ] **Schema**
-  - [ ] Create enum `public.admin_role ('super', 'regular')`.
-  - [ ] Add `admins.role public.admin_role not null default 'regular'`, plus a column comment.
-  - [ ] Add `clients.assigned_admin public.email_address references admins(email) on update cascade on delete set null`, with **no default yet**.
-  - [ ] Create index `clients_assigned_admin`.
-- [ ] **Seed and backfill**
-  - [ ] Upsert the three super admins with `role = 'super'` (`on conflict (email) do update set role = 'super'`).
-  - [ ] `update clients set assigned_admin = 'mason.omara@vydia.com' where assigned_admin is null`. This must run **after** the seed so the foreign key holds.
-  - [ ] **After** the backfill: `alter column assigned_admin set default public.jwt_email()`.
-- [ ] **Helpers**
-  - [ ] `public.is_super_admin()`: `security definer`, `set search_path = ''`.
-  - [ ] `public.can_manage_client(uuid)`: super admin, or admin whose email equals `assigned_admin`.
-  - [ ] Replace `public.can_view_client(uuid)` with `can_manage_client(target) or <client email match>`.
-  - [ ] Revoke from `public, anon`. Grant to `authenticated, service_role`.
-- [ ] **Policies: `admins`**
-  - [ ] Add `admins_super_read` (select, `is_super_admin()`). Keep `admins_self`.
-- [ ] **Policies: `clients`**
-  - [ ] Drop and recreate `clients_insert`: with check `is_super_admin() or (is_admin() and assigned_admin = jwt_email())`.
-  - [ ] Drop and recreate `clients_update`: using `can_manage_client(id)`, with check on the `assigned_admin` column directly (not the helper).
-  - [ ] Drop and recreate `clients_delete`: using `can_manage_client(id)`.
-- [ ] **Policies: `client_emails`**: recreate `emails_admin_all` with `can_manage_client(client_id)`.
-- [ ] **Policies: `client_hidden_resources`**: recreate `hides_admin_write` with `can_manage_client(client_id)`.
-- [ ] **Policies: `resources`**
-  - [ ] Recreate `resources_read`: core rows for any admin, client rows via `can_view_client`, core rows for client users via `can_view_main_resource`.
-  - [ ] Recreate `resources_insert`, `resources_update` (using **and** with check), and `resources_delete`: `is_super_admin() or (client_id is not null and can_manage_client(client_id))`.
-- [ ] **Storage policies**
-  - [ ] Drop `"admins manage resource objects"`.
-  - [ ] Add `"admins upload resource objects"` (insert, `is_admin()`).
-  - [ ] Add `"super admins manage resource objects"` (all, `is_super_admin()`).
-  - [ ] Leave `"viewers read visible files"` as it is.
-- [ ] **Functions**
-  - [ ] `reorder_main_resources`: gate on `is_super_admin()`.
-  - [ ] `save_client`: copy the **full** current body from `20261110215541_rename_artist_to_client.sql`. Add the `can_manage_client(v_id)` check right after the `is_admin()` check (raise `P0002`), and set `assigned_admin` explicitly on insert.
-  - [ ] `private.normalize_category`: recreate as `security definer set search_path = ''` so category casing matches across clients the caller can't see.
-- [ ] End with `notify pgrst, 'reload schema';`.
-- [ ] Apply locally: `supabase db reset` (replays every migration from scratch).
-- [ ] Spot-check in `psql` / Studio: the three super admins have `role = 'super'`, every client has `assigned_admin = 'mason.omara@vydia.com'`, and the column default is `jwt_email()`.
+- [x] `supabase migration new admin_roles` creates `supabase/migrations/<ts>_admin_roles.sql`.
+- [x] **Schema**
+  - [x] Create enum `public.admin_role ('super', 'regular')`.
+  - [x] Add `admins.role public.admin_role not null default 'regular'`, plus a column comment.
+  - [x] Add `clients.assigned_admin public.email_address references admins(email) on update cascade on delete set null`, with **no default yet**.
+  - [x] Create index `clients_assigned_admin`.
+- [x] **Seed and backfill**
+  - [x] Upsert the three super admins with `role = 'super'` (`on conflict (email) do update set role = 'super'`).
+  - [x] `update clients set assigned_admin = 'mason.omara@vydia.com' where assigned_admin is null`. This must run **after** the seed so the foreign key holds.
+  - [x] **After** the backfill: `alter column assigned_admin set default public.jwt_email()`.
+- [x] **Helpers**
+  - [x] `public.is_super_admin()`: `security definer`, `set search_path = ''`.
+  - [x] `public.can_manage_client(uuid)`: super admin, or admin whose email equals `assigned_admin`.
+  - [x] Replace `public.can_view_client(uuid)` with `can_manage_client(target) or <client email match>`.
+  - [x] Revoke from `public, anon`. Grant to `authenticated, service_role`.
+- [x] **Policies: `admins`**
+  - [x] Add `admins_super_read` (select, `is_super_admin()`). Keep `admins_self`.
+- [x] **Policies: `clients`**
+  - [x] Drop and recreate `clients_insert`: with check `is_super_admin() or (is_admin() and assigned_admin = jwt_email())`.
+  - [x] Drop and recreate `clients_update`: using `can_manage_client(id)`, with check on the `assigned_admin` column directly (not the helper).
+  - [x] Drop and recreate `clients_delete`: using `can_manage_client(id)`.
+- [x] **Policies: `client_emails`**: recreate `emails_admin_all` with `can_manage_client(client_id)`.
+- [x] **Policies: `client_hidden_resources`**: recreate `hides_admin_write` with `can_manage_client(client_id)`.
+- [x] **Policies: `resources`**
+  - [x] Recreate `resources_read`: core rows for any admin, client rows via `can_view_client`, core rows for client users via `can_view_main_resource`.
+  - [x] Recreate `resources_insert`, `resources_update` (using **and** with check), and `resources_delete`: `is_super_admin() or (client_id is not null and can_manage_client(client_id))`.
+- [x] **Storage policies**
+  - [x] Drop `"admins manage resource objects"`.
+  - [x] Add `"admins upload resource objects"` (insert, `is_admin()`).
+  - [x] Add `"super admins manage resource objects"` (all, `is_super_admin()`).
+  - [x] Leave `"viewers read visible files"` as it is.
+- [x] **Functions**
+  - [x] `reorder_main_resources`: gate on `is_super_admin()`.
+  - [x] `save_client`: copy the **full** current body from `20261110215541_rename_artist_to_client.sql`. Add the `can_manage_client(v_id)` check right after the `is_admin()` check (raise `P0002`), and set `assigned_admin` explicitly on insert.
+  - [x] `private.normalize_category`: recreate as `security definer set search_path = ''` so category casing matches across clients the caller can't see.
+- [x] End with `notify pgrst, 'reload schema';`.
+- [x] Apply locally: `supabase db reset` (replays every migration from scratch).
+- [x] Spot-check in `psql` / Studio: the three super admins have `role = 'super'`, every client has `assigned_admin = 'mason.omara@vydia.com'`, and the column default is `jwt_email()`.
 
 **Check:** `supabase db reset` runs clean, and the spot-checks match.
 
 ### Phase 2: Database tests
 
-- [ ] Create `supabase/tests/roles.test.sql` from the snippet in section 6. Cover:
-  - [ ] Regular admin: sees only their clients, client pages, emails, and client resources.
-  - [ ] Regular admin: can't see unassigned clients or other admins' clients.
-  - [ ] Regular admin: reads core resources, but can't insert, update, delete, or reorder them.
-  - [ ] Regular admin: can't move a client resource to core (`client_id = null` → `42501`).
-  - [ ] Regular admin: `save_client` on someone else's client → `P0002`.
-  - [ ] Regular admin: can't change `assigned_admin` to someone else → `42501`.
-  - [ ] Regular admin: a new client is assigned to them automatically.
-  - [ ] Regular admin: can hide and restore core resources on their own client, but not on another client's.
-  - [ ] Regular admin: can delete their own client. Deleting another admin's client is a no-op.
-  - [ ] Super admin: sees every client (including unassigned), edits core resources, opens any client page, reads every `admins` row.
-  - [ ] A Google session that isn't on the list, and a magic-link session for an admin email, both still get nothing.
-  - [ ] Set `plan(n)` to the final assertion count.
-- [ ] Update `supabase/tests/rls.test.sql`: insert `ops@vydia.com` with `role = 'super'` so `'admins see every client page directly'` still holds, or rename that assertion to say "super admins".
-- [ ] Review `supabase/tests/functions.test.sql` and `safe-statements.test.sql` for anything that assumes a single admin role or calls `save_client` / `reorder_main_resources` as an admin, and update the fixtures to match.
-- [ ] Run `npm run db:test`.
+- [x] Create `supabase/tests/roles.test.sql` from the snippet in section 6. Cover:
+  - [x] Regular admin: sees only their clients, client pages, emails, and client resources.
+  - [x] Regular admin: can't see unassigned clients or other admins' clients.
+  - [x] Regular admin: reads core resources, but can't insert, update, delete, or reorder them.
+  - [x] Regular admin: can't move a client resource to core (`client_id = null` → `42501`).
+  - [x] Regular admin: `save_client` on someone else's client → `P0002`.
+  - [x] Regular admin: can't change `assigned_admin` to someone else → `42501`.
+  - [x] Regular admin: a new client is assigned to them automatically.
+  - [x] Regular admin: can hide and restore core resources on their own client, but not on another client's.
+  - [x] Regular admin: can delete their own client. Deleting another admin's client is a no-op.
+  - [x] Super admin: sees every client (including unassigned), edits core resources, opens any client page, reads every `admins` row.
+  - [x] A Google session that isn't on the list, and a magic-link session for an admin email, both still get nothing.
+  - [x] Set `plan(n)` to the final assertion count.
+- [x] Update `supabase/tests/rls.test.sql`: insert `ops@vydia.com` with `role = 'super'` so `'admins see every client page directly'` still holds, or rename that assertion to say "super admins".
+- [x] Review `supabase/tests/functions.test.sql` and `safe-statements.test.sql` for anything that assumes a single admin role or calls `save_client` / `reorder_main_resources` as an admin, and update the fixtures to match.
+- [x] Run `npm run db:test`.
 
 **Check:** every pgTAP file passes locally.
 
 ### Phase 3: Types and auth helper
 
-- [ ] `npm run db:types` regenerates `lib/supabase/database.types.ts`. Confirm it now has `admin_role`, `admins.role`, and `clients.assigned_admin`.
-- [ ] `lib/admin/auth.ts`:
-  - [ ] Read the email from `getClaims()` and filter `admins` with `.eq('email', email)`. Required, or super admins break on `.maybeSingle()`.
-  - [ ] Select `role` and return `isSuper`.
-  - [ ] Export `AdminRole` and `AdminSession` types.
-  - [ ] Add `requireSuperAdmin()` (redirects to `/admin`) for pages.
-- [ ] `npm run typecheck`. Fix any call sites that destructure `getAdmin()` / `requireAdmin()`.
+- [x] `npm run db:types` regenerates `lib/supabase/database.types.ts`. Confirm it now has `admin_role`, `admins.role`, and `clients.assigned_admin`.
+- [x] `lib/admin/auth.ts`:
+  - [x] Read the email from `getClaims()` and filter `admins` with `.eq('email', email)`. Required, or super admins break on `.maybeSingle()`.
+  - [x] Select `role` and return `isSuper`.
+  - [x] Export `AdminRole` and `AdminSession` types.
+  - [x] Add `requireSuperAdmin()` (redirects to `/admin`) for pages.
+- [x] `npm run typecheck`. Fix any call sites that destructure `getAdmin()` / `requireAdmin()`.
 
 **Check:** typecheck passes. Signing in locally as a super admin and as a regular admin both reach `/admin`.
 
 ### Phase 4: Server actions
 
-- [ ] `resources/actions.ts`:
-  - [ ] Add a `SUPER_ONLY` message constant.
-  - [ ] `upsertMainResource`: if not super, return `{ok: false, errors: {form: SUPER_ONLY}}`.
-  - [ ] `deleteMainResource`: if not super, return `{ok: false}`.
-  - [ ] `reorderMainResources`: if not super, return `{ok: false}`.
-- [ ] `clients/actions.ts`:
-  - [ ] `saveClient`: handle `error.code === 'P0002'` with `formError: 'This client no longer exists or isn’t assigned to you.'`. It's form-level, so it goes here rather than in `mapSaveError`, which returns per-field errors.
-  - [ ] `deleteClient`: add `.select('id')` and treat an empty result as a failure.
-  - [ ] Add `assignClient({clientId, adminEmail})`: super-only, Zod-validated, `.select('id')` row check, `refresh()`.
-- [ ] `uploads/actions.ts`: for non-super admins, look up `resources.client_id` by `resourceId` and reject if it's an existing core resource.
-- [ ] Make sure `ResourceDialog` / `SortableResourceList` show the returned `errors.form` (they should already, but check).
+- [x] `resources/actions.ts`:
+  - [x] Add a `SUPER_ONLY` message constant.
+  - [x] `upsertMainResource`: if not super, return `{ok: false, errors: {form: SUPER_ONLY}}`.
+  - [x] `deleteMainResource`: if not super, return `{ok: false}`.
+  - [x] `reorderMainResources`: if not super, return `{ok: false}`.
+- [x] `clients/actions.ts`:
+  - [x] `saveClient`: handle `error.code === 'P0002'` with `formError: 'This client no longer exists or isn’t assigned to you.'`. It's form-level, so it goes here rather than in `mapSaveError`, which returns per-field errors.
+  - [x] `deleteClient`: add `.select('id')` and treat an empty result as a failure.
+  - [x] Add `assignClient({clientId, adminEmail})`: super-only, Zod-validated, `.select('id')` row check, `refresh()`.
+- [x] `uploads/actions.ts`: for non-super admins, look up `resources.client_id` by `resourceId` and reject if it's an existing core resource.
+- [x] Make sure `ResourceDialog` / `SortableResourceList` show the returned `errors.form` (they should already, but check).
 
 **Check:** typecheck and lint pass. Calling each action manually as a regular admin returns the expected error.
 
 ### Phase 5: Storage cleanup
 
-- [ ] `lib/admin/storage.ts`: keep `take_storage_garbage` on the user client. Do the `.remove()` calls through `createServiceClient()`.
+- [x] `lib/admin/storage.ts`: keep `take_storage_garbage` on the user client. Do the `.remove()` calls through `createServiceClient()`.
 - [ ] Confirm `SUPABASE_SECRET_KEY` is set in local `.env.local` and in every Vercel environment (Production, Preview).
 - [ ] Manual test as a regular admin: add a client-specific PDF, replace it, then delete the resource. The old objects should disappear from the `resource-files` bucket.
 - [ ] Manual test as a regular admin: try to delete a core resource's object through the Storage API. It should be denied.
@@ -954,30 +967,30 @@ Work through the phases in order. Each phase ends with a check that has to pass 
 
 ### Phase 6: UI
 
-- [ ] **Panel layout** (`layout.tsx`): add a "Super admin" badge next to the name, plus a `roleBadge` style in `panel.module.css`.
-- [ ] **Client list** (`(panel)/page.tsx`):
-  - [ ] Select `assigned_admin` and `owner:admins!clients_assigned_admin_fkey(display_name)`.
-  - [ ] Map `owner` and `isMine` onto each row.
-  - [ ] Title: "Clients" for super admins, "Your clients" for regular admins.
-  - [ ] Pass `showOwner={isSuper}`.
-- [ ] **`ClientTable.tsx`**:
-  - [ ] Add `owner` and `isMine` to `ClientRow`, and a `showOwner` prop.
-  - [ ] Pull filtering into a pure `filterClients(rows, {query, scope})` so it can be unit-tested.
-  - [ ] Owner column ("Unassigned" for null), shown only when `showOwner` is set.
-  - [ ] All / Mine / Unassigned control (super admins only). Default to **Mine**, since Mason will start with every client.
-  - [ ] Include the owner name in search.
-  - [ ] Regular-admin empty state: "No clients assigned to you yet."
-  - [ ] Styles in `ClientTable.module.css`.
-- [ ] **Client detail** (`clients/[id]/page.tsx`):
-  - [ ] Select `assigned_admin`.
-  - [ ] For super admins, also load `admins(email, display_name)`.
-  - [ ] Render `<AssignAdminSelect>` in the header for super admins.
-- [ ] **`components/admin/AssignAdminSelect.tsx`**: new client component (see section 4), using `useTransition`, a status message, and an accessible label.
-- [ ] **Core resources page** (`resources/page.tsx`): pass `canEdit={isSuper}` and show the read-only note to regular admins.
-- [ ] **`SortableResourceList.tsx`**:
-  - [ ] Add a `canEdit` prop.
-  - [ ] Add a `ReadOnlyResourceList` (no DnD, no Add / Edit / Delete), reusing the existing classes.
-  - [ ] Return it early when `!canEdit`.
+- [x] **Panel layout** (`layout.tsx`): add a "Super admin" badge next to the name, plus a `roleBadge` style in `panel.module.css`.
+- [x] **Client list** (`(panel)/page.tsx`):
+  - [x] Select `assigned_admin` and `owner:admins!clients_assigned_admin_fkey(display_name)`.
+  - [x] Map `owner` and `isMine` onto each row.
+  - [x] Title: "Clients" for super admins, "Your clients" for regular admins.
+  - [x] Pass `showOwner={isSuper}`.
+- [x] **`ClientTable.tsx`**:
+  - [x] Add `owner` and `isMine` to `ClientRow`, and a `showOwner` prop.
+  - [x] Pull filtering into a pure `filterClients(rows, {query, scope})` so it can be unit-tested.
+  - [x] Owner column ("Unassigned" for null), shown only when `showOwner` is set.
+  - [x] All / Mine / Unassigned control (super admins only). Default to **Mine**, since Mason will start with every client.
+  - [x] Include the owner name in search.
+  - [x] Regular-admin empty state: "No clients assigned to you yet."
+  - [x] Styles in `ClientTable.module.css`.
+- [x] **Client detail** (`clients/[id]/page.tsx`):
+  - [x] Select `assigned_admin`.
+  - [x] For super admins, also load `admins(email, display_name)`.
+  - [x] Render `<AssignAdminSelect>` in the header for super admins.
+- [x] **`components/admin/AssignAdminSelect.tsx`**: new client component (see section 4), using `useTransition`, a status message, and an accessible label.
+- [x] **Core resources page** (`resources/page.tsx`): pass `canEdit={isSuper}` and show the read-only note to regular admins.
+- [x] **`SortableResourceList.tsx`**:
+  - [x] Add a `canEdit` prop.
+  - [x] Add a `ReadOnlyResourceList` (no DnD, no Add / Edit / Delete), reusing the existing classes.
+  - [x] Return it early when `!canEdit`.
 - [ ] **`ClientForm`**: no changes. Confirm the Remove/Restore toggles and the "Client specific" section still work for a regular admin.
 - [ ] Manual pass in the browser as each role:
   - [ ] Super admin: sees all clients, owner column, and filter. Reassigns a client. Edits, reorders, and deletes core resources.
@@ -989,29 +1002,29 @@ Work through the phases in order. Each phase ends with a check that has to pass 
 
 ### Phase 7: App tests and CI checks
 
-- [ ] `tests/admin-lib.test.ts`: confirm `mapSaveError` still returns `null` for `P0002` (the action handles it).
-- [ ] New unit tests for `filterClients`: query matching, and the All / Mine / Unassigned scopes.
-- [ ] `tests/e2e/a11y.spec.ts` / `admin.spec.ts`: no admin-session e2e exists, so nothing to add. Confirm the signed-out redirects still pass.
+- [x] `tests/admin-lib.test.ts`: confirm `mapSaveError` still returns `null` for `P0002` (the action handles it).
+- [x] New unit tests for `filterClients`: query matching, and the All / Mine / Unassigned scopes.
+- [ ] `tests/e2e/a11y.spec.ts` / `admin.spec.ts`: no admin-session e2e exists, so nothing to add. Confirm the signed-out redirects still pass. (Not run: `.env.local` points at the hosted project and the suite writes rows.)
 - [ ] `scripts/e2e-fixtures.ts`: no change needed (service-role inserts leave `assigned_admin` null). Confirm `npm run e2e:setup` still runs.
-- [ ] Run everything: `npm run lint && npm run typecheck && npm run test && npm run db:test && npm run format:check`.
-- [ ] Run `npm run e2e` locally against the dev server.
+- [x] Run everything: `npm run lint && npm run typecheck && npm run test && npm run db:test && npm run format:check`.
+- [ ] Run `npm run e2e` locally against the dev server. (Not run, same reason. Point it at the local stack first.)
 
 **Check:** every command passes. These match the `check` and `db` jobs in `.github/workflows/ci.yml`.
 
 ### Phase 8: Docs
 
-- [ ] `docs/admin-guide.md`: add a roles section covering:
-  - [ ] The two roles and what each can do (copy the Goal table).
-  - [ ] Who the super admins are.
-  - [ ] How to make someone a super admin: Supabase table editor → `admins` → `role`.
-  - [ ] How clients get assigned (creator, by default) and how super admins reassign them.
-  - [ ] That regular admins can hide core resources on their own clients but not edit them.
-- [ ] Mark this plan as implemented, or move it to `docs/admin-roles-plan.md` next to the other plans.
+- [x] `docs/admin-guide.md`: add a roles section covering:
+  - [x] The two roles and what each can do (copy the Goal table).
+  - [x] Who the super admins are.
+  - [x] How to make someone a super admin: Supabase table editor → `admins` → `role`.
+  - [x] How clients get assigned (creator, by default) and how super admins reassign them.
+  - [x] That regular admins can hide core resources on their own clients but not edit them.
+- [x] Mark this plan as implemented, or move it to `docs/admin-roles-plan.md` next to the other plans.
 
 ### Phase 9: Review and PR
 
-- [ ] Self-review the migration against section 1 line by line. In particular, check that `save_client`'s body was copied **in full**.
-- [ ] Run `/security-review` on the branch. Focus on RLS gaps, storage policies, and the service-client delete.
+- [x] Self-review the migration against section 1 line by line. In particular, check that `save_client`'s body was copied **in full**. (A diff against the previous migration shows only the ownership check and the `assigned_admin` insert changed.)
+- [ ] Run `/security-review` on the branch (not run; a manual pass found no gaps: no policy lets `authenticated` write `admins`, storage insert-only for regular admins, `save_client`'s upsert is still scoped by `where t.client_id = v_id`). Focus on RLS gaps, storage policies, and the service-client delete.
 - [ ] Commit with an author email that maps to a Vydia-team GitHub user (the Vercel author check).
 - [ ] Open the PR against `main`. List the behavior changes in the description, especially that regular admins start with an empty client list.
 - [ ] Get the Vercel preview green. Supabase migrations don't run on preview unless a branch DB is set up, so test against a Supabase branch or the local stack.
