@@ -24,9 +24,9 @@ test.describe('enter your email', () => {
     expect(await userEmails()).not.toContain(stranger)
   })
 
-  test('a real artist email on the wrong artist’s slug is also not approved', async ({page}) => {
+  test('a real client email on the wrong client’s slug is also not approved', async ({page}) => {
     await page.goto(`/${E2E_SLUGS.b}`)
-    await page.getByPlaceholder('Enter your email').fill(E2E_USERS.artistA)
+    await page.getByPlaceholder('Enter your email').fill(E2E_USERS.clientA)
     await page.getByRole('button', {name: 'Continue'}).click()
     await expect(page.locator('#enter-email-message')).toHaveText(NOT_APPROVED)
   })
@@ -50,14 +50,14 @@ test.describe('enter your email', () => {
 })
 
 test.describe('the magic link', () => {
-  test('opening a fresh link signs in directly and lands on the artist page', async ({request, page}) => {
-    const token = await hashedToken(E2E_USERS.artistA)
+  test('opening a fresh link signs in directly and lands on the client page', async ({request, page}) => {
+    const token = await hashedToken(E2E_USERS.clientA)
     const response = await request.get(confirmPath(token, `/${E2E_SLUGS.a}`), {maxRedirects: 0})
     expect(response.status()).toBe(307)
     expect(response.headers().location).toContain(`/${E2E_SLUGS.a}`)
     expect(response.headers()['set-cookie'] ?? '').toContain('sb-')
 
-    await page.goto(confirmPath(await hashedToken(E2E_USERS.artistA), `/${E2E_SLUGS.a}`))
+    await page.goto(confirmPath(await hashedToken(E2E_USERS.clientA), `/${E2E_SLUGS.a}`))
     await expect(page).toHaveURL(`/${E2E_SLUGS.a}`)
     await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
   })
@@ -90,9 +90,9 @@ test.describe('the magic link', () => {
   test('signing in with another email replaces the earlier session', async ({browser}) => {
     const context = await browser.newContext()
     const page = await context.newPage()
-    await page.goto(confirmPath(await hashedToken(E2E_USERS.artistB), `/${E2E_SLUGS.b}`))
+    await page.goto(confirmPath(await hashedToken(E2E_USERS.clientB), `/${E2E_SLUGS.b}`))
     await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
-    await page.goto(confirmPath(await hashedToken(E2E_USERS.artistA), `/${E2E_SLUGS.a}`))
+    await page.goto(confirmPath(await hashedToken(E2E_USERS.clientA), `/${E2E_SLUGS.a}`))
     await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
     await page.goto(`/${E2E_SLUGS.b}`)
     await expect(page.getByPlaceholder('Enter your email')).toBeVisible()
@@ -101,6 +101,6 @@ test.describe('the magic link', () => {
 })
 
 test('the fixtures use the admin client on the expected project', async () => {
-  const {data} = await adminClient().from('artists').select('slug').in('slug', [E2E_SLUGS.a, E2E_SLUGS.b])
+  const {data} = await adminClient().from('clients').select('slug').in('slug', [E2E_SLUGS.a, E2E_SLUGS.b])
   expect(data?.map((row) => row.slug).sort()).toEqual([E2E_SLUGS.a, E2E_SLUGS.b])
 })

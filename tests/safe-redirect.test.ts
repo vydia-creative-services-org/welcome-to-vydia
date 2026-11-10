@@ -11,10 +11,10 @@ beforeAll(async () => {
 
 describe('safeNext', () => {
   it.each([
-    ['/test-artist', '/test-artist'],
-    ['/test-artist?tab=1', '/test-artist?tab=1'],
-    ['https://welcometovydia.com/test-artist', '/test-artist'],
-    ['/test-artist/', '/test-artist/'],
+    ['/test-client', '/test-client'],
+    ['/test-client?tab=1', '/test-client?tab=1'],
+    ['https://welcometovydia.com/test-client', '/test-client'],
+    ['/test-client/', '/test-client/'],
   ])('keeps same-site path %s', (raw, expected) => expect(safeNext(raw)).toBe(expected))
 
   it.each([

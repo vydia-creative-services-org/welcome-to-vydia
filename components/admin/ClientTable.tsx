@@ -4,9 +4,9 @@ import {useMemo, useState} from 'react'
 import {formatDate} from '@/lib/format'
 import {CopyLinkButton} from './CopyLinkButton'
 import controls from './controls.module.css'
-import styles from './ArtistTable.module.css'
+import styles from './ClientTable.module.css'
 
-export type ArtistRow = {
+export type ClientRow = {
   id: string
   name: string
   slug: string
@@ -16,7 +16,7 @@ export type ArtistRow = {
   allEmails: string[]
 }
 
-export function ArtistTable({rows}: {rows: ArtistRow[]}) {
+export function ClientTable({rows}: {rows: ClientRow[]}) {
   const [query, setQuery] = useState('')
 
   const visible = useMemo(() => {
@@ -30,7 +30,7 @@ export function ArtistTable({rows}: {rows: ArtistRow[]}) {
   if (rows.length === 0) {
     return (
       <div className={`${controls.card} ${styles.empty}`}>
-        <p className={styles.emptyTitle}>No artists yet</p>
+        <p className={styles.emptyTitle}>No clients yet</p>
       </div>
     )
   }
@@ -40,8 +40,8 @@ export function ArtistTable({rows}: {rows: ArtistRow[]}) {
       <input
         type="search"
         value={query}
-        aria-label="Search artists"
-        placeholder="Search artists"
+        aria-label="Search clients"
+        placeholder="Search clients"
         onChange={(event) => setQuery(event.target.value)}
         className={`${controls.input} ${styles.search}`}
       />
@@ -49,7 +49,7 @@ export function ArtistTable({rows}: {rows: ArtistRow[]}) {
         <table className={styles.table}>
           <thead>
             <tr>
-              <th scope="col">Artist</th>
+              <th scope="col">Client</th>
               <th scope="col">Email</th>
               <th scope="col">Created</th>
               <th scope="col">
@@ -61,7 +61,7 @@ export function ArtistTable({rows}: {rows: ArtistRow[]}) {
             {visible.map((row) => (
               <tr key={row.id}>
                 <td>
-                  <Link href={`/admin/artists/${row.id}`} className={styles.name}>
+                  <Link href={`/admin/clients/${row.id}`} className={styles.name}>
                     {row.name}
                   </Link>
                 </td>
@@ -77,7 +77,7 @@ export function ArtistTable({rows}: {rows: ArtistRow[]}) {
             ))}
           </tbody>
         </table>
-        {visible.length === 0 && <p className={`${controls.hint} ${styles.none}`}>No artists match “{query}”.</p>}
+        {visible.length === 0 && <p className={`${controls.hint} ${styles.none}`}>No clients match “{query}”.</p>}
       </div>
     </div>
   )

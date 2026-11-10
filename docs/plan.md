@@ -6,7 +6,7 @@
 
 > **Iteration two (read it with [`iteration-two-plan.md`](./iteration-two-plan.md)) replaced the Sanity-based design described below.** Data, access, and editing moved to Supabase and an admin panel at `/admin`. Decisions D23–D44 (added to the table in §1) record the new design. Status of the earlier decisions:
 >
-> - **Superseded:** D1, D2, D9 (Sanity Studio, dataset, and cache webhook; D23 and D25), D3 and D4 (the sign-in gate and the identical 404; now `/[slug]` always renders the Enter your email screen and row-level security is the gate, D24), D5 and D10 (slug history and redirects; old slugs now behave like any unknown slug), D6 and D22 (permanent viewers; D44), D14 (videos now go to Supabase Storage), D16 and D17 (Google plus magic link for artists, silent approval; artists now use a magic link only with an explicit not-approved message, and Google is for admins only, D29–D31), D18 (the Continue page; D33), D20 (signing unapproved Google users out; D30).
+> - **Superseded:** D1, D2, D9 (Sanity Studio, dataset, and cache webhook; D23 and D25), D3 and D4 (the sign-in gate and the identical 404; now `/[slug]` always renders the Enter your email screen and row-level security is the gate, D24), D5 and D10 (slug history and redirects; old slugs now behave like any unknown slug), D6 and D22 (permanent viewers; D44), D14 (videos now go to Supabase Storage), D16 and D17 (Google plus magic link for clients, silent approval; clients now use a magic link only with an explicit not-approved message, and Google is for admins only, D29–D31), D18 (the Continue page; D33), D20 (signing unapproved Google users out; D30).
 > - **Still hold:** D7 (`addedOn`), D8 (PDF first-page previews, now generated in the admin editor), D11 (permanent sessions), D12 (CSS Modules), D13 (the `/` instructions page), D15 (`cacheComponents`), D19 (links verified by `token_hash`), D21 (all auth cookies are written by the server).
 
 ---
@@ -17,12 +17,12 @@ One Next.js (App Router) app on Vercel that serves three things:
 
 | Route | What it is | Who can reach it |
 |---|---|---|
-| `/[slug]` | An artist's welcome page (header, intro, extra info, sections of resource cards) | Signed-in Supabase users whose verified email is on that artist's list, plus internal viewers |
-| `/` | Instructions only: "open the link your Vydia rep sent you" (no artist list) | Everyone |
+| `/[slug]` | A client's welcome page (header, intro, extra info, sections of resource cards) | Signed-in Supabase users whose verified email is on that client's list, plus internal viewers |
+| `/` | Instructions only: "open the link your Vydia rep sent you" (no client list) | Everyone |
 | `/login`, `/auth/*` | Supabase Auth: email/password (with email confirmation) and Google | Everyone |
 | `/studio` | Embedded Sanity Studio, where L&A edits content | The two shared Sanity seats |
 
-Content lives in a **private** Sanity dataset with four document types: `artist`, `resource`, `section`, and `website` (a singleton). On each request the page reconciles the two systems: **Supabase answers "who is this?"** and **Sanity answers "is this email allowed here?"** Sanity content is cached with Next 16's `'use cache'` and invalidated by a Sanity publish webhook.
+Content lives in a **private** Sanity dataset with four document types: `client`, `resource`, `section`, and `website` (a singleton). On each request the page reconciles the two systems: **Supabase answers "who is this?"** and **Sanity answers "is this email allowed here?"** Sanity content is cached with Next 16's `'use cache'` and invalidated by a Sanity publish webhook.
 
 The security rule that drives most of the design: an unknown slug and a known slug the user can't access must produce **exactly the same response**, and **only after sign-in**.
 
@@ -33,18 +33,18 @@ The security rule that drives most of the design: an unknown slug and a known sl
 | # | Decision | Rationale / research reference |
 |---|---|---|
 | D1 | **Embed Sanity Studio at `/studio`** in the same Next app | One repo, one deploy, one domain. Studio routes are static and take precedence over `/[slug]`. `studio` goes on the reserved-slug list. |
-| D2 | **Private Sanity dataset + server-only read token** | Allowed-email lists and the artist roster must never be queryable from the browser. All GROQ runs on the server. |
-| D3 | **Gate in two layers**: `proxy.ts` sends anyone without a session to `/login` for *every* non-public path. Then `/[slug]/page.tsx` does the Sanity access check. | The proxy never touches Sanity, so it can't leak whether an artist exists ("sign in before the 'doesn't exist' error"). |
+| D2 | **Private Sanity dataset + server-only read token** | Allowed-email lists and the client roster must never be queryable from the browser. All GROQ runs on the server. |
+| D3 | **Gate in two layers**: `proxy.ts` sends anyone without a session to `/login` for *every* non-public path. Then `/[slug]/page.tsx` does the Sanity access check. | The proxy never touches Sanity, so it can't leak whether a client exists ("sign in before the 'doesn't exist' error"). |
 | D4 | **Denied and unknown both call `notFound()`** after one identical Sanity query | Same component, same status (404), same number of round-trips, so the two cases look the same and take the same time. |
 | D5 | **Slug is generated once, locked on first publish, renames go through a "Change URL" action that saves the old slug to `previousSlugs`** | Bookmarks have to survive renames. Old slugs redirect (after the access check). Uniqueness is checked against current *and* previous slugs, so an old URL is never reused. |
 | D6 | **Superseded by D44.** **Permanent internal emails live in code/env; other internal viewers live on the `website` singleton** | The two shared @vydia.com addresses always have access and can't be removed by mistake. Other "designated internal" emails can be edited in Studio. |
 | D7 | **`addedOn` is an explicit datetime field**, initialised to "now" on create and editable | `_updatedAt` changes on every edit and `_createdAt` would be the migration date. Editors set the original Seismic date while migrating. |
 | D8 | **PDF preview generated in Studio** (pdf.js renders page 1 in the editor's browser and uploads it as an image asset) | No native canvas dependency on Vercel, and the preview exists before publish. Card fallback chain: cover → PDF preview → branded placeholder. |
-| D9 | **Sanity fetches tagged by document type, revalidated by webhook** | Editing a global resource updates every artist page right away ("publish webhook required"). |
+| D9 | **Sanity fetches tagged by document type, revalidated by webhook** | Editing a global resource updates every client page right away ("publish webhook required"). |
 | D10 | **Use `redirect()` (307), not `permanentRedirect()` (308), for old slugs** | Browsers cache 308s hard. A temporary redirect lets us fix an editor's mistake later. |
 | D11 | **Long-lived sessions**: Supabase refresh tokens with no time-box or inactivity timeout, `@supabase/ssr` cookies (≈400-day max-age), refreshed by the proxy on every request | "Returning clients should not face aggressive session expirations." |
 | D12 | **No Tailwind. Styling is CSS Modules**: each component has a co-located `Component.module.css`, and one global stylesheet holds only design tokens (CSS custom properties) and a base reset | Plan-review decision. Scoped class names with no build plugin, and plain CSS that anyone can read. Tokens keep colors, radii, and spacing consistent across modules. |
-| D13 | **`/` is an instructions-only page, not an artist index.** It's public, reads nothing from Sanity, and tells the visitor to open the link their Vydia rep sent | Plan-review decision. Assume the visitor is an artist looking for their page. Internal viewers reach artist pages by direct URL or with Studio's "Open site" action. |
+| D13 | **`/` is an instructions-only page, not a client index.** It's public, reads nothing from Sanity, and tells the visitor to open the link their Vydia rep sent | Plan-review decision. Assume the visitor is a client looking for their page. Internal viewers reach client pages by direct URL or with Studio's "Open site" action. |
 | D14 | **Videos are uploaded to Sanity** (no YouTube/Vimeo/Mux link option for the `video` type) | Plan-review decision, matches the research ("Sanity will store all … videos"). Storage and bandwidth still get measured (§15). |
 | D15 | **Keep Next 16's `cacheComponents`.** Sanity data is cached with `'use cache'` + `cacheLife('max')` + `cacheTag` (§7.1) and expired by the webhook (§10). Pages that read the request (`/[slug]`, `/login`) set `export const instant = false` | Decided in task 2.0. It's the Next 16 default. **Correction (found in Phase 6):** `instant = false` only relaxes navigation validation. It does **not** stop prerendering. In a production build `/[slug]` is a partial prerender: the static shell (layout and header) streams first, so `notFound()` comes back as **200** with the not-found UI and a `noindex` tag, and `redirect()` becomes a streamed client-side redirect. A dynamic root layout (`await connection()`) didn't change this. Unknown and denied still get identical responses, so the security requirement holds. Real 404/307 status codes need a Proxy check or turning `cacheComponents` off; see task 8.0. |
 | D16 | **Passwordless sign-in: Google + email magic link** (supersedes the email/password parts of §4.3, §8.4, §8.5) | TASKS "Email and sign in": approved people get in without creating an account. Details and code in [`sign-in-plan.md`](./sign-in-plan.md). |
@@ -55,27 +55,27 @@ The security rule that drives most of the design: an unknown slug and a known sl
 | D21 | **All auth is server-side; no browser Supabase client** | Every auth cookie is written by `Set-Cookie`, so Safari's 7-day cap on script-written cookies never applies (keeps D11). |
 | D22 | **Superseded by D44.** **Permanent viewers: `creativeservices@` and `labelservices@`** (`labelrelationships@` dropped). Named people go on Website → Access → Internal viewers | Owner decision, 2026-10-21. |
 | D23 | **Supabase is the only runtime data source.** Sanity is read once by `scripts/migrate-sanity.ts`, then the Sanity packages and Studio are removed. `sanity/schema.json` stays in the repo as the frozen field contract. | Spec: "The app reads Sanity once, for the migration, and never at runtime" and "`/sanity/schema.json` is the source of truth". |
-| D24 | **RLS is the access gate. Artist data is read with the visitor's own JWT, never with a privileged key.** One `security invoker` RPC (`get_artist_page`) returns the artist plus visible resources, or `null`. | "Enforced with Supabase RLS, not just in the UI." The query sees the live `artist_emails` rows on every request. |
-| D25 | **No server-side caching of artist data.** Drop `'use cache'`, `cacheTag`, and the revalidate webhook. | Cached data can't depend on the caller's JWT (`'use cache'` can't read cookies), and "changes apply to every artist immediately". At this scale one indexed RPC per load is cheap. |
-| D26 | **One `resources` table for main and exclusive resources.** `artist_id IS NULL` means main, otherwise exclusive to that artist. Hides go in `artist_hidden_resources`. | One shape maps 1:1 to the Sanity `resource` type, and one query renders the page. A check trigger keeps hides pointing only at main resources. |
+| D24 | **RLS is the access gate. Client data is read with the visitor's own JWT, never with a privileged key.** One `security invoker` RPC (`get_client_page`) returns the client plus visible resources, or `null`. | "Enforced with Supabase RLS, not just in the UI." The query sees the live `client_emails` rows on every request. |
+| D25 | **No server-side caching of client data.** Drop `'use cache'`, `cacheTag`, and the revalidate webhook. | Cached data can't depend on the caller's JWT (`'use cache'` can't read cookies), and "changes apply to every client immediately". At this scale one indexed RPC per load is cheap. |
+| D26 | **One `resources` table for main and exclusive resources.** `client_id IS NULL` means main, otherwise exclusive to that client. Hides go in `client_hidden_resources`. | One shape maps 1:1 to the Sanity `resource` type, and one query renders the page. A check trigger keeps hides pointing only at main resources. |
 | D27 | **Field names: Sanity's camelCase names are canonical.** TS domain types use them exactly (`coverImage`, `pdfPreview`, `addedOn`, `sortOrder`). Postgres uses the snake_case spelling of the same name (`cover_image`, …). One mapping table, plus a unit test that reads `sanity/schema.json` to enforce it. | Unquoted Postgres identifiers fold to lowercase (`coverImage` → `coverimage`), so a literal camelCase column would need quoting everywhere. A mechanical, tested mapping keeps "same names" without that cost. |
 | D28 | **The Sanity schema gains `category` (required string) and `sortOrder` (integer) first**, before the migration. `schema.json` is re-extracted. | Spec: "add it to the Sanity schema first so the 1:1 mapping holds". |
 | D29 | **The sign-in pre-check runs with a server-only secret key** (`SUPABASE_SECRET_KEY`, used only in `lib/supabase/service.ts`) through a `security definer` RPC that isn't granted to `anon`/`authenticated`. | If the publishable key could call `email_can_access_slug`, anyone could probe *email × slug* pairs straight against PostgREST and skip our rate limit. This **reverses** iteration one's "the app never reads the service key". |
-| D30 | **A "Before User Created" auth hook (Postgres function) blocks self-signup at the source.** Email-provider users are created only if the email is on some artist and isn't an admin. Google users only if listed in `admins`. | Success state: "no user is created in Supabase" for unapproved emails, and "a non-admin Google account is rejected". This replaces D20's sign-in-then-sign-out. |
+| D30 | **A "Before User Created" auth hook (Postgres function) blocks self-signup at the source.** Email-provider users are created only if the email is on some client and isn't an admin. Google users only if listed in `admins`. | Success state: "no user is created in Supabase" for unapproved emails, and "a non-admin Google account is rejected". This replaces D20's sign-in-then-sign-out. |
 | D31 | **`is_admin()` requires an OAuth (`amr` method `oauth`) session plus a row in `admins` plus `@vydia.com`.** Magic-link requests for admin emails are refused. | "Admins sign in only with Google SSO." Supabase auto-links identities by email, so without the `amr` check a magic-link session for an admin address would carry admin rights. |
-| D32 | **Admins see every artist page directly** while signed in with Google. `can_view_artist()` and `resources_read` include `is_admin()`, so `/[slug]` renders the resources page for them, and the admin detail page links to it ("Open page"). | **Owner decision.** It replaces the old permanent/internal viewers for label services, and no separate preview route is needed. **Re-confirmed:** admins reach artist pages with a Google session only. A magic-link session for an admin address is never admin and the sign-in flow keeps refusing admin addresses. A token refresh keeps the original sign-in method in `amr` (tested across two refreshes), so a Google session stays admin. |
-| D33 | **The email link signs in directly. This reverses D18.** `/auth/confirm` becomes a GET route handler: `verifyOtp({token_hash})` → session cookies → redirect to `/[slug]`. The Continue page and its server action are deleted. Any failure redirects to "This link has expired". Links are still verified by `token_hash` (D19), so they work in any browser. | **Owner decision**, matching the spec's "Artist clicks the magic link → session is created → redirected". Accepted trade-off: an email security scanner that opens links (Outlook Safe Links, Mimecast) can spend the single-use token first, and the artist then sees the expired screen and requests a new link (§16). |
+| D32 | **Admins see every client page directly** while signed in with Google. `can_view_client()` and `resources_read` include `is_admin()`, so `/[slug]` renders the resources page for them, and the admin detail page links to it ("Open page"). | **Owner decision.** It replaces the old permanent/internal viewers for label services, and no separate preview route is needed. **Re-confirmed:** admins reach client pages with a Google session only. A magic-link session for an admin address is never admin and the sign-in flow keeps refusing admin addresses. A token refresh keeps the original sign-in method in `amr` (tested across two refreshes), so a Google session stays admin. |
+| D33 | **The email link signs in directly. This reverses D18.** `/auth/confirm` becomes a GET route handler: `verifyOtp({token_hash})` → session cookies → redirect to `/[slug]`. The Continue page and its server action are deleted. Any failure redirects to "This link has expired". Links are still verified by `token_hash` (D19), so they work in any browser. | **Owner decision**, matching the spec's "Client clicks the magic link → session is created → redirected". Accepted trade-off: an email security scanner that opens links (Outlook Safe Links, Mimecast) can spend the single-use token first, and the client then sees the expired screen and requests a new link (§16). |
 | D34 | **Rate-limit `sendLink`** per IP (20 per 10 min) and per email (one send per 60 s), in a `private` schema that only the secret key can reach. | The form now tells you whether an email is approved for a slug, by design. That makes it a pair-probing oracle unless it's throttled. The 60 s per-email cooldown is a business rule. |
-| D35 | **Files go in a private bucket (`resource-files`) and are served through `/api/resources/[id]/file`.** That route checks RLS with the visitor's JWT, then 302s to a 1-hour signed URL. **Images go in a public bucket (`resource-images`)** under unguessable UUID paths, for main **and** exclusive resources. | Exclusive PDFs and decks must never reach other artists. Cover images have to work with `next/image` (its optimizer fetches without cookies). **Owner decision:** a public but unguessable image URL is acceptable, including covers and PDF first-page previews of exclusive resources. |
+| D35 | **Files go in a private bucket (`resource-files`) and are served through `/api/resources/[id]/file`.** That route checks RLS with the visitor's JWT, then 302s to a 1-hour signed URL. **Images go in a public bucket (`resource-images`)** under unguessable UUID paths, for main **and** exclusive resources. | Exclusive PDFs and decks must never reach other clients. Cover images have to work with `next/image` (its optimizer fetches without cookies). **Owner decision:** a public but unguessable image URL is acceptable, including covers and PDF first-page previews of exclusive resources. |
 | D36 | **Uploads go straight from the admin's browser to Storage via signed upload URLs.** The URL is issued by an admin-checked server action. | Server Actions cap request bodies at 1 MB and Vercel functions at about 4.5 MB, and videos are far larger. |
-| D37 | **Create *and* edit both save through one transactional RPC, `save_artist(payload jsonb)`.** It upserts the artist and replaces its emails, hides, and exclusive resources. | Spec: the create is "all or nothing (RPC)". The edit screen also has a single **Save**, so the same atomicity applies there. |
+| D37 | **Create *and* edit both save through one transactional RPC, `save_client(payload jsonb)`.** It upserts the client and replaces its emails, hides, and exclusive resources. | Spec: the create is "all or nothing (RPC)". The edit screen also has a single **Save**, so the same atomicity applies there. |
 | D38 | **Categories are normalized on write.** A trigger reuses the existing spelling when a new category matches one case-insensitively, and the UI groups by `lower(trim(category))` too. | "getting started" and "Getting Started" group together, and every page shows one canonical label. |
-| D39 | **Orphaned storage objects are queued by a DB trigger and removed by the server action** after a successful save or delete. | It runs on cascades (artist delete) and on file replacement without extra bookkeeping in each action. |
+| D39 | **Orphaned storage objects are queued by a DB trigger and removed by the server action** after a successful save or delete. | It runs on cascades (client delete) and on file replacement without extra bookkeeping in each action. |
 | D40 | **`zod` (v4) validates every action payload and the migration input.** It shares the same rules as the DB checks. | Server actions are public endpoints. Field errors come back to the form before Postgres raises. |
-| D41 | **Per-artist additional info (`additionalInfo`) is dropped.** There's no column, no admin field, and nothing under the grid. `RichText`, `@portabletext/react`, and the grid's `additionalInfo` slot are deleted. The migration doesn't read it. | **Owner decision.** It isn't in the spec. |
+| D41 | **Per-client additional info (`additionalInfo`) is dropped.** There's no column, no admin field, and nothing under the grid. `RichText`, `@portabletext/react`, and the grid's `additionalInfo` slot are deleted. The migration doesn't read it. | **Owner decision.** It isn't in the spec. |
 | D42 | **Covers keep today's blur-up style.** Each image stores its LQIP (a tiny base64 JPEG like Sanity's `metadata.lqip`) in `cover_image_lqip` / `pdf_preview_lqip`. The migration copies Sanity's LQIP as-is. Admin uploads generate it in the browser. `CardCover` keeps `placeholder="blur"` and the carousel backdrop keeps its instant placeholder layer. | **Owner decision:** the style should be the same. These are asset-metadata columns (Sanity keeps LQIP on the asset, not the document), so the field contract (§5) is unchanged. |
 | D43 | **Abandoned uploads are cleaned by a manual sweep** (`npm run storage:sweep`, dry run by default). Deletes and replacements are already cleaned automatically (D39). | **Owner decision.** No cron job needed at this volume. |
-| D44 | **`labelservices@vydia.com` and `creativeservices@vydia.com` are both seeded into `admins`** by the migration. Individuals (e.g. `mason.omara@`, `erica.johnson@`) are added by hand in the table editor. | **Owner decision.** They were permanent viewers in iteration one. As admins they keep seeing every artist page (D32) and can also edit. They must be real Google Workspace accounts to sign in. |
+| D44 | **`labelservices@vydia.com` and `creativeservices@vydia.com` are both seeded into `admins`** by the migration. Individuals (e.g. `mason.omara@`, `erica.johnson@`) are added by hand in the table editor. | **Owner decision.** They were permanent viewers in iteration one. As admins they keep seeing every client page (D32) and can also edit. They must be real Google Workspace accounts to sign in. |
 
 ---
 
@@ -111,7 +111,7 @@ welcome-to-vydia/
 │  │  ├─ globals.css                  # design tokens + base reset ONLY (D12)
 │  │  ├─ page.tsx                     # "/" instructions only, public (D13)
 │  │  ├─ [slug]/
-│  │  │  ├─ page.tsx                  # artist page
+│  │  │  ├─ page.tsx                  # client page
 │  │  │  ├─ page.module.css
 │  │  │  └─ not-found.tsx             # identical page for unknown + denied
 │  │  ├─ login/
@@ -164,7 +164,7 @@ welcome-to-vydia/
 │  ├─ schemaTypes/
 │  │  ├─ index.ts
 │  │  ├─ blockContent.ts
-│  │  ├─ artist.ts
+│  │  ├─ client.ts
 │  │  ├─ resource.ts
 │  │  ├─ section.ts
 │  │  └─ website.ts
@@ -185,7 +185,7 @@ welcome-to-vydia/
 ├─ .github/workflows/                 # ci.yml, e2e-preview.yml
 ├─ docs/editor-guide.md               # written version of the Loom
 └─ tests/
-   ├─ *.test.ts                       # Vitest unit tests (access, slug, safe-redirect, format, image, cover-source, artist-page)
+   ├─ *.test.ts                       # Vitest unit tests (access, slug, safe-redirect, format, image, cover-source, client-page)
    └─ e2e/                            # Playwright: access.spec.ts, a11y.spec.ts, global-setup.ts, users.ts
 ```
 
@@ -207,7 +207,7 @@ SANITY_REVALIDATE_SECRET=long-random-string           # shared with the webhook
 NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 
-# Comma-separated, always allowed on every artist page (D6)
+# Comma-separated, always allowed on every client page (D6)
 PERMANENT_VIEWER_EMAILS=labelservices@vydia.com,creativeservices@vydia.com
 ```
 
@@ -565,14 +565,14 @@ export const website = defineType({
       name: 'intro',
       title: 'Intro text',
       type: 'blockContent',
-      description: 'Shown on every artist page unless the artist has an intro override.',
+      description: 'Shown on every client page unless the client has an intro override.',
       validation: (rule) => rule.required(),
     }),
     defineField({
       name: 'sections',
       type: 'array',
       description:
-        'Default sections, in display order. Artists with a section override show their own sections instead.',
+        'Default sections, in display order. Clients with a section override show their own sections instead.',
       of: [defineArrayMember({type: 'reference', to: [{type: 'section'}]})],
       validation: (rule) => rule.required().min(1).unique(),
     }),
@@ -581,7 +581,7 @@ export const website = defineType({
       title: 'Internal viewers',
       type: 'array',
       description:
-        'Vydia emails that can view EVERY artist page. labelrelationships@ and creativeservices@ always have access and don’t need to be listed.',
+        'Vydia emails that can view EVERY client page. labelrelationships@ and creativeservices@ always have access and don’t need to be listed.',
       of: [
         defineArrayMember({
           type: 'string',
@@ -606,10 +606,10 @@ export const website = defineType({
 })
 ```
 
-### 5.6 `artist`
+### 5.6 `client`
 
 ```ts
-// sanity/schemaTypes/artist.ts
+// sanity/schemaTypes/client.ts
 import {UserIcon} from '@sanity/icons/User'
 import {defineArrayMember, defineField, defineType, type SlugValue, type ValidationContext} from 'sanity'
 import {RESERVED_SLUGS, SLUG_PATTERN, slugify} from '../../lib/slug'
@@ -620,7 +620,7 @@ const isSlugAvailable = async (slug: string, context: ValidationContext) => {
   const published = context.document?._id.replace(/^drafts\./, '') ?? ''
   return context.getClient({apiVersion}).fetch<boolean>(
     `!defined(*[
-      _type == "artist" &&
+      _type == "client" &&
       !(_id in [$draft, $published]) &&
       (slug.current == $slug || $slug in previousSlugs)
     ][0]._id)`,
@@ -628,9 +628,9 @@ const isSlugAvailable = async (slug: string, context: ValidationContext) => {
   )
 }
 
-export const artist = defineType({
-  name: 'artist',
-  title: 'Artist',
+export const client = defineType({
+  name: 'client',
+  title: 'Client',
   type: 'document',
   icon: UserIcon,
   groups: [
@@ -642,10 +642,10 @@ export const artist = defineType({
   fields: [
     defineField({
       name: 'name',
-      title: 'Artist name',
+      title: 'Client name',
       type: 'string',
       group: 'basics',
-      description: 'Used to generate the URL below. Renaming the artist later does not change the URL.',
+      description: 'Used to generate the URL below. Renaming the client later does not change the URL.',
       validation: (rule) => rule.required(),
     }),
     defineField({
@@ -664,7 +664,7 @@ export const artist = defineType({
           if (!SLUG_PATTERN.test(slug)) return 'Only lowercase letters, numbers, and single dashes.'
           if (RESERVED_SLUGS.has(slug)) return `"${slug}" is reserved. Pick another URL.`
           if (!(await isSlugAvailable(slug, context)))
-            return 'Another artist already uses this URL (or used it before). Pick a different one.'
+            return 'Another client already uses this URL (or used it before). Pick a different one.'
           return true
         }),
     }),
@@ -705,7 +705,7 @@ export const artist = defineType({
       title: 'Additional info (optional)',
       type: 'blockContent',
       group: 'content',
-      description: 'Shown directly below the intro, only on this artist’s page.',
+      description: 'Shown directly below the intro, only on this client’s page.',
     }),
     defineField({
       name: 'sectionOverride',
@@ -713,7 +713,7 @@ export const artist = defineType({
       type: 'array',
       group: 'content',
       description:
-        'If you add ANY sections here, they REPLACE the global sections on this artist’s page (not added to them). Leave empty to use the global sections.',
+        'If you add ANY sections here, they REPLACE the global sections on this client’s page (not added to them). Leave empty to use the global sections.',
       of: [defineArrayMember({type: 'reference', to: [{type: 'section'}]})],
       validation: (rule) => rule.unique(),
     }),
@@ -747,26 +747,26 @@ export const artist = defineType({
 ```ts
 // sanity/schemaTypes/index.ts
 import type {SchemaTypeDefinition} from 'sanity'
-import {artist} from './artist'
+import {client} from './client'
 import {blockContent} from './blockContent'
 import {resource} from './resource'
 import {section} from './section'
 import {website} from './website'
 
-export const schemaTypes: SchemaTypeDefinition[] = [website, artist, section, resource, blockContent]
+export const schemaTypes: SchemaTypeDefinition[] = [website, client, section, resource, blockContent]
 ```
 
 ### 5.7 How the model maps to the page
 
 ```
 website (singleton)
- ├─ intro ─────────────────────────────┐  overridden by artist.introOverride (if non-empty)
- ├─ sections[] → section ──────────────┤  REPLACED by artist.sectionOverride[] (if non-empty)
+ ├─ intro ─────────────────────────────┐  overridden by client.introOverride (if non-empty)
+ ├─ sections[] → section ──────────────┤  REPLACED by client.sectionOverride[] (if non-empty)
  │                ├─ title, subtitle   │
  │                └─ resources[] → resource {title, type, file|url, coverImage, pdfPreview, addedOn}
  └─ internalViewerEmails[]             │
                                        ▼
-artist ── slug ──► /[slug]: Header → Intro → additionalInfo → Sections → Cards
+client ── slug ──► /[slug]: Header → Intro → additionalInfo → Sections → Cards
 ```
 
 ---
@@ -786,7 +786,7 @@ export const structure: StructureResolver = (S) =>
   S.list()
     .title('Welcome to Vydia')
     .items([
-      S.documentTypeListItem('artist').title('Artists'),
+      S.documentTypeListItem('client').title('Clients'),
       S.divider(),
       S.documentTypeListItem('resource').title('Resources'),
       S.documentTypeListItem('section').title('Sections'),
@@ -1021,7 +1021,7 @@ export default defineConfig({
   document: {
     actions: (prev, {schemaType}) => {
       if (SINGLETONS.has(schemaType)) return prev.filter(({action}) => action && SINGLETON_ACTIONS.has(action))
-      if (schemaType === 'artist') {
+      if (schemaType === 'client') {
         return [
           ...prev.map((action) => (action.action === 'publish' ? lockSlugOnPublish(action) : action)),
           ChangeUrlAction,
@@ -1081,7 +1081,7 @@ export default function StudioLayout({children}: {children: React.ReactNode}) {
 }
 ```
 
-> Strong references give us a free guardrail: Sanity won't let an editor delete a resource that a section still uses (it shows "referenced by…"). Same for sections used by `website` or an artist.
+> Strong references give us a free guardrail: Sanity won't let an editor delete a resource that a section still uses (it shows "referenced by…"). Same for sections used by `website` or a client.
 
 ---
 
@@ -1112,7 +1112,7 @@ import {cacheLife, cacheTag} from 'next/cache'
 import type {ClientReturn, QueryParams} from 'next-sanity'
 import {sanity} from './client'
 
-export type SanityTag = 'artist' | 'resource' | 'section' | 'website'
+export type SanityTag = 'client' | 'resource' | 'section' | 'website'
 
 export async function sanityFetch<const Q extends string>(
   query: Q,
@@ -1135,7 +1135,7 @@ With `cacheComponents` on (D15), this is Next 16's native data cache. `query`, `
 import {defineQuery} from 'next-sanity'
 
 export const ACCESS_QUERY = defineQuery(`{
-  "artist": *[_type == "artist" && (slug.current == $slug || $slug in previousSlugs)][0]{
+  "client": *[_type == "client" && (slug.current == $slug || $slug in previousSlugs)][0]{
     _id,
     "slug": slug.current,
     allowedEmails
@@ -1166,12 +1166,12 @@ const SECTION_PROJECTION = `{
   "resources": resources[defined(@->_id)]->${RESOURCE_PROJECTION}
 }`
 
-export const ARTIST_PAGE_QUERY = defineQuery(`{
+export const CLIENT_PAGE_QUERY = defineQuery(`{
   "website": *[_type == "website" && _id == "website"][0]{
     intro,
     "sections": sections[defined(@->_id)]->${SECTION_PROJECTION}
   },
-  "artist": *[_type == "artist" && _id == $artistId][0]{
+  "client": *[_type == "client" && _id == $clientId][0]{
     name,
     introOverride,
     additionalInfo,
@@ -1182,14 +1182,14 @@ export const ARTIST_PAGE_QUERY = defineQuery(`{
 
 ### 7.3 Types
 
-Query result types come from typegen (`npm run typegen` reads the `defineQuery` calls and registers them, so `sanityFetch(ARTIST_PAGE_QUERY, …)` is typed automatically, with no generic and no `any`). `lib/sanity/types.ts` derives the card types from the generated result. The data layer normalizes them: resources without a title or type are dropped, and section titles are never null.
+Query result types come from typegen (`npm run typegen` reads the `defineQuery` calls and registers them, so `sanityFetch(CLIENT_PAGE_QUERY, …)` is typed automatically, with no generic and no `any`). `lib/sanity/types.ts` derives the card types from the generated result. The data layer normalizes them: resources without a title or type are dropped, and section titles are never null.
 
 ```ts
 // lib/sanity/types.ts
 import type {ResourceType} from '@/sanity/schemaTypes/resource'
-import type {ARTIST_PAGE_QUERY_RESULT, BlockContent} from './types.generated'
+import type {CLIENT_PAGE_QUERY_RESULT, BlockContent} from './types.generated'
 
-type RawWebsite = NonNullable<ARTIST_PAGE_QUERY_RESULT['website']>
+type RawWebsite = NonNullable<CLIENT_PAGE_QUERY_RESULT['website']>
 export type RawSection = NonNullable<RawWebsite['sections']>[number]
 export type RawResource = NonNullable<RawSection['resources']>[number]
 
@@ -1205,8 +1205,8 @@ export type SectionData = Omit<RawSection, 'title' | 'resources'> & {
   resources: ResourceCardData[]
 }
 
-export type ArtistPage = {
-  artistName: string
+export type ClientPage = {
+  clientName: string
   intro: BlockContent
   additionalInfo: BlockContent | null
   sections: SectionData[]
@@ -1219,8 +1219,8 @@ export type ArtistPage = {
 // lib/sanity/page.ts
 import 'server-only'
 import {sanityFetch} from './fetch'
-import {ARTIST_PAGE_QUERY} from './queries'
-import type {ArtistPage, RawResource, RawSection, ResourceCardData, SectionData} from './types'
+import {CLIENT_PAGE_QUERY} from './queries'
+import type {ClientPage, RawResource, RawSection, ResourceCardData, SectionData} from './types'
 
 const nonEmpty = <T>(list: T[] | null | undefined): list is T[] => Array.isArray(list) && list.length > 0
 
@@ -1234,21 +1234,21 @@ function toSection(section: RawSection): SectionData {
   return {...section, title: section.title ?? '', resources}
 }
 
-export async function getArtistPage(artistId: string): Promise<ArtistPage> {
-  const {website, artist} = await sanityFetch(ARTIST_PAGE_QUERY, {artistId}, [
+export async function getClientPage(clientId: string): Promise<ClientPage> {
+  const {website, client} = await sanityFetch(CLIENT_PAGE_QUERY, {clientId}, [
     'website',
     'section',
     'resource',
-    'artist',
+    'client',
   ])
 
-  const intro = nonEmpty(artist?.introOverride) ? artist.introOverride : (website?.intro ?? [])
-  const sections = nonEmpty(artist?.sectionOverride) ? artist.sectionOverride : (website?.sections ?? [])
+  const intro = nonEmpty(client?.introOverride) ? client.introOverride : (website?.intro ?? [])
+  const sections = nonEmpty(client?.sectionOverride) ? client.sectionOverride : (website?.sections ?? [])
 
   return {
-    artistName: artist?.name ?? '',
+    clientName: client?.name ?? '',
     intro,
-    additionalInfo: nonEmpty(artist?.additionalInfo) ? artist.additionalInfo : null,
+    additionalInfo: nonEmpty(client?.additionalInfo) ? client.additionalInfo : null,
     sections: sections.map(toSection),
   }
 }
@@ -1764,7 +1764,7 @@ const PERMANENT_VIEWERS = new Set(
 )
 
 export type AccessDecision =
-  {status: 'granted'; artistId: string} | {status: 'redirect'; canonicalSlug: string} | {status: 'denied'}
+  {status: 'granted'; clientId: string} | {status: 'redirect'; canonicalSlug: string} | {status: 'denied'}
 
 export function isInternalViewer(email: string, internalViewers: string[] | null | undefined) {
   const normalized = normalizeEmail(email)
@@ -1772,17 +1772,17 @@ export function isInternalViewer(email: string, internalViewers: string[] | null
 }
 
 export function decideAccess(requestedSlug: string, email: string | null, lookup: ACCESS_QUERY_RESULT): AccessDecision {
-  const {artist} = lookup
-  if (!email || !artist?.slug) return {status: 'denied'}
+  const {client} = lookup
+  if (!email || !client?.slug) return {status: 'denied'}
 
   const normalized = normalizeEmail(email)
   const allowed =
     isInternalViewer(normalized, lookup.internalViewers) ||
-    (artist.allowedEmails ?? []).some((allowedEmail) => normalizeEmail(allowedEmail) === normalized)
+    (client.allowedEmails ?? []).some((allowedEmail) => normalizeEmail(allowedEmail) === normalized)
 
   if (!allowed) return {status: 'denied'}
-  if (artist.slug !== requestedSlug) return {status: 'redirect', canonicalSlug: artist.slug}
-  return {status: 'granted', artistId: artist._id}
+  if (client.slug !== requestedSlug) return {status: 'redirect', canonicalSlug: client.slug}
+  return {status: 'granted', clientId: client._id}
 }
 
 export function verifiedEmail(user: User | null): string | null {
@@ -1798,14 +1798,14 @@ export function normalizeSlug(rawSlug: string) {
   }
 }
 
-export async function resolveArtistAccess(rawSlug: string, user: User | null): Promise<AccessDecision> {
+export async function resolveClientAccess(rawSlug: string, user: User | null): Promise<AccessDecision> {
   const slug = normalizeSlug(rawSlug)
-  const lookup = await sanityFetch(ACCESS_QUERY, {slug}, ['artist', 'website'])
+  const lookup = await sanityFetch(ACCESS_QUERY, {slug}, ['client', 'website'])
   return decideAccess(slug, verifiedEmail(user), lookup)
 }
 ```
 
-### 9.2 The artist page
+### 9.2 The client page
 
 ```tsx
 // app/(site)/[slug]/page.tsx
@@ -1815,8 +1815,8 @@ import {Intro} from '@/components/Intro'
 import {PageShell} from '@/components/PageShell'
 import {ResourceSection} from '@/components/ResourceSection'
 import {RichText} from '@/components/RichText'
-import {resolveArtistAccess} from '@/lib/access'
-import {getArtistPage} from '@/lib/sanity/page'
+import {resolveClientAccess} from '@/lib/access'
+import {getClientPage} from '@/lib/sanity/page'
 import {createClient} from '@/lib/supabase/server'
 import styles from './page.module.css'
 
@@ -1824,7 +1824,7 @@ export const metadata: Metadata = {title: 'Welcome to Vydia', robots: {index: fa
 
 export const instant = false
 
-export default async function ArtistPage({params}: PageProps<'/[slug]'>) {
+export default async function ClientPage({params}: PageProps<'/[slug]'>) {
   const {slug} = await params
 
   const supabase = await createClient()
@@ -1833,11 +1833,11 @@ export default async function ArtistPage({params}: PageProps<'/[slug]'>) {
   } = await supabase.auth.getUser()
   if (!user) redirect(`/login?next=/${encodeURIComponent(slug)}`)
 
-  const access = await resolveArtistAccess(slug, user)
+  const access = await resolveClientAccess(slug, user)
   if (access.status === 'denied') notFound()
   if (access.status === 'redirect') redirect(`/${access.canonicalSlug}`)
 
-  const page = await getArtistPage(access.artistId)
+  const page = await getClientPage(access.clientId)
 
   return (
     <PageShell>
@@ -1916,7 +1916,7 @@ Optional hardening: wrap the denied path in a constant minimum duration (for exa
 
 ### 9.4 Root `/`: instructions only (D13)
 
-`/` is **not** an artist index. Assume whoever lands here is an artist who lost or mistyped their link. The page is fully static: it reads no session and makes no Sanity query, so it can't reveal anything about the roster. It's public (`PUBLIC_EXACT` in §8.2), so a signed-out visitor sees the instructions straight away instead of being bounced to a login form with nothing behind it.
+`/` is **not** a client index. Assume whoever lands here is a client who lost or mistyped their link. The page is fully static: it reads no session and makes no Sanity query, so it can't reveal anything about the roster. It's public (`PUBLIC_EXACT` in §8.2), so a signed-out visitor sees the instructions straight away instead of being bounced to a login form with nothing behind it.
 
 ```tsx
 // app/(site)/page.tsx
@@ -1928,7 +1928,7 @@ export default function Home() {
     <PageShell>
       <Notice title="Looking for your Vydia resources?">
         Open the personal link your Vydia representative sent you. It looks like{' '}
-        <strong>welcometovydia.com/your-artist-name</strong>. You’ll be asked to sign in with the email address Vydia
+        <strong>welcometovydia.com/your-client-name</strong>. You’ll be asked to sign in with the email address Vydia
         has on file for you. Can’t find your link? Reach out to your Vydia representative.
       </Notice>
     </PageShell>
@@ -1936,7 +1936,7 @@ export default function Home() {
 }
 ```
 
-Internal viewers don't need an index. They open an artist's page with the **Open site** action in Studio (§6.2) or by typing the URL. `isInternalViewer()` still grants them access to every `/[slug]`.
+Internal viewers don't need an index. They open a client's page with the **Open site** action in Studio (§6.2) or by typing the URL. `isInternalViewer()` still grants them access to every `/[slug]`.
 
 ---
 
@@ -1949,7 +1949,7 @@ import {NextResponse, type NextRequest} from 'next/server'
 import {parseBody} from 'next-sanity/webhook'
 import type {SanityTag} from '@/lib/sanity/fetch'
 
-const TAGS: readonly SanityTag[] = ['artist', 'resource', 'section', 'website']
+const TAGS: readonly SanityTag[] = ['client', 'resource', 'section', 'website']
 
 export async function POST(request: NextRequest) {
   const secret = process.env.SANITY_REVALIDATE_SECRET
@@ -1973,13 +1973,13 @@ export async function POST(request: NextRequest) {
 | URL | `https://welcometovydia.com/api/revalidate` |
 | Dataset | `production` |
 | Trigger on | Create, Update, Delete |
-| Filter | `_type in ["artist", "resource", "section", "website"]` |
+| Filter | `_type in ["client", "resource", "section", "website"]` |
 | Projection | `{_type}` |
 | Drafts | Off |
 | HTTP method | POST |
 | Secret | `SANITY_REVALIDATE_SECRET` |
 
-Tagging by type is coarse but correct, and at this scale (tens of artists) it costs almost nothing. Editing one resource refreshes every page that shows it, which is exactly the "global editing impact" behaviour the research asks for. Revoking someone's email (an `artist` update) also takes effect on their next request.
+Tagging by type is coarse but correct, and at this scale (tens of clients) it costs almost nothing. Editing one resource refreshes every page that shows it, which is exactly the "global editing impact" behaviour the research asks for. Revoking someone's email (an `client` update) also takes effect on their next request.
 
 ---
 
@@ -2932,19 +2932,19 @@ beforeAll(async () => {
   access = await import('@/lib/access')
 })
 
-const lookup = (overrides: Partial<NonNullable<ACCESS_QUERY_RESULT['artist']>> = {}): ACCESS_QUERY_RESULT => ({
-  artist: {_id: 'a1', slug: 'jane-doe', allowedEmails: ['Jane@Example.com'], ...overrides},
+const lookup = (overrides: Partial<NonNullable<ACCESS_QUERY_RESULT['client']>> = {}): ACCESS_QUERY_RESULT => ({
+  client: {_id: 'a1', slug: 'jane-doe', allowedEmails: ['Jane@Example.com'], ...overrides},
   internalViewers: ['ops@vydia.com'],
 })
 
-const unknown: ACCESS_QUERY_RESULT = {artist: null, internalViewers: ['ops@vydia.com']}
+const unknown: ACCESS_QUERY_RESULT = {client: null, internalViewers: ['ops@vydia.com']}
 
 describe('decideAccess', () => {
-  it('denies unknown artists', () => {
+  it('denies unknown clients', () => {
     expect(access.decideAccess('nope', 'jane@example.com', unknown)).toEqual({status: 'denied'})
   })
 
-  it('denies unapproved emails with exactly the same result as an unknown artist', () => {
+  it('denies unapproved emails with exactly the same result as an unknown client', () => {
     expect(access.decideAccess('jane-doe', 'eve@example.com', lookup())).toEqual(
       access.decideAccess('nope', 'eve@example.com', unknown),
     )
@@ -2962,7 +2962,7 @@ describe('decideAccess', () => {
     expect(access.decideAccess('jane-doe', 'creativeservices@VYDIA.com', lookup()).status).toBe('granted')
   })
 
-  it('allows internal viewers listed on the website, but not on unknown artists', () => {
+  it('allows internal viewers listed on the website, but not on unknown clients', () => {
     expect(access.decideAccess('jane-doe', 'OPS@vydia.com', lookup()).status).toBe('granted')
     expect(access.decideAccess('nope', 'ops@vydia.com', unknown)).toEqual({status: 'denied'})
   })
@@ -2979,7 +2979,7 @@ describe('decideAccess', () => {
     expect(access.decideAccess('jane-doe', null, lookup())).toEqual({status: 'denied'})
   })
 
-  it('denies an artist with no allowed emails to everyone except internal viewers', () => {
+  it('denies a client with no allowed emails to everyone except internal viewers', () => {
     expect(access.decideAccess('jane-doe', 'jane@example.com', lookup({allowedEmails: null})).status).toBe('denied')
     expect(access.decideAccess('jane-doe', 'ops@vydia.com', lookup({allowedEmails: null})).status).toBe('granted')
   })
@@ -3069,18 +3069,18 @@ describe('RESERVED_SLUGS', () => {
 import {expect, test} from '@playwright/test'
 import {storageStatePath} from './users'
 
-const UNKNOWN = 'definitely-not-a-real-artist'
+const UNKNOWN = 'definitely-not-a-real-client'
 
 test.describe('signed out', () => {
-  test('real and fake artist URLs both go to login, with the same redirect', async ({page}) => {
-    for (const slug of ['test-artist', UNKNOWN]) {
+  test('real and fake client URLs both go to login, with the same redirect', async ({page}) => {
+    for (const slug of ['test-client', UNKNOWN]) {
       await page.goto(`/${slug}`)
       await expect(page).toHaveURL(`/login?next=%2F${slug}`)
       await expect(page.getByRole('heading', {name: 'Sign in'})).toBeVisible()
     }
   })
 
-  test('"/" is public, shows instructions, and lists no artists', async ({page}) => {
+  test('"/" is public, shows instructions, and lists no clients', async ({page}) => {
     const response = await page.goto('/')
     expect(response?.status()).toBe(200)
     await expect(page).toHaveURL('/')
@@ -3101,8 +3101,8 @@ test.describe('signed out', () => {
 test.describe('signed in as an unapproved user', () => {
   test.use({storageState: storageStatePath('outsider')})
 
-  test('unknown and forbidden artists render identically', async ({page}) => {
-    const forbidden = await page.goto('/test-artist')
+  test('unknown and forbidden clients render identically', async ({page}) => {
+    const forbidden = await page.goto('/test-client')
     const forbiddenHtml = await page.locator('main').innerHTML()
     const unknown = await page.goto(`/${UNKNOWN}`)
     const unknownHtml = await page.locator('main').innerHTML()
@@ -3123,7 +3123,7 @@ test.describe('signed in as an approved user', () => {
   test.use({storageState: storageStatePath('approved')})
 
   test('sees the intro and resource cards', async ({page}) => {
-    await page.goto('/test-artist')
+    await page.goto('/test-client')
     await expect(page.getByText('Welcome to Vydia!')).toBeVisible()
     await expect(page.getByRole('heading', {name: 'Vydia Platform Resources'})).toBeVisible()
     await expect(page.getByText(/^Added on /).first()).toBeVisible()
@@ -3136,7 +3136,7 @@ test.describe('signed in as an approved user', () => {
   })
 
   test('link cards open in a new tab without leaking the opener', async ({page}) => {
-    await page.goto('/test-artist')
+    await page.goto('/test-client')
     const cards = page.locator('section[aria-labelledby] a')
     expect(await cards.count()).toBeGreaterThan(0)
     for (const card of await cards.all()) {
@@ -3146,7 +3146,7 @@ test.describe('signed in as an approved user', () => {
   })
 
   test('the video dialog opens, plays, closes on Escape, and returns focus', async ({page}) => {
-    await page.goto('/test-artist')
+    await page.goto('/test-client')
     const card = page.locator('section[aria-labelledby] button[aria-haspopup="dialog"]').first()
     await card.click()
     const dialog = page.locator('dialog[open]')
@@ -3176,15 +3176,15 @@ Results from task 10.10 (2026-10-20, local production build, Playwright + manual
 - [ ] ⏳ Google sign-in works and returns to `next`. The redirect to Google with the right callback is verified; a full round trip needs a person at Google's sign-in screen.
 - [x] ✅ Session survives closing the browser and returning a week later: the auth cookie lasts 400 days, and a fresh browser with the saved cookies is still signed in (7.12).
 - [ ] ⏳ Publishing a resource change in Studio shows on the site within seconds without redeploying. Verified with signed webhook calls on a local production build (9.4/9.5). Sanity's real webhook delivery needs a deployment (9.3/9.7).
-- [x] ✅ Removing an email from an artist revokes access on the next page load, once the `artist` webhook fires (8.9).
-- [x] ✅ Artist intro override and section override work; clearing them falls back to the global versions (`test-override` vs `test-artist` renders, plus unit tests for empty overrides).
+- [x] ✅ Removing an email from a client revokes access on the next page load, once the `client` webhook fires (8.9).
+- [x] ✅ Client intro override and section override work; clearing them falls back to the global versions (`test-override` vs `test-client` renders, plus unit tests for empty overrides).
 - [x] ✅ Card with no cover photo: PDF shows its first page; link/video/slides show the branded tile (6.13).
 - [x] ✅ "Added on" doesn't change after editing a resource (edited a temporary resource: `addedOn` stayed the same while `_updatedAt` changed).
-- [x] ✅ Renaming an artist doesn't change the URL. "Change URL…" keeps the old URL redirecting (3.4, 4.5, 8.7, e2e).
+- [x] ✅ Renaming a client doesn't change the URL. "Change URL…" keeps the old URL redirecting (3.4, 4.5, 8.7, e2e).
 - [x] ✅ Reserved slug (`studio`) and duplicate/previous slugs are rejected in Studio (2.16).
 - [x] ✅ Studio: can't create a second Website or delete it. Can't delete a resource still used in a section (3.2, 3.12).
 - [x] ✅ Uploaded videos play in the dialog, seeking works, and **nothing** downloads until play. Changed from `preload="metadata"` to `preload="none"` after measuring 1.8 MB of metadata requests on page load with the real tutorials; it's now 0 bytes before play, and seeking to 2.00s of a 358s video works.
-- [x] ✅ `/` shows only the instructions, signed in or out. No links and no artist names.
+- [x] ✅ `/` shows only the instructions, signed in or out. No links and no client names.
 - [x] ✅ Keyboard: every card is focusable and opens with Enter, and the video dialog closes with Esc (e2e `a11y.spec.ts`).
 - [x] ✅ Mobile layout (single column), and the header logo scales down (6.12).
 - [x] ✅ No Tailwind or global component classes (6.14).
@@ -3251,7 +3251,7 @@ The full build broken into phases and tasks. Each task points to the section of 
 - [ ] **0.16** Protect `main` (PRs required) and work on feature branches per phase.
 
 **Added during validation**
-- [ ] **0.17** 🧑‍🤝‍🧑 **Upgrade the Sanity project to Growth before 2026-11-18.** When the trial ends without an upgrade, Sanity converts private datasets to **public** and turns every non-admin member into a viewer. That would make the artist roster and every allowed-email list readable by anyone, and lock L&A out of editing. Cost: $15 per non-viewer seat per month, so $45/month for the admin seat plus the two shared logins, or $30/month if the admin seat is removed once the shared logins are set up. Needs a payment card on the Vydia Sanity organization.
+- [ ] **0.17** 🧑‍🤝‍🧑 **Upgrade the Sanity project to Growth before 2026-11-18.** When the trial ends without an upgrade, Sanity converts private datasets to **public** and turns every non-admin member into a viewer. That would make the client roster and every allowed-email list readable by anyone, and lock L&A out of editing. Cost: $15 per non-viewer seat per month, so $45/month for the admin seat plus the two shared logins, or $30/month if the admin seat is removed once the shared logins are set up. Needs a payment card on the Vydia Sanity organization.
 - [ ] **0.18** 🧑‍🤝‍🧑 Branch protection for 0.16: upgrade the `vydia-creative-services-org` GitHub organization to **Team** (needed for branch protection or rulesets on private repos), or agree to work on feature branches by convention until then.
 
 **Done when:** all three dashboards are reachable, both shared Sanity logins work, a test confirmation email from Supabase arrives through the custom SMTP, and the Google provider is enabled.
@@ -3278,7 +3278,7 @@ The full build broken into phases and tasks. Each task points to the section of 
 | 0.9 | ☑️ Confirmed by you. Session settings aren't exposed without a management token. On Supabase's Free plan both are "never" by default anyway | Your status note |
 | 0.10 | ⏳ Site URL `http://localhost:3000` ✅, `localhost:3000/**` allowed ✅, unknown domains fall back to the Site URL ✅. Vercel preview pattern not added yet | Invalid-token `/verify` redirect probe |
 | 0.11 | ✅ Google provider on. Google accepts the client ID and redirect URI `https://cqqzvzljlthrqrttqnga.supabase.co/auth/v1/callback` and goes to its sign-in page with no `redirect_uri_mismatch` | `/authorize` → Google |
-| 0.12 | ⏳ Waiting on Resend. ⚠️ Supabase's built-in sender only delivers to **project team members** ("Email address not authorized" for anyone else) and is capped at **2 emails/hour**. Until Resend is in, test sign-ups only work with addresses on the Supabase team, and no artist can sign up with email/password (Google sign-in still works) | Supabase SMTP docs |
+| 0.12 | ⏳ Waiting on Resend. ⚠️ Supabase's built-in sender only delivers to **project team members** ("Email address not authorized" for anyone else) and is capped at **2 emails/hour**. Until Resend is in, test sign-ups only work with addresses on the Supabase team, and no client can sign up with email/password (Google sign-in still works) | Supabase SMTP docs |
 | 0.13 | ⏳ Templates drafted in `supabase/templates/` (subject in the first line). Waiting to be pasted into Auth → Email Templates | — |
 | 0.14 | ⏳ No Vercel deployments or GitHub integration on the repo yet (waiting on the Vercel account) | GitHub deployments API |
 | 0.15 | ⏳ Waiting on the product team | — |
@@ -3314,7 +3314,7 @@ Everything left in the plan waits on one of these. Each step lists exactly what 
 **U2: Shared Sanity seats (0.5)**
 1. sanity.io/manage → Welcome to Vydia → **Members** → **Invite** `labelrelationships@vydia.com` with the **Editor** role. Only `creativeservices@` was invited so far.
 2. Whoever reads each shared inbox accepts the invite and signs in. Use the same sign-in method every time (Google or email) so the seat isn't duplicated.
-3. Each team opens `http://localhost:3000/studio` (or the Vercel URL after U4) and confirms they see Artists / Resources / Sections / Website.
+3. Each team opens `http://localhost:3000/studio` (or the Vercel URL after U4) and confirms they see Clients / Resources / Sections / Website.
 - **I'll check:** both members show as accepted Editors, and no pending invitations remain.
 
 **U3: Email templates (0.13), can do now**
@@ -3344,12 +3344,12 @@ Everything left in the plan waits on one of these. Each step lists exactly what 
 5. **Supabase → Authentication → URL Configuration → Redirect URLs:** add `https://welcome-to-vydia-*-<team>.vercel.app/**` and the production `*.vercel.app` URL (0.10).
 6. **Sanity → API → CORS origins:** add `https://welcome-to-vydia-*.vercel.app` and the production URL, both with **Allow credentials**, so Studio works on Vercel.
 7. Tell me the project is linked. I'll push a branch, which completes 1.15.
-- **I'll check:** a preview builds, `/` loads, `/test-artist` redirects to `/login`, Studio loads on the preview URL, and the security headers are present.
+- **I'll check:** a preview builds, `/` loads, `/test-client` redirects to `/login`, Studio loads on the preview URL, and the security headers are present.
 
 **U5: Sanity webhook (9.3), after U4**
 1. sanity.io/manage → Welcome to Vydia → **API → Webhooks → Create webhook**.
 2. **Name:** `revalidate-preview`. **URL:** `https://<preview URL>/api/revalidate?x-vercel-protection-bypass=<bypass secret from U4.4>`. **Dataset:** `production`. **Trigger on:** Create, Update, Delete.
-3. **Filter:** `_type in ["artist", "resource", "section", "website"]`. **Projection:** `{_type}`. **HTTP method:** POST. **API version:** `v2025-02-19`. **Drafts:** off. **Secret:** the `SANITY_REVALIDATE_SECRET` value.
+3. **Filter:** `_type in ["client", "resource", "section", "website"]`. **Projection:** `{_type}`. **HTTP method:** POST. **API version:** `v2025-02-19`. **Drafts:** off. **Secret:** the `SANITY_REVALIDATE_SECRET` value.
 4. At launch (11.5), add a second webhook `revalidate-production` with URL `https://welcometovydia.com/api/revalidate` and the same settings. Growth allows 4 webhooks.
 - **I'll check:** publish a test edit, then confirm the attempts log shows 200 and the preview page updates (9.4, 9.5, 9.7).
 
@@ -3376,8 +3376,8 @@ Send them this list:
 
 **U9: One real Google sign-in (7.11)**
 1. While the Google app is in **Testing** mode, add the tester's Google address under Google Cloud → **Google Auth Platform → Audience → Test users**.
-2. They open `/test-artist` (locally, or on the preview after U4), click **Continue with Google**, and finish sign-in. For it to open the page, their email must be on `test-artist`'s **Allowed emails** (or they'll see "This page isn't available", which also proves the round trip).
-- **I'll check:** a Supabase user with the Google identity exists, and their session reached `/test-artist`. At launch, 11.3 publishes the Google app so anyone can sign in.
+2. They open `/test-client` (locally, or on the preview after U4), click **Continue with Google**, and finish sign-in. For it to open the page, their email must be on `test-client`'s **Allowed emails** (or they'll see "This page isn't available", which also proves the round trip).
+- **I'll check:** a Supabase user with the Google identity exists, and their session reached `/test-client`. At launch, 11.3 publishes the Google app so anyone can sign in.
 
 **U10: Branch protection (0.16 / 0.18)**
 - **Option A:** a GitHub org owner upgrades `vydia-creative-services-org` to **Team**. Then Settings → Rules → new branch ruleset for `main`: require a pull request and require the status check **check** (the CI job).
@@ -3426,14 +3426,14 @@ Ask L&A for every item on the current Seismic page: title, type (PDF / video / l
 - [x] **2.7** `resource` preview (type label + date + thumbnail) and orderings (newest first, title).
 - [x] **2.8** `section` type: title, subtitle, ordered unique resource references, preview with count (§5.4).
 - [x] **2.9** `website` type: intro (required), sections (required, unique), `internalViewerEmails` with @vydia.com validation (§5.5).
-- [x] **2.10** `artist` type: field groups, name, slug with custom `slugify`, `isSlugAvailable` (current + previous slugs), reserved-word and pattern validation (§5.6).
-- [x] **2.11** `artist` hidden `slugLocked`, read-only `previousSlugs`, slug `readOnly` when locked.
-- [x] **2.12** `artist` `allowedEmails` with per-item email validation and the case-insensitive duplicate check.
-- [x] **2.13** `artist` `introOverride`, `additionalInfo`, `sectionOverride` (with the "replaces, doesn't add" description), hidden `customization` placeholder.
-- [x] **2.14** `artist` preview (`/slug · N allowed emails`).
+- [x] **2.10** `client` type: field groups, name, slug with custom `slugify`, `isSlugAvailable` (current + previous slugs), reserved-word and pattern validation (§5.6).
+- [x] **2.11** `client` hidden `slugLocked`, read-only `previousSlugs`, slug `readOnly` when locked.
+- [x] **2.12** `client` `allowedEmails` with per-item email validation and the case-insensitive duplicate check.
+- [x] **2.13** `client` `introOverride`, `additionalInfo`, `sectionOverride` (with the "replaces, doesn't add" description), hidden `customization` placeholder.
+- [x] **2.14** `client` preview (`/slug · N allowed emails`).
 - [x] **2.15** Register everything in `schemaTypes/index.ts`.
 - [x] **2.16** Manually test every validation rule in Studio: wrong mime type, missing file, missing link, both file and link on a deck, invalid email, duplicate email in different case, reserved slug, duplicate slug.
-  ✅ 18 cases (16 invalid + 2 valid controls) run through `@sanity/validation`'s `validateDocument` against the real schema and dataset: every rule fires with its readable message, controls pass clean. Also covered: missing video file, title over 120 characters, missing "Added on", previous-slug reuse, non-@vydia.com internal viewer, missing website intro/sections, bad slug pattern. Spot-checked in headless Studio (doc-level rule, async mime check, slug rule): message shown and **Publish disabled**. A valid resource, section, artist, and website were each published from Studio. All probe documents and assets were deleted afterwards; the dataset is empty.
+  ✅ 18 cases (16 invalid + 2 valid controls) run through `@sanity/validation`'s `validateDocument` against the real schema and dataset: every rule fires with its readable message, controls pass clean. Also covered: missing video file, title over 120 characters, missing "Added on", previous-slug reuse, non-@vydia.com internal viewer, missing website intro/sections, bad slug pattern. Spot-checked in headless Studio (doc-level rule, async mime check, slug rule): message shown and **Publish disabled**. A valid resource, section, client, and website were each published from Studio. All probe documents and assets were deleted afterwards; the dataset is empty.
   ⚠️ Don't rely on `sanity documents validate` (CLI) for these checks: in Sanity 6 it silently skips the document-level rules, the async mime check, and the slug rules (it reported 9 of 16 failures). Use `validateDocument` from `@sanity/validation` with a client instead (Phase 10).
 
 **Done when:** every document type can be created, validated, and published in the local Studio, and each validation rule in 2.16 blocks publishing with a readable message.
@@ -3442,9 +3442,9 @@ Ask L&A for every item on the current Seismic page: title, type (PDF / video / l
 
 ### Phase 3: Studio editor experience ✅ Complete
 
-- [x] **3.1** Desk structure, in this order: **Artists**, divider, **Resources** (one flat list of all resources), **Sections**, **Website** (singleton editor) (§6.1).
+- [x] **3.1** Desk structure, in this order: **Clients**, divider, **Resources** (one flat list of all resources), **Sections**, **Website** (singleton editor) (§6.1).
 - [x] **3.2** Singleton guards: filter the `website` template from "new document", limit its actions to publish / discard / restore (§6.4).
-- [x] **3.3** `lockSlugOnPublish` wrapper around the publish action (§6.2). Test: publish a new artist → slug becomes read-only.
+- [x] **3.3** `lockSlugOnPublish` wrapper around the publish action (§6.2). Test: publish a new client → slug becomes read-only.
 - [x] **3.4** `ChangeUrlAction` (§6.2). Test: Change URL → old slug appears in Previous URLs → edit slug → publish → re-locks.
 - [x] **3.5** `OpenSiteAction` (§6.2). Test it opens `NEXT_PUBLIC_SITE_URL/<slug>` in a new tab.
 - [x] **3.6** `PdfPreviewInput` (§6.3): render page 1 with pdf.js, upload as an image asset, set the field.
@@ -3453,7 +3453,7 @@ Ask L&A for every item on the current Seismic page: title, type (PDF / video / l
 - [x] **3.9** Decide where the pdf.js worker loads from (unpkg vs copied to `public/`) and finalise it (§6.3 note). **Decided: bundled by Next via `new Worker(new URL(…, import.meta.url))`.**
 - [x] **3.10** Vision tool loaded in development only.
 - [x] **3.11** Read every field title and description aloud as a non-developer would, and rewrite anything unclear.
-- [x] **3.12** Confirm strong references block deleting a resource that's still in a section, and a section that's still on the website or an artist.
+- [x] **3.12** Confirm strong references block deleting a resource that's still in a section, and a section that's still on the website or a client.
 
 **Done when:** you can run Flow 1 (create a microsite) and Flow 2 (edit resources → sections → website) from the research end to end in Studio without touching code, and the slug lock / Change URL / PDF preview all behave as specified.
 
@@ -3465,11 +3465,11 @@ Ask L&A for every item on the current Seismic page: title, type (PDF / video / l
 - [x] **4.2** Confirm in Studio: the Website singleton has the intro text from the reference, plus the three sections in order.
 - [x] **4.3** Create test resources covering every case: PDF with cover, PDF without cover (auto preview), uploaded video, link (pitch form), slide deck as upload, slide deck as link, resource with a long title.
 - [x] **4.4** Add the test resources to the three sections.
-- [x] **4.5** Create test artists:
-  - `test-artist`: default layout, your personal email allowed.
-  - `test-override`: intro override, additional info, section override with one artist-specific section.
+- [x] **4.5** Create test clients:
+  - `test-client`: default layout, your personal email allowed.
+  - `test-override`: intro override, additional info, section override with one client-specific section.
   - `test-renamed`: published, then renamed via Change URL (so it has a previous slug).
-- [x] **4.6** Create one resource that's in no section, and confirm it shows up in Resources but on no artist page.
+- [x] **4.6** Create one resource that's in no section, and confirm it shows up in Resources but on no client page.
 - [x] **4.7** Run `npx sanity typegen generate` and commit `lib/sanity/types.generated.ts`. ✅ Generated (20 schema types; queries are added in Phase 5). Regenerate with `npm run typegen` (`sanity schema extract --force && sanity typegen generate`). Generated together with `sanity/schema.json`; both are ready to commit.
 
 **Done when:** the dataset contains every content shape the site has to render, and the generated types compile.
@@ -3480,22 +3480,22 @@ Ask L&A for every item on the current Seismic page: title, type (PDF / video / l
 
 - [x] **5.1** `lib/sanity/client.ts`: private client with token, `useCdn: false`, `perspective: 'published'` (§7.1).
 - [x] **5.2** `lib/sanity/fetch.ts`: `sanityFetch` with `'use cache'`, `cacheLife('max')` and type tags via `cacheTag` (§7.1).
-- [x] **5.3** `lib/sanity/queries.ts`: `ACCESS_QUERY`, resource and section projections, `ARTIST_PAGE_QUERY` (§7.2).
+- [x] **5.3** `lib/sanity/queries.ts`: `ACCESS_QUERY`, resource and section projections, `CLIENT_PAGE_QUERY` (§7.2).
 - [x] **5.4** Swap the hand-written types (§7.3) for the generated ones where they match. Keep `ResourceCardData` and `SectionData` as named exports either way.
-- [x] **5.5** `lib/sanity/page.ts`: `getArtistPage` with the override rules (intro override, sections REPLACE) and dangling-reference filtering (§7.4).
+- [x] **5.5** `lib/sanity/page.ts`: `getClientPage` with the override rules (intro override, sections REPLACE) and dangling-reference filtering (§7.4).
 - [x] **5.6** `lib/sanity/image.ts` + `images.remotePatterns` for `cdn.sanity.io` in `next.config.ts` (§7.5). Confirm the `@sanity/image-url` export name for the installed version.
 - [x] **5.7** `lib/format.ts`: `formatAddedOn` in America/New_York (§11.4). Unit test: `2025-05-16T16:08:00Z` → `Added on May 16, 2025 at 12:08 PM`.
-- [x] **5.8** Unit-test `getArtistPage`'s override logic with a mocked `sanityFetch`: no override, intro override only, section override only, empty arrays treated as "no override", null references dropped.
+- [x] **5.8** Unit-test `getClientPage`'s override logic with a mocked `sanityFetch`: no override, intro override only, section override only, empty arrays treated as "no override", null references dropped.
 
-**Done when:** a temporary server component can print the resolved data for `test-artist` and `test-override`, and the override unit tests pass.
+**Done when:** a temporary server component can print the resolved data for `test-client` and `test-override`, and the override unit tests pass.
 
-✅ Verified: a temporary server component rendered both artists correctly (global layout vs. intro/info/section overrides) in dev, and prerendered statically in a production build through `'use cache'` (Revalidate 30d / Expire 1y = `cacheLife('max')`). It was deleted afterwards. 39 unit tests pass. Dangling references are filtered in GROQ (`[defined(@->_id)]`), because typegen types resolved references as non-null.
+✅ Verified: a temporary server component rendered both clients correctly (global layout vs. intro/info/section overrides) in dev, and prerendered statically in a production build through `'use cache'` (Revalidate 30d / Expire 1y = `cacheLife('max')`). It was deleted afterwards. 39 unit tests pass. Dangling references are filtered in GROQ (`[defined(@->_id)]`), because typegen types resolved references as non-null.
 
 ---
 
 ### Phase 6: UI components (rendering, no auth yet) ✅ Complete
 
-Temporarily render `/[slug]` without the auth check (hard-code the artist ID lookup) so the UI can be built against real data. **This bypass is removed in 8.3.**
+Temporarily render `/[slug]` without the auth check (hard-code the client ID lookup) so the UI can be built against real data. **This bypass is removed in 8.3.**
 
 - [x] **6.1** `PageShell` + `.module.css` (§11.2).
 - [x] **6.2** `Header` + `.module.css`: grain banner, centered logo, responsive height (§11.2).
@@ -3512,7 +3512,7 @@ Temporarily render `/[slug]` without the auth check (hard-code the artist ID loo
 - [x] **6.13** Check all card states with the test content: with cover, auto PDF preview, placeholder, long title (wraps, date stays pinned), video, link, slides.
 - [x] **6.14** Grep for stray inline styles or global classes. Everything is in modules except tokens, reset, and `.visually-hidden` (D12).
 
-**Done when:** `/test-artist` and `/test-override` render correctly against real Sanity data and match the reference at desktop and mobile sizes.
+**Done when:** `/test-client` and `/test-override` render correctly against real Sanity data and match the reference at desktop and mobile sizes.
 
 ✅ Verified in dev and in a production build (`next start`):
 - Both pages render from real Sanity data. Columns are 1/2/3/4 at 375/768/1024/1440px, and the logo goes from 28px to 40px.
@@ -3564,19 +3564,19 @@ Fixed along the way:
 
 ### Phase 8: Access control ✅ Complete
 
-- [x] **8.0** 🧑‍🤝‍🧑 Decide how artist pages return status codes. **Decided: option 1, accept streamed 200.** Under `cacheComponents` the page always responds **200** (it streams), and unknown and denied stay identical (§9.3). Options:
+- [x] **8.0** 🧑‍🤝‍🧑 Decide how client pages return status codes. **Decided: option 1, accept streamed 200.** Under `cacheComponents` the page always responds **200** (it streams), and unknown and denied stay identical (§9.3). Options:
   1. **Accept streamed 200** (recommended for the prototype). The not-found UI and `noindex` are identical for both cases, which meets the research requirement ("indistinguishable"). Old-slug redirects work, but client-side.
-  2. **Access check in Proxy, after the session check.** Real 404 and 307, but Proxy queries Sanity on every artist-page request, and the access logic moves out of the page.
+  2. **Access check in Proxy, after the session check.** Real 404 and 307, but Proxy queries Sanity on every client-page request, and the access logic moves out of the page.
   3. **Turn `cacheComponents` off** (revisit D15). The plan's original 404/307 behaviour, but on the older caching model (§7.1/§10 change back).
-- [x] **8.1** `lib/access.ts`: `normalizeEmail`, `PERMANENT_VIEWERS` from env, `isInternalViewer`, `decideAccess`, `verifiedEmail`, `resolveArtistAccess` (§9.1).
+- [x] **8.1** `lib/access.ts`: `normalizeEmail`, `PERMANENT_VIEWERS` from env, `isInternalViewer`, `decideAccess`, `verifiedEmail`, `resolveClientAccess` (§9.1).
 - [x] **8.2** `tests/access.test.ts` (§13.1): unknown, unapproved = unknown, case-insensitive + trim, permanent emails, internal viewers from the website, old-slug redirect only when allowed, no verified email.
-- [x] **8.3** Replace the Phase 6 bypass with the real `[slug]/page.tsx`: `getUser` → `resolveArtistAccess` → `notFound()` / `redirect()` / render (§9.2). **Remove the temporary bypass code.**
+- [x] **8.3** Replace the Phase 6 bypass with the real `[slug]/page.tsx`: `getUser` → `resolveClientAccess` → `notFound()` / `redirect()` / render (§9.2). **Remove the temporary bypass code.**
 - [x] **8.4** `[slug]/not-found.tsx` + `NoAccess` using `Notice`, with a "sign in with a different email" form (§9.2).
-- [x] **8.5** Static `metadata` with no artist name, and `noindex` on the site layout and artist page.
+- [x] **8.5** Static `metadata` with no client name, and `noindex` on the site layout and client page.
 - [x] **8.6** Root `/` instructions page: static, public, no session read, no Sanity query (§9.4, D13).
 - [x] **8.7** Manual matrix test, signed in as each persona against each slug:
 
-  | Persona ↓ / Slug → | `test-artist` | old `test-renamed` slug | `does-not-exist` |
+  | Persona ↓ / Slug → | `test-client` | old `test-renamed` slug | `does-not-exist` |
   |---|---|---|---|
   | Approved client | ✅ page | ↪ redirect to new slug | 404 NoAccess |
   | Unapproved client | 404 NoAccess | 404 NoAccess (no redirect) | 404 NoAccess |
@@ -3584,12 +3584,12 @@ Fixed along the way:
   | Internal viewer from Website list | ✅ page | ↪ redirect | 404 NoAccess |
   | Signed out | → `/login` | → `/login` | → `/login` |
 
-- [x] **8.8** Also confirm the status codes match whatever 8.0 decided. Diff the HTML of "unapproved on a real artist" against "anyone on a missing artist". It must be byte-identical apart from Next's per-request IDs.
+- [x] **8.8** Also confirm the status codes match whatever 8.0 decided. Diff the HTML of "unapproved on a real client" against "anyone on a missing client". It must be byte-identical apart from Next's per-request IDs.
   ✅ Verified on a production build, signed in as an unapproved user:
-  - `/test-artist` (real, denied) and a missing slug both return **200** (decision 8.0) with identical headers and the same NoAccess page with `noindex`.
-  - No artist name or resource title anywhere in the response. Median response time is the same (101 vs 98 ms).
-  - Byte-level differences are only React's random per-request keys and stream chunking. These vary the same way across real, unknown-cold, and unknown-warm slugs (12 samples each, with the same three response shapes in every group), so they don't reveal whether an artist exists.
-- [x] **8.9** Remove an email from an artist and confirm that user loses access on the next load. ✅ On a production build: granted after adding the email and calling the `artist` webhook; still granted (cached) right after removing it; revoked on the next load after the `artist` webhook. Without the webhook, a removed email keeps access until the cache expires, so the webhook (9.3) is required before launch.
+  - `/test-client` (real, denied) and a missing slug both return **200** (decision 8.0) with identical headers and the same NoAccess page with `noindex`.
+  - No client name or resource title anywhere in the response. Median response time is the same (101 vs 98 ms).
+  - Byte-level differences are only React's random per-request keys and stream chunking. These vary the same way across real, unknown-cold, and unknown-warm slugs (12 samples each, with the same three response shapes in every group), so they don't reveal whether a client exists.
+- [x] **8.9** Remove an email from a client and confirm that user loses access on the next load. ✅ On a production build: granted after adding the email and calling the `client` webhook; still granted (cached) right after removing it; revoked on the next load after the `client` webhook. Without the webhook, a removed email keeps access until the cache expires, so the webhook (9.3) is required before launch.
 - [x] **8.10** Mixed-case test: add `Jane.Doe@Example.com` in Studio, sign in as `jane.doe@example.com` → allowed.
 
 **Done when:** every cell in the 8.7 matrix behaves as shown, 8.8 shows no difference, and the access unit tests pass.
@@ -3601,8 +3601,8 @@ Fixed along the way:
 - [x] **9.1** `/api/revalidate` route with `parseBody` signature check and type-tag revalidation (§10). Use the `revalidateTag` signature for the installed Next version.
 - [ ] **9.2** Generate `SANITY_REVALIDATE_SECRET` and add it to `.env.local` and Vercel (Preview + Production). ✅ Generated (64 hex chars) and written to `.env.local`. ⏳ Vercel part blocked on 0.14.
 - [ ] **9.3** ⏳ Blocked on 0.14 (no deployment URL yet). Create the Sanity webhook pointed at the **preview** deployment first, with filter, projection `{_type}`, and the secret (§10).
-- [ ] **9.4** Test on the preview deployment: edit a resource title → publish → reload `/test-artist` → new title shows within seconds. ✅ Verified on a local production build (`next start`) with correctly signed webhook calls: the edited title stays cached until the `resource` webhook, then shows immediately. ⏳ Repeat against the preview once 9.3 exists.
-- [ ] **9.5** Test each type: website intro, section order, artist allowed emails (revocation), resource delete. ✅ All four verified locally on a production build with a warm cache: stale before the matching webhook, fresh right after. Revocation also covers 8.9. ⏳ Repeat on the preview.
+- [ ] **9.4** Test on the preview deployment: edit a resource title → publish → reload `/test-client` → new title shows within seconds. ✅ Verified on a local production build (`next start`) with correctly signed webhook calls: the edited title stays cached until the `resource` webhook, then shows immediately. ⏳ Repeat against the preview once 9.3 exists.
+- [ ] **9.5** Test each type: website intro, section order, client allowed emails (revocation), resource delete. ✅ All four verified locally on a production build with a warm cache: stale before the matching webhook, fresh right after. Revocation also covers 8.9. ⏳ Repeat on the preview.
 - [x] **9.6** Test a bad signature → 401, and an unknown `_type` → 400. ✅ Unsigned → 401, wrong secret → 401, `sanity.imageAsset` → 400, missing secret env → 500.
 - [ ] **9.7** ⏳ Blocked on 9.3. Check the webhook attempt log in sanity.io/manage shows 200s.
 
@@ -3612,15 +3612,15 @@ Fixed along the way:
 
 ### Phase 10: Testing and hardening
 
-- [x] **10.1** ✅ `npm run e2e:setup` / `e2e:teardown` (`scripts/e2e-fixtures.ts`) create and delete pre-confirmed users and grant or revoke access on `test-artist`/`test-renamed`, then revalidate the cache. `tests/e2e/global-setup.ts` signs in through the real form and saves `storageState` (gitignored). Create Supabase test users for e2e (`approved`, `outsider`) and a Playwright global setup that signs in and saves `storageState` files (gitignored).
+- [x] **10.1** ✅ `npm run e2e:setup` / `e2e:teardown` (`scripts/e2e-fixtures.ts`) create and delete pre-confirmed users and grant or revoke access on `test-client`/`test-renamed`, then revalidate the cache. `tests/e2e/global-setup.ts` signs in through the real form and saves `storageState` (gitignored). Create Supabase test users for e2e (`approved`, `outsider`) and a Playwright global setup that signs in and saves `storageState` files (gitignored).
 - [x] **10.2** Write `tests/e2e/access.spec.ts` (§13.2): signed-out redirects, `/` is public with no links, unknown vs forbidden identical, approved user sees content.
 - [x] **10.3** ✅ 16 Playwright tests (`access.spec.ts` + `a11y.spec.ts`) pass on a local production build, 3× repeat-stable. Add e2e tests: old slug redirects for an approved user, the video dialog opens and closes, link cards have `target="_blank"` and `rel="noopener noreferrer"`.
 - [ ] **10.4** Run Playwright against the Vercel preview in CI (on PRs to `main`). ⏳ Prepared, but can't be verified until 0.14: `.github/workflows/e2e-preview.yml` runs on successful Vercel preview deployments, creates throwaway fixtures (`npm run e2e:setup`), runs `npm run e2e` against the preview URL, and always tears down. It needs repo variables `NEXT_PUBLIC_SANITY_PROJECT_ID`, `NEXT_PUBLIC_SANITY_DATASET` and `NEXT_PUBLIC_SUPABASE_URL`, plus secrets `SANITY_E2E_EDITOR_TOKEN` (Editor robot token), `SUPABASE_SERVICE_ROLE_KEY`, `SANITY_REVALIDATE_SECRET` and `VERCEL_AUTOMATION_BYPASS_SECRET`.
 - [x] **10.5** Security headers in `next.config.ts` for site routes: `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`, `X-Content-Type-Options: nosniff`, `Permissions-Policy` minimal. Exclude `/studio` if they break it.
 - [x] **10.6** Confirm no server-only module ends up in a client bundle (`server-only` import errors would show at build). Grep the client build output for `SANITY_API_READ_TOKEN`.
 - [x] **10.7** Confirm the Sanity dataset rejects unauthenticated queries (`curl` the public API without a token → no documents).
-- [x] **10.8** ✅ axe (WCAG 2.0/2.1/2.2 A+AA, colour contrast included): **0 violations** on `/`, all three login modes, NoAccess, the artist page, and the open video dialog. Keyboard-only test passes. Lighthouse accessibility **100** on `/`, `/login` and `/test-artist`. Accessibility: keyboard-only walk-through (cards, video dialog, login form), axe/Lighthouse a11y ≥ 95, color contrast of the muted date text, alt text on cover images.
-- [x] **10.9** ✅ Lighthouse mobile on a local production build: `/test-artist` performance 97, `/` 99, `/login` 97. CLS 0, TBT 10–20 ms, best practices 100. The LCP element is the intro text (fine; the header logo is preloaded with `preload`, since `priority` is deprecated in Next 16). Card covers lazy-load and are now capped at `max-w=800&max-h=450`, so tall portrait previews no longer download at full height. Performance: Lighthouse on `/test-artist` (mobile). LCP image is the header logo (`priority`), covers are lazy, no layout shift from cards.
+- [x] **10.8** ✅ axe (WCAG 2.0/2.1/2.2 A+AA, colour contrast included): **0 violations** on `/`, all three login modes, NoAccess, the client page, and the open video dialog. Keyboard-only test passes. Lighthouse accessibility **100** on `/`, `/login` and `/test-client`. Accessibility: keyboard-only walk-through (cards, video dialog, login form), axe/Lighthouse a11y ≥ 95, color contrast of the muted date text, alt text on cover images.
+- [x] **10.9** ✅ Lighthouse mobile on a local production build: `/test-client` performance 97, `/` 99, `/login` 97. CLS 0, TBT 10–20 ms, best practices 100. The LCP element is the intro text (fine; the header logo is preloaded with `preload`, since `priority` is deprecated in Next 16). Card covers lazy-load and are now capped at `max-w=800&max-h=450`, so tall portrait previews no longer download at full height. Performance: Lighthouse on `/test-client` (mobile). LCP image is the header logo (`priority`), covers are lazy, no layout shift from cards.
 - [x] **10.10** Run the full manual QA checklist (§13.3) and record the results in the PR. ✅ Results recorded in §13.3: 14 verified; 3 blocked on SMTP, a Google account, or a deployment.
 
 **Done when:** CI runs unit + e2e green against preview, every §13.3 item passes, and Lighthouse a11y ≥ 95.
@@ -3635,8 +3635,8 @@ Fixed along the way:
 - [ ] **11.4** 🧑‍🤝‍🧑 Add `welcometovydia.com` (and `www` → apex redirect) in Vercel. The product team creates the DNS records. Wait for SSL.
 - [ ] **11.5** Point the Sanity webhook at `https://welcometovydia.com/api/revalidate` (or add a second production webhook and keep preview).
 - [ ] **11.6** Add `https://welcometovydia.com` to Sanity CORS origins with credentials.
-- [ ] **11.7** Smoke test production: `/` instructions, `/studio` login with both shared accounts, sign-up email arrives from the custom SMTP sender, Google login, `/test-artist` renders, publish → refresh works.
-- [ ] **11.8** Delete or unpublish the test artists in production (or keep `test-artist` for monitoring, allowed only to your email).
+- [ ] **11.7** Smoke test production: `/` instructions, `/studio` login with both shared accounts, sign-up email arrives from the custom SMTP sender, Google login, `/test-client` renders, publish → refresh works.
+- [ ] **11.8** Delete or unpublish the test clients in production (or keep `test-client` for monitoring, allowed only to your email).
 
 **Done when:** the smoke test in 11.7 passes on the real domain.
 
@@ -3650,10 +3650,10 @@ Fixed along the way:
 - [ ] **12.4** For each asset: create the Resource → upload the file or paste the link → set **Added on** to the Seismic date → add the cover photo if Seismic had one → check the auto PDF preview → publish.
 - [ ] **12.5** Add each resource to its section in the Seismic order, and publish the sections.
 - [ ] **12.6** Check no resource is left out of every section: run `*[_type == "resource" && count(*[_type == "section" && references(^._id)]) == 0]{title}` in Vision (dev) and confirm it's empty, or only holds intentional leftovers.
-- [ ] **12.7** Side-by-side check of a production artist page against the Seismic page: every resource is present, in order, with matching dates.
+- [ ] **12.7** Side-by-side check of a production client page against the Seismic page: every resource is present, in order, with matching dates.
 - [ ] **12.8** Spot-check every file opens (PDFs open in a new tab, videos play, links go to the right forms).
 - [ ] **12.9** Check asset usage in sanity.io/manage after the upload and set a monthly reminder to re-check (§15).
-- [ ] **12.10** 🧑‍🤝‍🧑 Create artist records for any current clients being moved off Seismic, with their allowed emails (or leave that to L&A as their first real task after the Loom).
+- [ ] **12.10** 🧑‍🤝‍🧑 Create client records for any current clients being moved off Seismic, with their allowed emails (or leave that to L&A as their first real task after the Loom).
 
 **Done when:** the production site shows the full Seismic library and L&A agrees it matches.
 
@@ -3669,7 +3669,7 @@ Fixed along the way:
 - [ ] **13.6** 🧑‍🤝‍🧑 Hand over credentials: confirm L&A and Creative Services know the shared Sanity logins, and who owns the Vercel/Supabase/Sanity accounts and billing going forward.
 - [ ] **13.7** Sunset plan for the Seismic link: agree a date with L&A, and how existing clients get their new link.
 
-**Done when:** L&A has created at least one real artist microsite on their own, without developer help.
+**Done when:** L&A has created at least one real client microsite on their own, without developer help.
 
 ---
 
@@ -3677,8 +3677,8 @@ Fixed along the way:
 
 Scope depends on the answers to §17. Placeholders:
 
-- [ ] **14.1** Implement the agreed customization fields in `artist.customization` (e.g. profile picture, background image) and unhide the group.
-- [ ] **14.2** Render the customization on the artist page (new components, each with its `.module.css`).
+- [ ] **14.1** Implement the agreed customization fields in `client.customization` (e.g. profile picture, background image) and unhide the group.
+- [ ] **14.2** Render the customization on the client page (new components, each with its `.module.css`).
 - [ ] **14.3** If per-person audit trails are required: request more Sanity seats or document the shared-login trade-off.
 - [ ] **14.4** If sensitive files are ever uploaded: build the authenticated `/api/files/[id]` proxy (§15).
 - [ ] **14.5** Re-check Sanity usage after one month of real traffic and adjust the plan if needed.
@@ -3689,13 +3689,13 @@ Scope depends on the answers to §17. Placeholders:
 
 | Risk (research) | Mitigation in this plan |
 |---|---|
-| **URL stability**: renames break bookmarks | Slug generated once, locked on first publish (§6.2). Renaming the artist doesn't touch the slug. "Change URL…" keeps old slugs as redirects. Uniqueness checked across current + previous slugs, reserved words blocked, `slugify` handles accents/`&`/punctuation. |
+| **URL stability**: renames break bookmarks | Slug generated once, locked on first publish (§6.2). Renaming the client doesn't touch the slug. "Change URL…" keeps old slugs as redirects. Uniqueness checked across current + previous slugs, reserved words blocked, `slugify` handles accents/`&`/punctuation. |
 | **"Added on" dates** reflect edits | Explicit `addedOn` field, initialised on create and editable for migration. GROQ falls back to `_createdAt`, never `_updatedAt`. |
 | **Missing cover photos** | Three-step fallback: cover → auto PDF preview → branded grain tile that matches the existing thumbnail style. The card layout is identical in every case (fixed 16:9 cover box). |
 | **Global edits look like failed publishes** | Type-tagged cache + signed webhook with immediate expiry (§10). Pages refresh within seconds. |
 | **Sanity storage/bandwidth for videos** | **Decision: videos stay in Sanity** (D14). Still unverified whether the quotas are enough. Before migrating, check the current plan's asset storage and bandwidth on sanity.io/pricing against the total size of the Seismic videos. Keep files small: MP4/H.264 at 1080p max (guidance is in the field description). Cards use `preload="none"`, so no video bytes are spent until someone presses play (measured: 0 bytes on page load). Watch usage in sanity.io/manage after launch. If the numbers don't fit, the answer is a higher Sanity plan, not a different host. |
-| **Public asset URLs** in a private dataset | Acceptable for client-facing collateral. If needed later: `/api/files/[id]` route that checks the session + an allowed artist before streaming from Sanity, with cards linking there instead of `cdn.sanity.io`. |
-| **Roster enumeration** | Proxy gates every artist path before any Sanity lookup. Denied = unknown (§9.3). Static metadata. `noindex`. Private dataset. `/` is a static instructions page with no artist list for anyone (D13). |
+| **Public asset URLs** in a private dataset | Acceptable for client-facing collateral. If needed later: `/api/files/[id]` route that checks the session + an allowed client before streaming from Sanity, with cards linking there instead of `cdn.sanity.io`. |
+| **Roster enumeration** | Proxy gates every client path before any Sanity lookup. Denied = unknown (§9.3). Static metadata. `noindex`. Private dataset. `/` is a static instructions page with no client list for anyone (D13). |
 | **Sanity trial ends and the dataset goes public** | The trial ends 2026-11-18. Upgrade to Growth before then (task 0.17). Without the upgrade, Sanity makes the private dataset public, which exposes the roster and allowed emails, and editors become viewers. |
 | **Email confirmations not arriving** | Custom SMTP is required for production (Supabase default sender is rate-limited). |
 | **Shared Sanity login: no per-person audit trail** | Open question for L&A (§17). Studio history still shows *what* changed and when. |
@@ -3705,15 +3705,15 @@ Scope depends on the answers to §17. Placeholders:
 
 ## 16. Loom Walkthrough Outline (for L&A and Creative Services)
 
-1. **Tour** (1 min): sidebar = Artists, then Resources, Sections, Website. "Resources go into Sections, Sections go into the Website."
-2. **Create a new microsite** (Flow 1): New Artist → name → Generate URL → allowed emails (internal emails are automatic) → optional intro override / additional info → Publish → *Open site*.
+1. **Tour** (1 min): sidebar = Clients, then Resources, Sections, Website. "Resources go into Sections, Sections go into the Website."
+2. **Create a new microsite** (Flow 1): New Client → name → Generate URL → allowed emails (internal emails are automatic) → optional intro override / additional info → Publish → *Open site*.
 3. **Add a resource** (Flow 2): New Resource → title → type → upload/link → (optional cover) → check the auto PDF preview → "Added on" (and when to change it) → Publish.
 4. **Put it on the page**: open a Section → add the resource → drag to reorder → Publish. Stress that a resource that isn't in any section won't appear on any page.
 5. **Global layout**: Website → intro text → section order → internal viewers.
-6. **Per-artist overrides**: section override *replaces* the global sections, and how to undo it (clear the field).
-7. **Things not to do**: why the URL locks, how "Change URL…" works, and that edits to a shared resource change every artist's page.
-8. **Troubleshooting**: "Client says they can't see the page" → check the email spelling on the artist and confirm they verified their email or used Google. "Client went to welcometovydia.com" → the home page only shows instructions, so resend their personal link.
-9. **Viewing any artist's page yourself**: use *Open site* on the artist in Studio. There's no list of artists on the website itself.
+6. **Per-client overrides**: section override *replaces* the global sections, and how to undo it (clear the field).
+7. **Things not to do**: why the URL locks, how "Change URL…" works, and that edits to a shared resource change every client's page.
+8. **Troubleshooting**: "Client says they can't see the page" → check the email spelling on the client and confirm they verified their email or used Google. "Client went to welcometovydia.com" → the home page only shows instructions, so resend their personal link.
+9. **Viewing any client's page yourself**: use *Open site* on the client in Studio. There's no list of clients on the website itself.
 
 ---
 
@@ -3721,7 +3721,7 @@ Scope depends on the answers to §17. Placeholders:
 
 From research:
 - Is a single shared Sanity login per team acceptable (no individual change tracking)?
-- Customization: artist profile picture? Custom background images? Anything else? (The `artist.customization` object is already in the schema, hidden, ready for this.)
+- Customization: client profile picture? Custom background images? Anything else? (The `client.customization` object is already in the schema, hidden, ready for this.)
 
 Raised while planning:
 - Is it fine that Sanity file URLs are public-if-known, or do we need the authenticated file proxy?
@@ -3729,7 +3729,7 @@ Raised while planning:
 - Should the date line show for link-type resources (pitch forms)? The reference shows it, so the plan keeps it.
 
 Resolved in plan review:
-- ~~Should internal emails see an artist index at `/`?~~ **No.** `/` is a static instructions page for everyone (D13, §9.4).
+- ~~Should internal emails see a client index at `/`?~~ **No.** `/` is a static instructions page for everyone (D13, §9.4).
 - ~~Do videos stay in Sanity?~~ **Yes.** Upload only, no external video links (D14). Quotas still get checked before migration (§15).
 - ~~Tailwind?~~ **No.** CSS Modules with shared tokens (D12, §11.0).
 
@@ -3742,14 +3742,14 @@ Resolved in plan review:
 | Page = header + intro + sections of cards | §9.2, §11 |
 | Header with Vydia logo, fixed branding | §11.2 |
 | Global rich-text intro, editable | `website.intro` §5.5, seed §12 |
-| Artist intro override | `artist.introOverride`, §7.4 |
-| Additional info under intro | `artist.additionalInfo`, §9.2 |
+| Client intro override | `client.introOverride`, §7.4 |
+| Additional info under intro | `client.additionalInfo`, §9.2 |
 | Section override replaces (not appends) | §7.4 |
 | Card: cover / PDF preview fallback, title, "Added on" | §5.3, §6.3, §11.4 |
 | Types: PDF, video, link, slides | `resource.type` §5.3 |
 | Pitch forms are link cards | `type: 'link'` |
 | Grid, not horizontal scroll; keep file-type icons | §11.4 |
-| URL `welcometovydia.com/[artist-name]`, stable | §5.1, §5.6, §6.2 |
+| URL `welcometovydia.com/[client-name]`, stable | §5.1, §5.6, §6.2 |
 | Two shared @vydia.com emails always have access | `PERMANENT_VIEWER_EMAILS`, §9.1 |
 | Designated internal emails see every site | `website.internalViewerEmails`, §9.1. Reached via Studio "Open site" (§6.2), not an index |
 | `/` gives instructions, no roster | §9.4 (D13) |

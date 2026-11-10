@@ -1,10 +1,10 @@
 'use client'
 import {useState, useTransition} from 'react'
-import {deleteArtist} from '@/app/(admin)/admin/(panel)/artists/actions'
+import {deleteClient} from '@/app/(admin)/admin/(panel)/clients/actions'
 import {ConfirmDialog} from './ConfirmDialog'
 import controls from './controls.module.css'
 
-export function DeleteArtistButton({id, name}: {id: string; name: string}) {
+export function DeleteClientButton({id, name}: {id: string; name: string}) {
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -12,7 +12,7 @@ export function DeleteArtistButton({id, name}: {id: string; name: string}) {
   const confirm = () =>
     startTransition(async () => {
       try {
-        const result = await deleteArtist(id)
+        const result = await deleteClient(id)
         setError(result.message)
       } catch {
         setError('Couldn’t reach the server. Nothing was changed.')
@@ -23,7 +23,7 @@ export function DeleteArtistButton({id, name}: {id: string; name: string}) {
   return (
     <div>
       <button type="button" className={`${controls.button} ${controls.danger}`} onClick={() => setOpen(true)}>
-        Delete artist
+        Delete client
       </button>
       {error && (
         <p role="alert" className={controls.error}>
@@ -33,8 +33,8 @@ export function DeleteArtistButton({id, name}: {id: string; name: string}) {
       <ConfirmDialog
         open={open}
         title={`Delete ${name}?`}
-        body="This permanently deletes the artist, their emails, and their artist-specific resources."
-        confirmLabel="Delete artist"
+        body="This permanently deletes the client, their emails, and their client-specific resources."
+        confirmLabel="Delete client"
         tone="danger"
         pending={pending}
         onCancel={() => setOpen(false)}

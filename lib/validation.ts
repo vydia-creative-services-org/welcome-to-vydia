@@ -36,10 +36,10 @@ export const resourceInput = z
     if (r.pdfPreview && r.type !== 'pdf') fail('file', 'Only PDFs have a preview.')
   })
 
-export const artistPayload = z
+export const clientPayload = z
   .object({
     id: z.uuid().optional(),
-    name: z.string().trim().min(1, 'Artist name is required.').max(100, 'Keep the name under 100 characters.'),
+    name: z.string().trim().min(1, 'Client name is required.').max(100, 'Keep the name under 100 characters.'),
     slug: z
       .string()
       .trim()
@@ -64,7 +64,7 @@ export const artistPayload = z
     })
   })
 
-export type ArtistPayload = z.infer<typeof artistPayload>
-export type ArtistInput = z.input<typeof artistPayload>
+export type ClientPayload = z.infer<typeof clientPayload>
+export type ClientInput = z.input<typeof clientPayload>
 export type ResourceInput = z.infer<typeof resourceInput>
 export type ResourceInputValue = z.input<typeof resourceInput>

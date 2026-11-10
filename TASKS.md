@@ -21,7 +21,7 @@
 
 ## Email and sign in
 
-- when a new artist is created, only the approved emails, creativeservices@vydia.com, labelservices@vydia.com, erica.johnson@vydia.com and mason.omara@vydia.com are allowed to see.
+- when a new client is created, only the approved emails, creativeservices@vydia.com, labelservices@vydia.com, erica.johnson@vydia.com and mason.omara@vydia.com are allowed to see.
 - We need to reevalaute the best way for these people,a nd ony these peopel to be abel to access without having to create an account
 - i am thinking we have a login by google or by email, and then if by email then supabase uses the magic link to sign in, or they just use a OTP.
 - There shoudl still be a long if not neverending user session so the user doesnt have to go through it all again once its all set up

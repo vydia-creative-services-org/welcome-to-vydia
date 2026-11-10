@@ -121,7 +121,7 @@ async function migrateOne(doc: SanityResource, index: number): Promise<{notes: s
   if (!dryRun) {
     const {error} = await supabase.from('resources').upsert({
       id,
-      artist_id: null,
+      client_id: null,
       title: row.title,
       type: row.type,
       file: row.file,

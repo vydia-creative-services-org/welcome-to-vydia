@@ -281,7 +281,7 @@ export function SortableResourceList({groups, categories}: Props) {
       <ConfirmDialog
         open={deleting !== null}
         title={`Delete ${deleting?.title ?? 'this resource'}?`}
-        body="It’s removed from every artist’s page."
+        body="It’s removed from every client’s page."
         confirmLabel="Delete resource"
         tone="danger"
         onCancel={() => setDeleting(null)}

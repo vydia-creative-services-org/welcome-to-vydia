@@ -2,7 +2,7 @@ import type {Metadata} from 'next'
 import {PageShell} from '@/components/PageShell'
 import {ResourceViews} from '@/components/ResourceViews'
 import {ViewModeProvider} from '@/components/ViewMode'
-import {getArtistPage} from '@/lib/artist-page'
+import {getClientPage} from '@/lib/client-page'
 import {greeting} from '@/lib/greeting'
 import {normalizeSlug} from '@/lib/slug'
 import {EnterEmail} from './EnterEmail'
@@ -11,13 +11,13 @@ export const instant = false
 
 export async function generateMetadata({params}: PageProps<'/[slug]'>): Promise<Metadata> {
   const {slug} = await params
-  const page = await getArtistPage(slug)
-  return {title: greeting(page?.artistName), robots: {index: false, follow: false}}
+  const page = await getClientPage(slug)
+  return {title: greeting(page?.clientName), robots: {index: false, follow: false}}
 }
 
-export default async function ArtistRoute({params}: PageProps<'/[slug]'>) {
+export default async function ClientRoute({params}: PageProps<'/[slug]'>) {
   const {slug} = await params
-  const page = await getArtistPage(slug)
+  const page = await getClientPage(slug)
 
   if (!page) {
     return (
@@ -29,8 +29,8 @@ export default async function ArtistRoute({params}: PageProps<'/[slug]'>) {
 
   return (
     <ViewModeProvider>
-      <PageShell fullscreen artistName={page.artistName}>
-        <h1 className="visually-hidden">{greeting(page.artistName)}</h1>
+      <PageShell fullscreen clientName={page.clientName}>
+        <h1 className="visually-hidden">{greeting(page.clientName)}</h1>
         <ResourceViews groups={page.groups} />
       </PageShell>
     </ViewModeProvider>

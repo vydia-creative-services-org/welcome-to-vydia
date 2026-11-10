@@ -5,8 +5,8 @@ import {greeting} from '@/lib/greeting'
 import styles from './Header.module.css'
 import {useViewMode} from './ViewMode'
 
-/** `artistName` greets the artist by name; pages without one show the plain welcome. */
-export function Header({artistName}: {artistName?: string}) {
+/** `clientName` greets the client by name; pages without one show the plain welcome. */
+export function Header({clientName}: {clientName?: string}) {
   const viewMode = useViewMode()
   const isGrid = viewMode?.view === 'grid'
   const toggle = useRef<HTMLButtonElement>(null)
@@ -36,7 +36,7 @@ export function Header({artistName}: {artistName?: string}) {
   return (
     // Named so view transitions keep it pinned above the moving cards (see globals.css).
     <header className={styles.header} style={{viewTransitionName: 'site-header'}}>
-      <span className={styles.text}>{greeting(artistName, {spaced: true})}</span>
+      <span className={styles.text}>{greeting(clientName, {spaced: true})}</span>
 
       {viewMode && (
         // One button that swaps between the views; its label says what pressing it will do. The

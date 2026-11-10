@@ -7,7 +7,7 @@ export async function loadResourceContext(supabase: ServerClient) {
   const {data} = await supabase.from('resources').select('*').order('sort_order').order('added_on')
   const rows = data ?? []
   return {
-    mainResources: rows.filter((row) => row.artist_id === null).map(fromRow),
+    mainResources: rows.filter((row) => row.client_id === null).map(fromRow),
     categories: distinctCategories(rows.map((row) => row.category)),
   }
 }
