@@ -27,11 +27,11 @@ test.describe('signed out', () => {
     await expect(page.getByPlaceholder('Enter your email')).toBeVisible()
   })
 
-  test('"/" is public, shows instructions, and lists no artists', async ({page}) => {
+  test('"/" is public, shows the email form, and lists no artists', async ({page}) => {
     const response = await page.goto('/')
     expect(response?.status()).toBe(200)
     await expect(page).toHaveURL('/')
-    await expect(page.getByRole('heading', {name: 'Looking for your Vydia resources?'})).toBeVisible()
+    await expect(page.getByPlaceholder('Enter your email')).toBeVisible()
     await expect(page.locator('main a')).toHaveCount(0)
   })
 

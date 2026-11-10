@@ -7,12 +7,12 @@
   padding: var(--space-2) var(--space-4);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   font-weight: 600;
   cursor: pointer;
 }
 
-.button:hover {
+.button:hover:not(:disabled) {
   background: var(--color-page);
 }
 
@@ -22,21 +22,21 @@
 }
 
 .primary {
-  background: var(--color-ink);
-  border-color: var(--color-ink);
-  color: #fff;
+  background: #fff;
+  border-color: #fff;
+  color: var(--color-ink);
 }
 
-.primary:hover {
-  background: #000;
+.primary:hover:not(:disabled) {
+  background: #e5e5e5;
 }
 
 .input {
   width: 100%;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-4);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
 }
 
 .button:focus-visible,

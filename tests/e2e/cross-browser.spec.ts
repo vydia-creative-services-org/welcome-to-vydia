@@ -15,7 +15,7 @@ test.describe('enter your email', () => {
 
     const stranger = `nobody-${Date.now()}@example.com`
     await input.fill(stranger)
-    await page.getByRole('button', {name: 'Send link'}).click()
+    await page.getByRole('button', {name: 'Continue'}).click()
     await expect(page.locator('#enter-email-message')).toBeVisible()
     await expect(input).toHaveValue(stranger)
     expect(await noHorizontalScroll(page)).toBe(true)

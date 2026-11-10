@@ -23,12 +23,12 @@ test.describe('accessibility, signed out', () => {
     await expectNoViolations(page)
 
     await page.getByPlaceholder('Enter your email').fill(`nobody-${Date.now()}@example.com`)
-    await page.getByRole('button', {name: 'Send link'}).click()
+    await page.getByRole('button', {name: 'Continue'}).click()
     await expect(page.locator('#enter-email-message')).toBeVisible()
     await expectNoViolations(page)
 
     await page.getByPlaceholder('Enter your email').fill(E2E_USERS.aux2)
-    await page.getByRole('button', {name: 'Send link'}).click()
+    await page.getByRole('button', {name: 'Continue'}).click()
     await expect(page.getByText('Email sent, check your inbox')).toBeVisible()
     await expectNoViolations(page)
   })

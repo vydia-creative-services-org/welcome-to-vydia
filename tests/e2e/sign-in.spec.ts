@@ -3,7 +3,7 @@ import {adminClient, confirmPath, hashedToken, userEmails} from './admin-client'
 import {E2E_SLUGS, E2E_USERS} from './users'
 
 const NOT_APPROVED =
-  'This email isn’t approved to view this page. Please contact Vydia label services if you’re having trouble.'
+  'This email isn’t approved to view this page. Make sure you’re using the URL provided by Vydia label services, or contact them if you’re having trouble.'
 
 test.describe('enter your email', () => {
   test('a wrong email and any email on an unknown slug get the identical message, and no user is created', async ({
@@ -14,7 +14,7 @@ test.describe('enter your email', () => {
     for (const slug of [E2E_SLUGS.a, `does-not-exist-${Date.now()}`]) {
       await page.goto(`/${slug}`)
       await page.getByPlaceholder('Enter your email').fill(stranger)
-      await page.getByRole('button', {name: 'Send link'}).click()
+      await page.getByRole('button', {name: 'Continue'}).click()
       const message = page.locator('#enter-email-message')
       await expect(message).toBeVisible()
       answers.push((await message.textContent()) ?? '')
@@ -27,14 +27,14 @@ test.describe('enter your email', () => {
   test('a real artist email on the wrong artist’s slug is also not approved', async ({page}) => {
     await page.goto(`/${E2E_SLUGS.b}`)
     await page.getByPlaceholder('Enter your email').fill(E2E_USERS.artistA)
-    await page.getByRole('button', {name: 'Send link'}).click()
+    await page.getByRole('button', {name: 'Continue'}).click()
     await expect(page.locator('#enter-email-message')).toHaveText(NOT_APPROVED)
   })
 
   test('an approved auxiliary email sees the sent state and a disabled resend countdown', async ({page}) => {
     await page.goto(`/${E2E_SLUGS.a}`)
     await page.getByPlaceholder('Enter your email').fill(E2E_USERS.aux2.toUpperCase())
-    await page.getByRole('button', {name: 'Send link'}).click()
+    await page.getByRole('button', {name: 'Continue'}).click()
     await expect(page.getByText('Email sent, check your inbox')).toBeVisible()
     await expect(page.getByPlaceholder('Enter your email')).toHaveCount(0)
     const resend = page.getByRole('button', {name: /^Resend email \(\d+s\)$/})
@@ -44,7 +44,7 @@ test.describe('enter your email', () => {
   test('a malformed email asks for a full address without calling the server', async ({page}) => {
     await page.goto(`/${E2E_SLUGS.a}`)
     await page.getByPlaceholder('Enter your email').fill('not-an-email')
-    await page.getByRole('button', {name: 'Send link'}).click()
+    await page.getByRole('button', {name: 'Continue'}).click()
     await expect(page.getByPlaceholder('Enter your email')).toBeFocused()
   })
 })

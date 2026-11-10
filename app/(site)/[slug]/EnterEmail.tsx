@@ -2,6 +2,7 @@
 import {useActionState, useEffect, useState} from 'react'
 import ui from '@/components/ui/controls.module.css'
 import {cx} from '@/lib/cx'
+import {EMAIL_PATTERN, normalizeEmail} from '@/lib/email'
 import {sendLink, type LinkState} from './actions'
 import styles from './EnterEmail.module.css'
 
@@ -27,7 +28,7 @@ function useSecondsLeft(sentAt: number | undefined) {
 
 const MESSAGES: Partial<Record<LinkState['status'], string>> = {
   'not-approved':
-    'This email isn’t approved to view this page. Please contact Vydia label services if you’re having trouble.',
+    'This email isn’t approved to view this page. Make sure you’re using the URL provided by Vydia label services, or contact them if you’re having trouble.',
   invalid: 'Enter your full email address.',
   'rate-limited': 'Too many attempts. Please wait a few minutes and try again.',
   error: 'Something went wrong sending your link. Please try again.',
@@ -36,6 +37,7 @@ const MESSAGES: Partial<Record<LinkState['status'], string>> = {
 export function EnterEmail({slug}: {slug: string}) {
   const [state, action, pending] = useActionState<ClientState, FormData>(submit, {status: 'idle'})
   const [email, setEmail] = useState('')
+  const ready = EMAIL_PATTERN.test(normalizeEmail(email))
   const secondsLeft = useSecondsLeft(state.status === 'sent' ? state.sentAt : undefined)
 
   if (state.status === 'sent') {
@@ -48,7 +50,12 @@ export function EnterEmail({slug}: {slug: string}) {
         <form action={action} className={styles.form}>
           <input type="hidden" name="slug" value={slug} />
           <input type="hidden" name="email" value={state.email} />
-          <button disabled={pending || secondsLeft > 0} className={ui.button}>
+          <button
+            disabled={pending || secondsLeft > 0}
+            data-pending={pending || undefined}
+            className={cx(ui.button, styles.resend)}
+          >
+            {pending && <span aria-hidden className={styles.spinner} />}
             {secondsLeft > 0 ? `Resend email (${secondsLeft}s)` : 'Resend email'}
           </button>
         </form>
@@ -60,31 +67,34 @@ export function EnterEmail({slug}: {slug: string}) {
   return (
     <div className={styles.panel}>
       <h1 className="visually-hidden">Enter your email</h1>
-      <form action={action} className={styles.form}>
-        <input type="hidden" name="slug" value={slug} />
-        <label>
-          <span className="visually-hidden">Email</span>
-          <input
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            placeholder="Enter your email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            aria-describedby={message ? 'enter-email-message' : undefined}
-            className={cx(ui.input, styles.input)}
-          />
-        </label>
-        <button disabled={pending} className={cx(ui.button, ui.primary)}>
-          Send link
-        </button>
-      </form>
-      {message && (
-        <p id="enter-email-message" role="alert" className={cx(ui.error, styles.message)}>
-          {message}
-        </p>
-      )}
+      <div className={styles.fields}>
+        <form action={action} className={styles.form}>
+          <input type="hidden" name="slug" value={slug} />
+          <label>
+            <span className="visually-hidden">Email</span>
+            <input
+              name="email"
+              type="email"
+              required
+              autoComplete="email"
+              placeholder="Enter your email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              aria-describedby={message ? 'enter-email-message' : undefined}
+              className={cx(ui.input, styles.input)}
+            />
+          </label>
+          <button disabled={pending} data-ready={ready || undefined} className={cx(ui.button, ui.primary, styles.send)}>
+            {pending && <span aria-hidden className={styles.spinner} />}
+            Continue
+          </button>
+        </form>
+        {message && (
+          <p id="enter-email-message" role="alert" className={cx(ui.error, styles.message)}>
+            {message}
+          </p>
+        )}
+      </div>
     </div>
   )
 }
