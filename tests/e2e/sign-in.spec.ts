@@ -1,53 +1,106 @@
 import {expect, test} from '@playwright/test'
-import {E2E_USERS} from './users'
+import {adminClient, confirmPath, hashedToken, userEmails} from './admin-client'
+import {E2E_SLUGS, E2E_USERS} from './users'
 
-test.describe('sign-in page', () => {
-  test('offers Google and an email link, and no password', async ({page}) => {
-    await page.goto('/login?next=%2Ftest-artist')
-    await expect(page.getByRole('button', {name: 'Continue with Google'})).toBeVisible()
-    await expect(page.getByRole('button', {name: 'Email me a sign-in link'})).toBeVisible()
-    await expect(page.locator('input[type="password"]')).toHaveCount(0)
-  })
+const NOT_APPROVED =
+  'This email isn’t approved to view this page. Please contact Vydia label services if you’re having trouble.'
 
-  test('a known-but-unapproved and a made-up email get the same answer', async ({page}) => {
+test.describe('enter your email', () => {
+  test('a wrong email and any email on an unknown slug get the identical message, and no user is created', async ({
+    page,
+  }) => {
+    const stranger = `nobody-${Date.now()}@example.com`
     const answers: string[] = []
-    for (const email of [E2E_USERS.outsider, `nobody-${Date.now()}@example.com`]) {
-      await page.goto('/login')
-      await page.getByPlaceholder('Email').fill(email)
-      await page.getByRole('button', {name: 'Email me a sign-in link'}).click()
-      const status = page.getByRole('status')
-      await expect(status).toContainText(email)
-      answers.push(((await status.textContent()) ?? '').replace(email, '<email>'))
+    for (const slug of [E2E_SLUGS.a, `does-not-exist-${Date.now()}`]) {
+      await page.goto(`/${slug}`)
+      await page.getByPlaceholder('Enter your email').fill(stranger)
+      await page.getByRole('button', {name: 'Send link'}).click()
+      const message = page.locator('#enter-email-message')
+      await expect(message).toBeVisible()
+      answers.push((await message.textContent()) ?? '')
+      await expect(page.getByPlaceholder('Enter your email')).toHaveValue(stranger)
     }
-    expect(answers[0]).toBe(answers[1])
-    await expect(page.getByRole('button', {name: /^Resend link in \d+s$/})).toBeDisabled()
+    expect(answers).toEqual([NOT_APPROVED, NOT_APPROVED])
+    expect(await userEmails()).not.toContain(stranger)
   })
 
-  test('"Use a different email" starts over', async ({page}) => {
-    await page.goto('/login')
-    await page.getByPlaceholder('Email').fill(`nobody-${Date.now()}@example.com`)
-    await page.getByRole('button', {name: 'Email me a sign-in link'}).click()
-    await page.getByRole('button', {name: 'Use a different email'}).click()
-    await expect(page.getByPlaceholder('Email')).toHaveValue('')
+  test('a real artist email on the wrong artist’s slug is also not approved', async ({page}) => {
+    await page.goto(`/${E2E_SLUGS.b}`)
+    await page.getByPlaceholder('Enter your email').fill(E2E_USERS.artistA)
+    await page.getByRole('button', {name: 'Send link'}).click()
+    await expect(page.locator('#enter-email-message')).toHaveText(NOT_APPROVED)
   })
 
-  test('Google goes to accounts.google.com via Supabase', async ({page}) => {
-    await page.goto('/login?next=%2Ftest-artist')
-    const google = page.waitForRequest((request) => request.url().startsWith('https://accounts.google.com/'))
-    await page.getByRole('button', {name: 'Continue with Google'}).click()
-    expect((await google).url()).toContain('prompt=select_account')
+  test('an approved auxiliary email sees the sent state and a disabled resend countdown', async ({page}) => {
+    await page.goto(`/${E2E_SLUGS.a}`)
+    await page.getByPlaceholder('Enter your email').fill(E2E_USERS.aux2.toUpperCase())
+    await page.getByRole('button', {name: 'Send link'}).click()
+    await expect(page.getByText('Email sent, check your inbox')).toBeVisible()
+    await expect(page.getByPlaceholder('Enter your email')).toHaveCount(0)
+    const resend = page.getByRole('button', {name: /^Resend email \(\d+s\)$/})
+    await expect(resend).toBeDisabled()
   })
 
-  test('a bad or used link asks for a new one', async ({page}) => {
-    await page.goto('/auth/confirm?token_hash=not-a-real-token&type=email&redirect_to=/test-artist')
-    await page.getByRole('button', {name: 'Continue'}).click()
-    await expect(page).toHaveURL('/login?error=link&next=%2Ftest-artist')
-    await expect(page.locator('p[role="alert"]')).toContainText('invalid, expired, or already used')
+  test('a malformed email asks for a full address without calling the server', async ({page}) => {
+    await page.goto(`/${E2E_SLUGS.a}`)
+    await page.getByPlaceholder('Enter your email').fill('not-an-email')
+    await page.getByRole('button', {name: 'Send link'}).click()
+    await expect(page.getByPlaceholder('Enter your email')).toBeFocused()
+  })
+})
+
+test.describe('the magic link', () => {
+  test('opening a fresh link signs in directly and lands on the artist page', async ({request, page}) => {
+    const token = await hashedToken(E2E_USERS.artistA)
+    const response = await request.get(confirmPath(token, `/${E2E_SLUGS.a}`), {maxRedirects: 0})
+    expect(response.status()).toBe(307)
+    expect(response.headers().location).toContain(`/${E2E_SLUGS.a}`)
+    expect(response.headers()['set-cookie'] ?? '').toContain('sb-')
+
+    await page.goto(confirmPath(await hashedToken(E2E_USERS.artistA), `/${E2E_SLUGS.a}`))
+    await expect(page).toHaveURL(`/${E2E_SLUGS.a}`)
+    await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
   })
 
-  test('opening a link does not sign in until Continue is pressed', async ({request}) => {
-    const response = await request.get('/auth/confirm?token_hash=anything&type=email', {maxRedirects: 0})
-    expect(response.status()).toBe(200)
-    expect(response.headers()['set-cookie'] ?? '').not.toContain('sb-')
+  test('a bogus link goes to the expired screen with a way back to the slug', async ({page}) => {
+    await page.goto(confirmPath('not-a-real-token', `/${E2E_SLUGS.a}`))
+    await expect(page).toHaveURL(`/auth/expired?next=%2F${E2E_SLUGS.a}`)
+    await expect(page.getByRole('heading', {name: 'This link has expired'})).toBeVisible()
+    await expect(page.getByRole('link', {name: 'Send a new link'})).toHaveAttribute('href', `/${E2E_SLUGS.a}`)
   })
+
+  test('a missing token also goes to the expired screen', async ({request}) => {
+    const response = await request.get('/auth/confirm', {maxRedirects: 0})
+    expect(response.status()).toBe(307)
+    expect(response.headers().location).toContain('/auth/expired')
+  })
+
+  test('a used link opened in another browser is expired', async ({browser}) => {
+    const token = await hashedToken(E2E_USERS.manager)
+    const first = await browser.newContext()
+    await (await first.newPage()).goto(confirmPath(token, `/${E2E_SLUGS.a}`))
+    const second = await browser.newContext()
+    const page = await second.newPage()
+    await page.goto(confirmPath(token, `/${E2E_SLUGS.a}`))
+    await expect(page.getByRole('heading', {name: 'This link has expired'})).toBeVisible()
+    await first.close()
+    await second.close()
+  })
+
+  test('signing in with another email replaces the earlier session', async ({browser}) => {
+    const context = await browser.newContext()
+    const page = await context.newPage()
+    await page.goto(confirmPath(await hashedToken(E2E_USERS.artistB), `/${E2E_SLUGS.b}`))
+    await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
+    await page.goto(confirmPath(await hashedToken(E2E_USERS.artistA), `/${E2E_SLUGS.a}`))
+    await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
+    await page.goto(`/${E2E_SLUGS.b}`)
+    await expect(page.getByPlaceholder('Enter your email')).toBeVisible()
+    await context.close()
+  })
+})
+
+test('the fixtures use the admin client on the expected project', async () => {
+  const {data} = await adminClient().from('artists').select('slug').in('slug', [E2E_SLUGS.a, E2E_SLUGS.b])
+  expect(data?.map((row) => row.slug).sort()).toEqual([E2E_SLUGS.a, E2E_SLUGS.b])
 })
