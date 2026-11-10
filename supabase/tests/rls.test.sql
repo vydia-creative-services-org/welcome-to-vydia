@@ -2,7 +2,8 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(15);
 
-insert into public.admins (email) values ('ops@vydia.com') on conflict do nothing;
+insert into public.admins (email, role) values ('ops@vydia.com', 'super')
+  on conflict (email) do update set role = 'super';
 
 insert into public.clients (id, name, slug) values
   ('00000000-0000-0000-0000-00000000000a', 'Client A', 'client-a'),
@@ -53,7 +54,7 @@ select ok(public.get_client_page('client-a') is null, 'a removed email loses acc
 
 set local request.jwt.claims = '{"sub":"33333333-3333-3333-3333-333333333333","email":"ops@vydia.com","role":"authenticated","amr":[{"method":"oauth","timestamp":0}]}';
 select ok(public.is_admin(), 'a listed @vydia.com Google session is admin');
-select ok(public.get_client_page('client-b') is not null, 'admins see every client page directly');
+select ok(public.get_client_page('client-b') is not null, 'super admins see every client page directly');
 
 set local request.jwt.claims = '{"sub":"33333333-3333-3333-3333-333333333333","email":"ops@vydia.com","role":"authenticated","amr":[{"method":"otp","timestamp":0}]}';
 select ok(not public.is_admin(), 'a magic-link session for an admin address is not admin');
