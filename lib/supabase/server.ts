@@ -5,6 +5,8 @@ import {connection} from 'next/server'
 import {SUPABASE_KEY, SUPABASE_URL} from '@/lib/env'
 import type {Database} from './database.types'
 
+export type ServerClient = Awaited<ReturnType<typeof createClient>>
+
 export async function createClient() {
   // Supabase checks token expiry against Date.now(), which Next only allows at request time.
   await connection()

@@ -11,3 +11,12 @@ export function groupByCategory<T extends {category: string}>(items: T[]): Categ
   }
   return [...groups.values()]
 }
+
+export function distinctCategories(categories: string[]): string[] {
+  const seen = new Map<string, string>()
+  for (const raw of categories) {
+    const category = raw.trim().replace(/\s+/g, ' ')
+    if (category && !seen.has(category.toLowerCase())) seen.set(category.toLowerCase(), category)
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b))
+}

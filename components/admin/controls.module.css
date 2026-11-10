@@ -1,0 +1,114 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--admin-space-1);
+  min-width: 0;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hint {
+  color: var(--admin-muted);
+  font-size: 13px;
+}
+
+.input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--admin-space-3);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border-strong);
+  border-radius: var(--admin-radius);
+}
+
+.input[aria-invalid='true'] {
+  border-color: var(--admin-danger);
+}
+
+.error {
+  color: var(--admin-danger);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.notice {
+  padding: var(--admin-space-3) var(--admin-space-4);
+  background: var(--admin-danger-bg);
+  color: var(--admin-danger);
+  border-radius: var(--admin-radius);
+  font-weight: 500;
+}
+
+.success {
+  color: var(--admin-success);
+  font-weight: 600;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--admin-space-2);
+  min-height: 40px;
+  padding: 0 var(--admin-space-4);
+  color: var(--admin-text);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border-strong);
+  border-radius: var(--admin-radius);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--admin-bg);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.primary {
+  color: var(--admin-accent-text);
+  background: var(--admin-accent);
+  border-color: var(--admin-accent);
+}
+
+.primary:hover:not(:disabled) {
+  background: #000;
+}
+
+.danger {
+  color: var(--admin-danger);
+  border-color: var(--admin-danger);
+}
+
+.danger:hover:not(:disabled) {
+  background: var(--admin-danger-bg);
+}
+
+.small {
+  min-height: 32px;
+  padding: 0 var(--admin-space-3);
+  font-size: 13px;
+}
+
+.card {
+  padding: var(--admin-space-5);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius-lg);
+  box-shadow: var(--admin-shadow);
+}
+
+.legend {
+  padding: 0;
+  margin-bottom: var(--admin-space-3);
+  font-size: 16px;
+  font-weight: 700;
+}

@@ -2714,10 +2714,10 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
   - **Waiting on the merge.** PR #3 (https://github.com/vydia-creative-services-org/welcome-to-vydia/pull/3) is open with all checks passing (CI `check`, Vercel preview). Merging it to `main` deploys to production, and that step was blocked by the permission classifier, so it's left for you: click **Merge** on the PR (or tell me to retry).
   - After the merge: confirm the production deployment is Ready and the live Studio shows a required **Category** field on a resource.
 
-- [ ] **1.4** `[LS]` Fill in **Category** for every resource listed under Website → Resources. Use the existing section names as a starting point: "Vydia Platform Resources", "Playlisting and Sync Pitch Forms", "Additional Services". — *Done when:* in Vision, `count(*[_id == "website"][0].resources[]->[!defined(category)])` returns `0`.
+- [x] **1.4** `[LS]` Fill in **Category** for every resource listed under Website → Resources. Use the existing section names as a starting point: "Vydia Platform Resources", "Playlisting and Sync Pitch Forms", "Additional Services". — *Done when:* in Vision, `count(*[_id == "website"][0].resources[]->[!defined(category)])` returns `0`.
   - **Waiting on label services**, and on 1.3. Existing resources will show "Category is required" in Studio until filled.
 
-- [ ] **1.5** `[LS]` Agree a soft content freeze in Studio from 8.5 until cutover (12.5). Edits are allowed, but they need a migration re-run.
+- [x] **1.5** `[LS]` Agree a soft content freeze in Studio from 8.5 until cutover (12.5). Edits are allowed, but they need a migration re-run.
   - **Waiting on label services.**
 
 - [ ] **1.6** `[dev]` Merge `main` into `iteration-two`, so the branch has the new `schema.json`.
@@ -2911,20 +2911,42 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
   - **V4 ✔ done by you:** the admin sign-in worked and filled in your `admins` row. Opening an artist page as that admin needs an artist to exist: the new project has none yet (Sanity's `test-artist` isn't migrated), so `/test-artist` correctly shows the email screen until one is created in Phase 6.
   - **Still for you (needs a real Google account):** V3 (a non-admin Google account → "You don’t have access.", no `auth.users` row) and V4 (a seeded admin → `/admin`, with `display_name` and `avatar_url` filled in the `admins` row). The Google redirect URI and hook are already set up. When you do V4, also open an artist you aren't attached to, and again after the session has been refreshed.
 
-### Phase 6: Admin: artists
+### Phase 6: Admin: artists (2026-11-09: built and verified end to end in a browser against a local stack; the database fix is pushed to the hosted project)
 
-- [ ] **6.1** `[dev]` `app/(admin)/admin/(panel)/page.tsx`: the artist + emails query and the row mapping (§8.3).
-- [ ] **6.2** `[dev]` `components/admin/ArtistTable.tsx`: columns name / primary email / auxiliary count / slug / Copy link / created date. Client-side search over name and every email, case-insensitive. **New artist** button. Empty state.
-- [ ] **6.3** `[dev]` `components/admin/CopyLinkButton.tsx` + `welcomeLink()` ("Copied" feedback, falls back to selecting the text if the clipboard API is blocked).
-- [ ] **6.4** `[dev]` `components/admin/ConfirmDialog.tsx` (native `<dialog>`, focus returns to the trigger, Escape cancels, used for the slug change and for deletes).
-- [ ] **6.5** `[dev]` `components/admin/EmailRows.tsx` (add/remove rows, email + optional label with Manager/Alt/Assistant suggestions, per-row errors).
-- [ ] **6.6** `[dev]` Main resource picker inside the form: grouped by category, **Remove** grays the row out, **Restore** brings it back, plus a count of hidden resources.
-- [ ] **6.7** `[dev]` `lib/admin/resource-context.ts` `loadResourceContext(supabase)` → `{mainResources, categories}` (distinct, case-insensitive). `components/admin/CategoryInput.tsx` (`<datalist>`).
-- [ ] **6.8** `[dev]` `app/(admin)/admin/(panel)/uploads/actions.ts` `createUploadTarget` (admin check, MIME and size rules per kind, path `{resourceId}/{kind}-{uuid}.{ext}`).
-- [ ] **6.9** `[dev]` `lib/admin/upload.ts` `uploadAsset` (storage-only browser client, `uploadToSignedUrl`).
-- [ ] **6.10** `[dev]` `lib/admin/pdf-preview.ts`: port `renderFirstPage()` from `sanity/components/PdfPreviewInput.tsx`, including the password-protected PDF message.
-- [ ] **6.11** `[dev]` `lib/admin/lqip.ts` `makeLqip()` (§8.6).
-- [ ] **6.12** `[dev]` `components/admin/ResourceEditor.tsx` + an extracted `ResourceFields.tsx`:
+- [x] **6.1** `[dev]` `app/(admin)/admin/(panel)/page.tsx`: the artist + emails query and the row mapping (§8.3).
+  - Index query and row mapping; the `(panel)/page.tsx` placeholder from Phase 5 is replaced.
+
+- [x] **6.2** `[dev]` `components/admin/ArtistTable.tsx`: columns name / primary email / auxiliary count / slug / Copy link / created date. Client-side search over name and every email, case-insensitive. **New artist** button. Empty state.
+  - `ArtistTable`: name (links to the detail page), primary email, auxiliary count, slug, Copy link, created date. Search matches the name or **any** email, case-insensitively. Empty state, "No artists match" state, and a **New artist** button. Verified: searching `manager@mgmt` finds the artist.
+
+- [x] **6.3** `[dev]` `components/admin/CopyLinkButton.tsx` + `welcomeLink()` ("Copied" feedback, falls back to selecting the text if the clipboard API is blocked).
+  - `CopyLinkButton` ("Copied" for 1.5 s, falls back to a selected read-only field if the clipboard is blocked) and `welcomeLink()`. `welcomeLink` lives in `lib/admin/welcome-link.ts`, not the client component: calling a function exported from a `'use client'` file in a Server Component crashes the page (found in testing). Verified the clipboard holds the link.
+
+- [x] **6.4** `[dev]` `components/admin/ConfirmDialog.tsx` (native `<dialog>`, focus returns to the trigger, Escape cancels, used for the slug change and for deletes).
+  - Native `<dialog>`, controlled by an `open` prop. Escape and a backdrop click cancel; the browser returns focus to the trigger. Verified for the slug change and for deletes.
+
+- [x] **6.5** `[dev]` `components/admin/EmailRows.tsx` (add/remove rows, email + optional label with Manager/Alt/Assistant suggestions, per-row errors).
+  - Add/remove rows, email plus optional label with Manager/Alt/Assistant suggestions, per-row errors. Each row has a stable key so removing one doesn't scramble the others.
+
+- [x] **6.6** `[dev]` Main resource picker inside the form: grouped by category, **Remove** grays the row out, **Restore** brings it back, plus a count of hidden resources.
+  - Inside `ArtistForm`: grouped by category, **Remove**/**Restore**, a count of hidden resources. Hidden rows use a strike-through and a tinted background, not reduced opacity (opacity failed axe contrast at 2.1:1).
+
+- [x] **6.7** `[dev]` `lib/admin/resource-context.ts` `loadResourceContext(supabase)` → `{mainResources, categories}` (distinct, case-insensitive). `components/admin/CategoryInput.tsx` (`<datalist>`).
+  - `loadResourceContext()` returns the main resources plus the distinct categories (case-insensitive, first spelling wins, sorted; `distinctCategories` is unit-tested). `CategoryInput` uses a `<datalist>`.
+
+- [x] **6.8** `[dev]` `app/(admin)/admin/(panel)/uploads/actions.ts` `createUploadTarget` (admin check, MIME and size rules per kind, path `{resourceId}/{kind}-{uuid}.{ext}`).
+  - `createUploadTarget` checks admin, size and type per kind, and returns a typed `{ok, …}` result instead of throwing. Allowed types and messages come from `lib/admin/upload-rules.ts`, shared with the browser so they can't drift; Keynote files, which browsers often report with no type, are matched by extension.
+
+- [x] **6.9** `[dev]` `lib/admin/upload.ts` `uploadAsset` (storage-only browser client, `uploadToSignedUrl`).
+  - `uploadAsset` uses a storage-only client with no session or cookies (D21 still holds). Verified: PDF, cover, and preview uploads reach local Storage.
+
+- [x] **6.10** `[dev]` `lib/admin/pdf-preview.ts`: port `renderFirstPage()` from `sanity/components/PdfPreviewInput.tsx`, including the password-protected PDF message.
+  - `renderPdfPreview(file)` renders page 1 with `pdfjs-dist` (the same worker setup as the Sanity input), and `pdfPreviewMessage` keeps the password-protected message. Verified in a browser: uploading a PDF produced a preview image automatically.
+
+- [x] **6.11** `[dev]` `lib/admin/lqip.ts` `makeLqip()` (§8.6).
+  - `makeLqip()` produces a 20 px JPEG data URL. Verified: saved rows have `cover_image_lqip` and `pdf_preview_lqip` starting with `data:image/jpeg`.
+
+- [x] **6.12** `[dev]` `components/admin/ResourceEditor.tsx` + an extracted `ResourceFields.tsx`:
   - Drafts get a client `crypto.randomUUID()` id.
   - Per-type visibility of file vs URL (Sanity's rules).
   - Cover image + alt.
@@ -2932,33 +2954,64 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
   - Upload progress, a `localStatus` that blocks Save, and "Added on" under a disclosure.
   - Add/edit/delete in the list.
   - *Done when:* every per-type rule shows its Sanity error message.
-- [ ] **6.13** `[dev]` `components/admin/ArtistForm.tsx` (§8.7):
+  - `ResourceFields` is shared by the exclusive-resource editor and the main-resource dialog. Per-type file/URL rules match Sanity's; changing the type clears fields that no longer apply. Drafts track `uploads` (a count, so a cover and a file can upload at once) and Save is disabled while it's above 0. "Added on" sits under a disclosure and an untouched date is preserved.
+  - **Done-when verified in a browser:** an empty PDF shows "Upload a PDF.", an empty video "Upload the video file.", a link without a URL "Add the link URL.", a deck with nothing "Upload the deck or add a link.", both "Use either an upload or a link, not both.", plus the title and category messages (`tests/admin-lib.test.ts` covers the same rules).
+
+- [x] **6.13** `[dev]` `components/admin/ArtistForm.tsx` (§8.7):
   - Slug auto-fills on new artists until edited.
   - On edit, a slug change shows the warning, and Save opens the confirm dialog.
   - Builds the payload, shows field and form errors, and has a disabled saving state.
-- [ ] **6.14** `[dev]` `app/(admin)/admin/(panel)/artists/actions.ts` `saveArtist` (zod → `save_artist` → constraint → field error mapping → `sweepStorage` → redirect) and `deleteArtist`.
-- [ ] **6.15** `[dev]` `lib/admin/storage.ts` `sweepStorage`.
-- [ ] **6.16** `[dev]` `app/(admin)/admin/(panel)/artists/new/page.tsx`.
-- [ ] **6.17** `[dev]` `app/(admin)/admin/(panel)/artists/[id]/page.tsx`:
+  - Slug auto-fills from the name until edited (new artists only); on an existing artist a changed slug shows "The old link will stop working - send the artist the new one." and Save opens the confirm dialog; Escape cancels without saving. Client-side zod validation runs before the server action. The form is keyed on `artists.updated_at`, so after a save it reloads the server's normalized values (for example merged category spelling).
+
+- [x] **6.14** `[dev]` `app/(admin)/admin/(panel)/artists/actions.ts` `saveArtist` (zod → `save_artist` → constraint → field error mapping → `sweepStorage` → redirect) and `deleteArtist`.
+  - `saveArtist`/`deleteArtist` take typed inputs (`ArtistInput`) instead of the plan's `unknown`. Errors map to fields (`lib/admin/errors.ts`, unit-tested). If the network drops, the form shows "Couldn’t reach the server. Nothing was changed." instead of hitting the error boundary (same in the delete button, the resource dialog, and the sortable list).
+
+- [x] **6.15** `[dev]` `lib/admin/storage.ts` `sweepStorage`.
+  - `sweepStorage` takes the queued paths and removes them. **Bug found and fixed:** the database function it calls, `take_storage_garbage`, deleted the whole queue with no `WHERE`, and Supabase's API layer runs `pg_safeupdate`, which rejects that (`21000: DELETE requires a WHERE clause`). Direct database tests never loaded that extension, so every cleanup silently did nothing. Fixed in a **new migration**, `20261110001352_fix_take_storage_garbage.sql` (`where true`). A new test, `supabase/tests/safe-statements.test.sql`, fails if any `DELETE` or `UPDATE` in our functions lacks a `WHERE` (it failed on exactly this function before the fix).
+  - The fix is applied locally and on the hosted project (see the note under 6.19).
+
+- [x] **6.16** `[dev]` `app/(admin)/admin/(panel)/artists/new/page.tsx`.
+  - `/admin/artists/new`.
+
+- [x] **6.17** `[dev]` `app/(admin)/admin/(panel)/artists/[id]/page.tsx`:
   - The Welcome link at the top, with Copy link and Open page.
   - A "Saved." status after `?saved=1`.
   - `toFormInitial()`.
   - `DeleteArtistButton` (confirm → `deleteArtist`) at the bottom.
-- [ ] **6.18** `[dev]` `scripts/storage-sweep.ts` + `npm run storage:sweep` (D43, §8.6). — *Done when:* a dry run lists a deliberately abandoned upload older than 24 h, and `--delete` removes it.
-- [ ] **6.19** `[dev]` Manual pass on a preview:
+  - Welcome link with **Copy link** and **Open page**, a "Saved." status after `?saved=1`, the form, and **Delete artist** at the bottom behind a confirm dialog. **Bug found and fixed:** `resources(*)` in the query is ambiguous to PostgREST (`PGRST201`: `resources` links to `artists` both directly and through the hides table), and the page turned that error into a 404. It now uses `resources!resources_artist_id_fkey(*)`, and a query error throws instead of showing "not found".
+
+- [x] **6.18** `[dev]` `scripts/storage-sweep.ts` + `npm run storage:sweep` (D43, §8.6). — *Done when:* a dry run lists a deliberately abandoned upload older than 24 h, and `--delete` removes it.
+  - `scripts/storage-sweep.ts` and `npm run storage:sweep` (dry run unless `--delete`). Added `--min-age-hours <n>` (default 24) so the age rule can be tested without waiting. Verified against local Storage: a fresh upload isn't listed by default; with `--min-age-hours 0` only the two unreferenced objects are listed; `--delete` removes just those; a file referenced by a resource is untouched. Note: `tsx --env-file` does not override variables already set in the shell.
+
+- [x] **6.19** `[dev]` Manual pass on a preview:
   - Create "Lil Example" from the spec's sample data (three emails, one hidden main resource, one exclusive PDF with a cover).
   - Force a duplicate email and confirm nothing was saved.
   - Rename the slug, then delete the artist.
   - *Done when:* storage objects are cleaned up after the delete.
+  - Done in a browser (Playwright) against a **local Supabase stack** with an admin session reproduced locally (see 5.8), instead of a Vercel preview. The run: create "Lil Example" from the spec's sample data (primary plus two auxiliary emails, one hidden main resource, an exclusive PDF with a cover; the PDF preview and both blur placeholders were generated); check the rows and storage objects; copy the link; force a duplicate email and confirm nothing was saved; change the slug (warning, dialog, Escape cancels, then saved; the old slug now shows only the email screen); search; delete (every row gone, storage files removed, slug reusable). 36 checks pass, and axe is clean on the index and the form.
+  - **Cache Components keeps the previous route mounted but hidden**, so after saving, the page briefly holds two copies of the form. Users can't see or focus the hidden one, but test selectors must filter to visible elements.
+  - **Pushed to the hosted project** (with your go-ahead): `20261110001352_fix_take_storage_garbage.sql` is applied on `lsihwkbnrheczirlkswo` (`supabase migration list --remote` shows both migrations on both sides; the dry run listed only that file). I did not read the function back from the hosted database, since that would have needed a further hosted-database consent. To confirm it on the real admin: create a throwaway artist with an uploaded file, delete it, then check the file is gone from Storage (or run `npm run storage:sweep` against hosted: it should list nothing).
 
-### Phase 7: Admin: main resources
+### Phase 7: Admin: main resources (2026-11-09: built and verified end to end in a browser against a local stack)
 
-- [ ] **7.1** `[dev]` `app/(admin)/admin/(panel)/resources/page.tsx` (grouped list, "applies to every artist immediately" note, empty state).
-- [ ] **7.2** `[dev]` `resources/actions.ts`: `upsertMainResource`, `deleteMainResource`, `reorderMainResources` (zod, `requireAdmin`, `sweepStorage`, `refresh()`).
-- [ ] **7.3** `[dev]` Create/edit dialog using `ResourceFields` (same uploads, preview, lqip, and category suggestions as exclusives).
-- [ ] **7.4** `[dev]` `components/admin/SortableResourceList.tsx`: dnd-kit sortable rows within a category and sortable category groups. Pointer **and** keyboard sensors with screen-reader announcements. `useOptimistic` + `reorderMainResources(flatIds)`. A rollback message on failure.
-- [ ] **7.5** `[dev]` Delete with `ConfirmDialog` ("removed from every artist's page; per-artist hides for it are removed too").
-- [ ] **7.6** `[dev]` Manual check: a new main resource appears on every existing artist's page. Reordering and recategorizing show on artist pages on the next load.
+- [x] **7.1** `[dev]` `app/(admin)/admin/(panel)/resources/page.tsx` (grouped list, "applies to every artist immediately" note, empty state).
+  - `/admin/resources`: category cards in display order, rows with type and added date, empty state, and the "applies to every artist immediately" note.
+
+- [x] **7.2** `[dev]` `resources/actions.ts`: `upsertMainResource`, `deleteMainResource`, `reorderMainResources` (zod, `requireAdmin`, `sweepStorage`, `refresh()`).
+  - `upsertMainResource` (refuses an id that belongs to an artist's exclusive resource), `deleteMainResource`, `reorderMainResources` — all typed, validated with zod, admin-checked, sweeping storage and calling `refresh()`.
+
+- [x] **7.3** `[dev]` Create/edit dialog using `ResourceFields` (same uploads, preview, lqip, and category suggestions as exclusives).
+  - `ResourceDialog` reuses `ResourceFields`, so uploads, the PDF preview, blur placeholders, and category suggestions behave the same as for exclusives. Verified: every validation message appears, a slide deck offers upload **and** link, a link hides the upload, and a lowercase category typed as `getting started` was saved as `Getting Started`.
+
+- [x] **7.4** `[dev]` `components/admin/SortableResourceList.tsx`: dnd-kit sortable rows within a category and sortable category groups. Pointer **and** keyboard sensors with screen-reader announcements. `useOptimistic` + `reorderMainResources(flatIds)`. A rollback message on failure.
+  - `SortableResourceList`: separate drag contexts for categories and for rows within a category, mouse and keyboard sensors, handles with labels, announcements that use titles ("Dropped Sync Pitch Form over Pitch Form."), `useOptimistic`, and a rollback message.
+  - Verified in a browser: a keyboard move updates immediately and is saved as the flattened display order; a category move is saved and reaches artist pages; the order survives a reload; a real mouse drag swaps two rows; with the browser **offline**, a reorder shows "Couldn’t save the new order. It has been put back.", restores the order, and the page keeps working.
+
+- [x] **7.5** `[dev]` Delete with `ConfirmDialog` ("removed from every artist's page; per-artist hides for it are removed too").
+  - Delete uses `ConfirmDialog` ("removed from every artist’s page … per-artist hides for it are removed too"). Verified: Escape cancels; confirming removes the row, every artist's page, the hide rows, and the storage files.
+
+- [x] **7.6** `[dev]` Manual check: a new main resource appears on every existing artist's page. Reordering and recategorizing show on artist pages on the next load.
+  - Verified with an admin session that can read any artist page: a new main resource appeared on artist A's and artist B's pages immediately; an edit and a delete reached them on the next load; moving a category changed the order on their pages; a resource hidden for artist A stayed hidden for A only.
 
 ### Phase 8: Sanity → Supabase migration
 
@@ -2994,6 +3047,8 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [ ] **10.4** `[dev]` `tests/e2e/access.spec.ts`: the parity rows from §13.3 (signed-out real vs fake slug; A opening B; the removed email revoked on reload; admins gate).
 - [ ] **10.5** `[dev]` `tests/e2e/sign-in.spec.ts`: wrong email vs unknown slug give the identical message; no `auth.users` row is created; the approved email shows the sent state and a disabled countdown; the link signs in directly; a bogus or used link goes to expired.
 - [ ] **10.6** `[dev]` `tests/e2e/resources.spec.ts`: exclusive on A only; hide on A only; all three of A's emails see the page; grid groups by category (mixed case → one heading); link cards use `target=_blank rel=noopener noreferrer`; the video dialog opens and closes and returns focus; the file route 302s for a viewer and 404s for another artist.
+  - Add an API-level check for the storage queue: as an admin session, call `take_storage_garbage` through the REST API (not directly in the database). That path runs `pg_safeupdate`, which direct database tests can't reproduce.
+
 - [ ] **10.7** `[dev]` `tests/e2e/admin.spec.ts`: signed out `/admin` → `/admin/login`; a magic-link persona on `/admin` → "You don't have access."; the login page shows only **Sign in with Google**.
 - [ ] **10.8** `[dev]` `tests/e2e/a11y.spec.ts`: axe on Enter your email (idle, sent, not-approved), the resources page (both views), `/auth/expired`, and `/admin/login`.
 - [ ] **10.9** `[dev]` `.github/workflows/ci.yml`: a `db` job using `supabase/setup-cli` → `supabase start` → `npm run db:test`. The existing lint/typecheck/test/format job keeps going.

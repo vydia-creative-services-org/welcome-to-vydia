@@ -65,4 +65,6 @@ export const artistPayload = z
   })
 
 export type ArtistPayload = z.infer<typeof artistPayload>
+export type ArtistInput = z.input<typeof artistPayload>
 export type ResourceInput = z.infer<typeof resourceInput>
+export type ResourceInputValue = z.input<typeof resourceInput>
