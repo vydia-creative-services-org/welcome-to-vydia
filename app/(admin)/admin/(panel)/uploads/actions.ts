@@ -18,10 +18,21 @@ export type UploadRequest = z.input<typeof uploadRequest>
 export type UploadTarget = {ok: true; bucket: string; path: string; token: string} | {ok: false; message: string}
 
 export async function createUploadTarget(input: UploadRequest): Promise<UploadTarget> {
-  const {supabase} = await requireAdmin()
+  const {supabase, isSuper} = await requireAdmin()
   const parsed = uploadRequest.safeParse(input)
   if (!parsed.success) return {ok: false, message: 'That upload isn’t valid.'}
   const request = parsed.data
+
+  if (!isSuper) {
+    const {data: existing} = await supabase
+      .from('resources')
+      .select('client_id')
+      .eq('id', request.resourceId)
+      .maybeSingle()
+    if (existing && existing.client_id === null) {
+      return {ok: false, message: 'Only super admins can change core resources.'}
+    }
+  }
 
   const isImage = request.kind !== 'file'
   if (isImage && !imageAllowed(request.contentType, request.size)) return {ok: false, message: IMAGE_MESSAGE}

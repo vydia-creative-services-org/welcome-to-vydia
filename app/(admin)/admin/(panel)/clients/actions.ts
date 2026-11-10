@@ -1,5 +1,7 @@
 'use server'
+import {refresh} from 'next/cache'
 import {redirect} from 'next/navigation'
+import {z} from 'zod'
 import {requireAdmin} from '@/lib/admin/auth'
 import {mapSaveError} from '@/lib/admin/errors'
 import {sweepStorage} from '@/lib/admin/storage'
@@ -20,6 +22,9 @@ export async function saveClient(input: ClientInput): Promise<SaveResult> {
   if (error) {
     const mapped = mapSaveError(error)
     if (mapped) return {ok: false, fieldErrors: {[mapped.field]: mapped.message}}
+    if (error.code === 'P0002') {
+      return {ok: false, fieldErrors: {}, formError: 'This client no longer exists or isn’t assigned to you.'}
+    }
     console.error('save_client failed:', error.code, error.message)
     return {ok: false, fieldErrors: {}, formError: 'Couldn’t save. Nothing was changed. Try again.'}
   }
@@ -30,8 +35,26 @@ export async function saveClient(input: ClientInput): Promise<SaveResult> {
 
 export async function deleteClient(id: string): Promise<{ok: false; message: string}> {
   const {supabase} = await requireAdmin()
-  const {error} = await supabase.from('clients').delete().eq('id', id)
-  if (error) return {ok: false, message: 'Couldn’t delete the client. Nothing was changed.'}
+  const {data, error} = await supabase.from('clients').delete().eq('id', id).select('id')
+  if (error || !data?.length) return {ok: false, message: 'Couldn’t delete the client. Nothing was changed.'}
   await sweepStorage(supabase)
   redirect('/admin')
+}
+
+const assignInput = z.object({clientId: z.uuid(), adminEmail: z.email().nullable()})
+
+export async function assignClient(input: z.input<typeof assignInput>): Promise<{ok: boolean; message?: string}> {
+  const {supabase, isSuper} = await requireAdmin()
+  if (!isSuper) return {ok: false, message: 'Only super admins can reassign clients.'}
+  const parsed = assignInput.safeParse(input)
+  if (!parsed.success) return {ok: false, message: 'That isn’t a valid admin.'}
+
+  const {data, error} = await supabase
+    .from('clients')
+    .update({assigned_admin: parsed.data.adminEmail?.toLowerCase() ?? null})
+    .eq('id', parsed.data.clientId)
+    .select('id')
+  if (error || !data?.length) return {ok: false, message: 'Couldn’t reassign the client.'}
+  refresh()
+  return {ok: true}
 }
