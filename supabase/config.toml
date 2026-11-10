@@ -250,11 +250,11 @@ otp_expiry = 3600
 # sender_name = "Admin"
 
 [auth.email.template.magic_link]
-subject = "Open your Welcome to Vydia page"
+subject = "Open your Vydia Onboarding page"
 content_path = "./supabase/templates/magic-link.html"
 
 [auth.email.template.confirmation]
-subject = "Open your Welcome to Vydia page"
+subject = "Open your Vydia Onboarding page"
 content_path = "./supabase/templates/confirm-signup.html"
 
 # Uncomment to customize notification email template

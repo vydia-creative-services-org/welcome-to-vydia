@@ -21,8 +21,8 @@ test.describe('signed out', () => {
     expect(real.status).toBe(200)
     expect(fake.status).toBe(200)
     expect(real.html).toBe(fake.html)
-    expect(real.title).toBe('Welcome to Vydia')
-    expect(fake.title).toBe('Welcome to Vydia')
+    expect(real.title).toBe('Vydia Onboarding')
+    expect(fake.title).toBe('Vydia Onboarding')
     expect(real.document).not.toContain(E2E_NAMES.a)
     await expect(page.getByPlaceholder('Enter your email')).toBeVisible()
   })
@@ -50,13 +50,13 @@ test.describe('signed in for client A', () => {
   test('sees their own page', async ({page}) => {
     await page.goto(`/${E2E_SLUGS.a}`)
     await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
-    await expect(page).toHaveTitle(`${E2E_NAMES.a} | Welcome to Vydia`)
+    await expect(page).toHaveTitle(`${E2E_NAMES.a} | Vydia Onboarding`)
   })
 
   test("opening client B's URL shows Enter your email, never B's name or resources", async ({page}) => {
     const other = await mainHtml(page, E2E_SLUGS.b)
     expect(other.status).toBe(200)
-    expect(other.title).toBe('Welcome to Vydia')
+    expect(other.title).toBe('Vydia Onboarding')
     expect(other.document).not.toContain(E2E_NAMES.b)
     await expect(page.getByPlaceholder('Enter your email')).toBeVisible()
     await expect(page.getByRole('region', {name: 'Resources'})).toHaveCount(0)

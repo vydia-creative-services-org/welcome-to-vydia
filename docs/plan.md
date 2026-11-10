@@ -1,4 +1,4 @@
-# Welcome to Vydia Microsite: Implementation Plan
+# Vydia Onboarding Microsite: Implementation Plan
 
 > Source of truth for requirements: [`docs/research.md`](./research.md).
 > Visual reference: [`docs/screenshots/sample website.png`](./screenshots/sample%20website.png).
@@ -784,7 +784,7 @@ import type {StructureResolver} from 'sanity/structure'
 
 export const structure: StructureResolver = (S) =>
   S.list()
-    .title('Welcome to Vydia')
+    .title('Vydia Onboarding')
     .items([
       S.documentTypeListItem('client').title('Clients'),
       S.divider(),
@@ -1006,7 +1006,7 @@ const SINGLETON_ACTIONS = new Set(['publish', 'discardChanges', 'restore'])
 
 export default defineConfig({
   name: 'default',
-  title: 'Welcome to Vydia',
+  title: 'Vydia Onboarding',
   basePath: '/studio',
   projectId,
   dataset,
@@ -1820,7 +1820,7 @@ import {getClientPage} from '@/lib/sanity/page'
 import {createClient} from '@/lib/supabase/server'
 import styles from './page.module.css'
 
-export const metadata: Metadata = {title: 'Welcome to Vydia', robots: {index: false, follow: false}}
+export const metadata: Metadata = {title: 'Vydia Onboarding', robots: {index: false, follow: false}}
 
 export const instant = false
 
@@ -1908,7 +1908,7 @@ export function NoAccess() {
 | Before sign-in | Proxy → `302 /login?next=/x` | Proxy → `302 /login?next=/x` |
 | After sign-in: status | `200` (streamed `notFound()`; `404` only if 8.0 picks a Proxy check) | `200` (identical) |
 | After sign-in: body | `<NoAccess/>` | `<NoAccess/>` |
-| After sign-in: `<title>` | Static "Welcome to Vydia" | Static "Welcome to Vydia" |
+| After sign-in: `<title>` | Static "Vydia Onboarding" | Static "Vydia Onboarding" |
 | Sanity work | 1 × `ACCESS_QUERY` (same shape, cached) | 1 × `ACCESS_QUERY` (same shape, cached) |
 | Old-slug redirect | n/a | Only issued *after* access is granted |
 
@@ -2022,7 +2022,7 @@ import './globals.css'
 
 const sans = Public_Sans({subsets: ['latin'], variable: '--font-public-sans'})
 
-export const metadata: Metadata = {title: 'Welcome to Vydia', robots: {index: false, follow: false}}
+export const metadata: Metadata = {title: 'Vydia Onboarding', robots: {index: false, follow: false}}
 
 export default function SiteLayout({children}: {children: React.ReactNode}) {
   return (
@@ -2870,7 +2870,7 @@ async function main() {
     intro: [
       {
         _type: 'block', _key: key(), style: 'normal', markDefs: [],
-        children: [{_type: 'span', _key: key(), text: 'Welcome to Vydia! Check out the resources below to get started:', marks: []}],
+        children: [{_type: 'span', _key: key(), text: 'Vydia Onboarding! Check out the resources below to get started:', marks: []}],
       },
       bullet('Vydia Platform Resources', "Here you'll find a full guide to Vydia's platform along with video tutorials to help you get familiar with the platform."),
       bullet('Playlisting and Sync Pitch Forms', "Leverage Vydia's playlisting and sync services to promote your upcoming and existing releases. Get started by filling out one of the forms below."),
@@ -3109,7 +3109,7 @@ test.describe('signed in as an unapproved user', () => {
     expect(forbidden?.status()).toBe(unknown?.status())
     expect(forbiddenHtml).toBe(unknownHtml)
     await expect(page.getByRole('heading', {name: 'This page isn’t available'})).toBeVisible()
-    await expect(page).toHaveTitle('Welcome to Vydia')
+    await expect(page).toHaveTitle('Vydia Onboarding')
   })
 
   test('an old URL does not redirect for someone without access', async ({page}) => {
@@ -3124,7 +3124,7 @@ test.describe('signed in as an approved user', () => {
 
   test('sees the intro and resource cards', async ({page}) => {
     await page.goto('/test-client')
-    await expect(page.getByText('Welcome to Vydia!')).toBeVisible()
+    await expect(page.getByText('Vydia Onboarding!')).toBeVisible()
     await expect(page.getByRole('heading', {name: 'Vydia Platform Resources'})).toBeVisible()
     await expect(page.getByText(/^Added on /).first()).toBeVisible()
   })
@@ -3212,7 +3212,7 @@ The full build broken into phases and tasks. Each task points to the section of 
 ### Phase 0: Accounts, access, and prerequisites
 
 **Sanity** (§4.2)
-- [x] **0.1** Create the Sanity project "Welcome to Vydia" and the `production` dataset.
+- [x] **0.1** Create the Sanity project "Vydia Onboarding" and the `production` dataset.
 - [x] **0.2** Set dataset visibility to **Private** (D2).
 - [x] **0.3** Create a *Viewer* API token named `vercel-read` and store it in the password manager.
 - [x] **0.4** Add CORS origins `http://localhost:3000` (allow credentials). The production origin is added in 11.6.
@@ -3267,7 +3267,7 @@ The full build broken into phases and tasks. Each task points to the section of 
 
 | Task | Result | How it was checked |
 |---|---|---|
-| 0.1 | ✅ "Welcome to Vydia" (`t7ic4vs4`) in the Vydia org, `production` dataset | Sanity management API |
+| 0.1 | ✅ "Vydia Onboarding" (`t7ic4vs4`) in the Vydia org, `production` dataset | Sanity management API |
 | 0.2 | ✅ `production` is private. ⚠️ Only while the Growth trial lasts, see 0.17 | Dataset `aclMode` |
 | 0.3 | ✅ `vercel-read` token with the viewer role. Being in the password manager can't be checked | Project tokens API |
 | 0.4 | ✅ `http://localhost:3000` with credentials. A leftover `http://localhost:3333` (default standalone Studio port) is harmless; delete it if you like | Project CORS API |
@@ -3306,19 +3306,19 @@ Everything left in the plan waits on one of these. Each step lists exactly what 
 | U11 | Seismic asset list | L&A | Before migration | Phase 12 |
 
 **U1: Upgrade Sanity to Growth (0.17), before 2026-11-18**
-1. sanity.io/manage → **Welcome to Vydia** → **Plan** (or Billing) → **Upgrade** to **Growth**.
+1. sanity.io/manage → **Vydia Onboarding** → **Plan** (or Billing) → **Upgrade** to **Growth**.
 2. Add the payment card on the **Vydia** organization.
 3. Seats are $15 per non-viewer member per month: your admin seat plus the two shared logins = $45/month ($30 if you later drop your own seat and keep a shared login as admin).
 - **I'll check:** the subscription shows Growth (not trial), and the `production` dataset is still `private`.
 
 **U2: Shared Sanity seats (0.5)**
-1. sanity.io/manage → Welcome to Vydia → **Members** → **Invite** `labelrelationships@vydia.com` with the **Editor** role. Only `creativeservices@` was invited so far.
+1. sanity.io/manage → Vydia Onboarding → **Members** → **Invite** `labelrelationships@vydia.com` with the **Editor** role. Only `creativeservices@` was invited so far.
 2. Whoever reads each shared inbox accepts the invite and signs in. Use the same sign-in method every time (Google or email) so the seat isn't duplicated.
 3. Each team opens `http://localhost:3000/studio` (or the Vercel URL after U4) and confirms they see Clients / Resources / Sections / Website.
 - **I'll check:** both members show as accepted Editors, and no pending invitations remain.
 
 **U3: Email templates (0.13), can do now**
-1. Supabase → **Authentication** → **Email Templates** → **Confirm signup**: set the subject to the first-line comment in `supabase/templates/confirm-signup.html` ("Confirm your email for Welcome to Vydia"), and paste the rest of the file as the body.
+1. Supabase → **Authentication** → **Email Templates** → **Confirm signup**: set the subject to the first-line comment in `supabase/templates/confirm-signup.html` ("Confirm your email for Vydia Onboarding"), and paste the rest of the file as the body.
 2. Same for **Reset password** with `supabase/templates/reset-password.html`.
 3. Save both. The links use `{{ .SiteURL }}`, so they point at localhost now and switch to production when the Site URL changes in 11.2.
 - **I'll check:** after U7 (real email delivery), a sign-up and a reset email both land through `/auth/confirm`.
@@ -3347,7 +3347,7 @@ Everything left in the plan waits on one of these. Each step lists exactly what 
 - **I'll check:** a preview builds, `/` loads, `/test-client` redirects to `/login`, Studio loads on the preview URL, and the security headers are present.
 
 **U5: Sanity webhook (9.3), after U4**
-1. sanity.io/manage → Welcome to Vydia → **API → Webhooks → Create webhook**.
+1. sanity.io/manage → Vydia Onboarding → **API → Webhooks → Create webhook**.
 2. **Name:** `revalidate-preview`. **URL:** `https://<preview URL>/api/revalidate?x-vercel-protection-bypass=<bypass secret from U4.4>`. **Dataset:** `production`. **Trigger on:** Create, Update, Delete.
 3. **Filter:** `_type in ["client", "resource", "section", "website"]`. **Projection:** `{_type}`. **HTTP method:** POST. **API version:** `v2025-02-19`. **Drafts:** off. **Secret:** the `SANITY_REVALIDATE_SECRET` value.
 4. At launch (11.5), add a second webhook `revalidate-production` with URL `https://welcometovydia.com/api/revalidate` and the same settings. Growth allows 4 webhooks.

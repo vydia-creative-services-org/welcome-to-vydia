@@ -1,8 +1,8 @@
-# Welcome to Vydia - Goal
+# Vydia Onboarding - Goal
 
 ## Project Context
 
-Welcome to Vydia is an internal onboarding tool for Vydia's label services team. When a new client signs, label services builds them a personalized "Welcome to Vydia" page in a lightweight admin panel: they enter the client's name, email, and any auxiliary emails (managers, secondary addresses), and choose which resources the client sees. The app generates a unique link, which label services copies and emails to the client from their own inbox. The client opens the link, enters an approved email, receives a magic link, and lands on their resources page.
+Vydia Onboarding is an internal onboarding tool for Vydia's label services team. When a new client signs, label services builds them a personalized "Vydia Onboarding" page in a lightweight admin panel: they enter the client's name, email, and any auxiliary emails (managers, secondary addresses), and choose which resources the client sees. The app generates a unique link, which label services copies and emails to the client from their own inbox. The client opens the link, enters an approved email, receives a magic link, and lands on their resources page.
 
 Today label services uses Seismic, a high-end sales-enablement tool that is overkill for a gated, personalized resource list. We want a simple replacement on Vydia's approved stack.
 

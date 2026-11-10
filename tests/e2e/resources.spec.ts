@@ -92,7 +92,7 @@ for (const persona of ['clientA', 'manager', 'aux2'] as const satisfies readonly
     test('sees the same page, greeted by the client', async ({page}) => {
       await page.goto(`/${E2E_SLUGS.a}`)
       await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
-      await expect(page).toHaveTitle(`${E2E_NAMES.a} | Welcome to Vydia`)
+      await expect(page).toHaveTitle(`${E2E_NAMES.a} | Vydia Onboarding`)
       expect(await visibleTitles(page)).toContain(E2E_TITLES.exclusive)
     })
   })

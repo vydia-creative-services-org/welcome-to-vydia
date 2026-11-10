@@ -65,7 +65,7 @@ GET /lil-example
 
 ### 1.3 UI today
 
-- `PageShell` → `Header` (greeting `"{client} | Welcome to Vydia"`, a view toggle when inside `ViewModeProvider`) + `Footer`.
+- `PageShell` → `Header` (greeting `"{client} | Vydia Onboarding"`, a view toggle when inside `ViewModeProvider`) + `Footer`.
 - `ResourceViews` → `ResourceCarousel` (3D cover-flow on a native scroll-snap container, with inertia, drag, trackpad and backdrop crossfade) or `ResourceGrid` (flat `<ul>`). View switches use View Transitions keyed on `data-morph-id={resource._id}` (`ViewMode.tsx`).
 - Cards: `ResourceCard` → `<a target=_blank>` for pdf/link/slides, `VideoCard` (`<dialog>` + `<video>`) for video. `CardCover` uses the Sanity image builder (`urlFor`, `coverSource` for crop/hotspot) and the Sanity `lqip`. The fallback is a branded tile.
 - Styling: CSS Modules + tokens in `app/(site)/globals.css` (D12, no Tailwind).
@@ -186,7 +186,7 @@ GET /lil-example
        └─ rpc('get_client_page', {p_slug})        (security invoker → RLS)
              ├─ client row invisible (unknown / deleted / renamed / not linked) → null
              └─ {client:{id,name}, resources:[...main − hidden..., ...exclusive...]}
-  ├─ null   → <PageShell><EnterEmail slug/></PageShell>     title "Welcome to Vydia"
+  ├─ null   → <PageShell><EnterEmail slug/></PageShell>     title "Vydia Onboarding"
   └─ page   → <ViewModeProvider><PageShell clientName><ResourceViews groups/></…>
 
 POST (server action sendLink {email, slug})
@@ -1558,7 +1558,7 @@ export default async function AdminLogin({searchParams}: PageProps<'/admin/login
   return (
     <main className={styles.page}>
       <div className={styles.card}>
-        <h1>Welcome to Vydia admin</h1>
+        <h1>Vydia Onboarding admin</h1>
         {message && <p role="alert" className={styles.error}>{message}</p>}
         <form action={signInWithGoogle}><button className={styles.google}>Sign in with Google</button></form>
       </div>
@@ -1599,7 +1599,7 @@ import {Public_Sans} from 'next/font/google'
 import './admin.css'
 
 const sans = Public_Sans({subsets: ['latin'], variable: '--font-public-sans'})
-export const metadata: Metadata = {title: 'Welcome to Vydia · Admin', robots: {index: false, follow: false}}
+export const metadata: Metadata = {title: 'Vydia Onboarding · Admin', robots: {index: false, follow: false}}
 
 export default function AdminRootLayout({children}: {children: React.ReactNode}) {
   return <html lang="en" className={sans.variable}><body>{children}</body></html>
@@ -2446,7 +2446,7 @@ Run order: `--dry-run` against a local Supabase (`supabase start`), then for rea
 - **Supabase → Auth → SMTP**: host `smtp.resend.com`, port `465`, username `resend`, password = the Resend API key, sender `welcome@vydia.com` as a **placeholder for now** (swap it before launch, task 12.4; the domain verified in Resend must match), sender name "Vydia".
 - **Templates**: keep `supabase/templates/magic-link.html` and `confirm-signup.html` (both must send the same link, since Supabase uses Confirm signup for first-time users). Update the branding and copy:
   - Replace the text "VYDIA" header with the logo image hosted at `${SITE_URL}/vydia-logo.png` (a PNG export of `docs/logo/gamma-vydia-white.svg`; email clients block SVG).
-  - Copy: "Open your Welcome to Vydia page", with "This link works once and expires in 1 hour".
+  - Copy: "Open your Vydia Onboarding page", with "This link works once and expires in 1 hour".
   - The link is unchanged: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&redirect_to={{ .RedirectTo }}`.
 - **Rate limits**: raise "emails per hour" (e.g. 100) once SMTP is custom. Keep Supabase's per-email 60 s OTP limit, which matches ours.
 - All of the above has to be set **on the new project** (§12.1). None of it carries over from the old one.
@@ -2610,7 +2610,7 @@ Add `supabase/tests/hook.test.sql`: `hook_before_user_created` allows email user
 
 | Spec success state | Test |
 |---|---|
-| Made-up slug shows the same screen | Signed out: `/e2e-client-a` and `/does-not-exist-<rand>` → status 200, `main` innerHTML equal, title "Welcome to Vydia", no client name in the HTML |
+| Made-up slug shows the same screen | Signed out: `/e2e-client-a` and `/does-not-exist-<rand>` → status 200, `main` innerHTML equal, title "Vydia Onboarding", no client name in the HTML |
 | Wrong email: not-approved, nothing sent, no user | On `/e2e-client-a` enter `nobody-<rand>@example.com` → not-approved text. Same on `/does-not-exist` with **any** email → identical text. Admin API `GET /auth/v1/admin/users` has no such user. |
 | Approved email: sent + 60 s resend | On `/e2e-client-a` enter the aux address → "Email sent, check your inbox", `Resend email (5\ds)` disabled |
 | Primary + 2 aux all see the page | Personas `clientA`, `manager` (and a third aux) each see `region "Resources"` and the header greeting "Client A" |
@@ -2681,7 +2681,7 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
   - Local `max_frequency` is `60s` (matches the spec's cooldown) and the local storage limit is `1GiB`.
   - `redirect_to` is a **query parameter** on `/auth/v1/otp` (supabase-js does this). A URL outside `additional_redirect_urls` silently falls back to the Site URL, so on the hosted project E4 must list the slug paths (`https://welcometovydia.com/**`).
 - [x] **0.3** `[dev]` `supabase link --project-ref lsihwkbnrheczirlkswo`. — *Done when:* `supabase db remote commit --dry-run` (or `supabase migration list`) reaches the new project.
-  - Verified: `supabase link` succeeded for `Welcome to Vydia (lsihwkbnrheczirlkswo)` and `supabase migration list --linked` reaches it (no remote migrations yet). The local `supabase/.temp` link state is gitignored.
+  - Verified: `supabase link` succeeded for `Vydia Onboarding (lsihwkbnrheczirlkswo)` and `supabase migration list --linked` reaches it (no remote migrations yet). The local `supabase/.temp` link state is gitignored.
 - [x] **0.4** `[ops]` New project → API Keys: create a **secret** key (`sb_secret_…`) and add it to `.env.local` as `SUPABASE_SECRET_KEY`. Confirm `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `NEXT_PUBLIC_SUPABASE_URL` in `.env.local` are the new project's. Leave the legacy `SUPABASE_SERVICE_ROLE_KEY` in place until 13.3. — *Done when:* `curl -H "apikey: $SUPABASE_SECRET_KEY" $NEXT_PUBLIC_SUPABASE_URL/rest/v1/` returns 200.
   - Verified: `SUPABASE_SECRET_KEY` (`sb_secret_…`) is in `.env.local`, and `GET /rest/v1/` with it returns 200. The URL and publishable key point at the new project. The legacy `SUPABASE_SERVICE_ROLE_KEY` is also for the new project and stays until 13.3.
 - [x] **0.5** `[ops]` Settings → JWT Keys: asymmetric signing keys are active (P4). — *Done when:* the JWKS endpoint `/auth/v1/.well-known/jwks.json` lists a key.
@@ -2831,9 +2831,9 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
 - [x] **4.1** `[dev]` `lib/client-page.ts` (`getClientPage`, `cache()`d, null for every no-access case, fails closed on RPC error).
   - `lib/client-page.ts`: returns null for an invalid slug, no session, an RPC error, a null result, or an unexpected shape (it fails closed). The RPC result is parsed with zod rather than cast. The shared `cache()` means the page and its metadata make one RPC per request.
 
-- [x] **4.2** `[dev]` Rewrite `app/(site)/[slug]/page.tsx` and its `generateMetadata` (§7.2). Delete `app/(site)/[slug]/not-found.tsx` and `components/NoAccess.tsx`. — *Done when:* signed out, a real slug and a made-up slug produce identical `<main>` HTML, a status of 200, and the title "Welcome to Vydia".
+- [x] **4.2** `[dev]` Rewrite `app/(site)/[slug]/page.tsx` and its `generateMetadata` (§7.2). Delete `app/(site)/[slug]/not-found.tsx` and `components/NoAccess.tsx`. — *Done when:* signed out, a real slug and a made-up slug produce identical `<main>` HTML, a status of 200, and the title "Vydia Onboarding".
   - Old `not-found.tsx` and `components/NoAccess.tsx` are deleted. Added a visually hidden `<h1>` on the resources page (axe `page-has-heading-one`).
-  - Checked against the running dev server, signed out: a real slug and a made-up slug both return **200** with the title "Welcome to Vydia", and their `<main>` HTML is identical once the visitor's own requested slug (echoed into the form's hidden input) is normalized. The client name never appears.
+  - Checked against the running dev server, signed out: a real slug and a made-up slug both return **200** with the title "Vydia Onboarding", and their `<main>` HTML is identical once the visitor's own requested slug (echoed into the form's hidden input) is normalized. The client name never appears.
 
 - [x] **4.3** `[dev]` `app/(site)/[slug]/actions.ts` `sendLink` (§7.3) + `tests/send-link.test.ts`. The test checks that an unknown slug and a wrong email give the same result with no send, a cooldown returns `sent` with no send, `over_email_send_rate_limit` counts as sent, and a rate limit returns `rate-limited`.
   - `tests/send-link.test.ts` (9 tests): a wrong email and an unknown slug return the same `not-approved` and send nothing; reserved or malformed slugs are never approved; the cooldown returns `sent` without sending; `over_email_send_rate_limit` counts as sent and any other error is `error`; a rate limit returns `rate-limited` after one call; the limit keys on the first forwarded address; an RPC error fails closed.
@@ -2850,9 +2850,9 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
   - `/auth/expired` returns 200 with "This link has expired" and a **Send a new link** button back to the slug.
 
 - [ ] **4.7** `[dev]` Email templates: export `public/vydia-logo.png` (white logo on a dark band), update the copy in `supabase/templates/magic-link.html` and `confirm-signup.html` (§11), and keep the `/auth/confirm?token_hash…` link. `[ops]` Paste both into the new project (E3). — *Done when:* a local (Mailpit) and a hosted (Resend) email both render the logo and the right link.
-  - **Dev half done:** `public/vydia-logo.png` (640×72, white on transparent, rendered from `docs/logo/gamma-vydia-white.svg`; the template's dark band shows through). Both templates are updated and identical: logo image at `{{ .SiteURL }}/vydia-logo.png`, "Open your Welcome to Vydia page", "Open my page", and the unchanged `/auth/confirm?token_hash=…` link. The subject in `supabase/config.toml` matches.
+  - **Dev half done:** `public/vydia-logo.png` (640×72, white on transparent, rendered from `docs/logo/gamma-vydia-white.svg`; the template's dark band shows through). Both templates are updated and identical: logo image at `{{ .SiteURL }}/vydia-logo.png`, "Open your Vydia Onboarding page", "Open my page", and the unchanged `/auth/confirm?token_hash=…` link. The subject in `supabase/config.toml` matches.
   - **Verified locally** (after `supabase stop && supabase start`, which template and subject changes need): the Mailpit email has the right subject, the logo `<img>` URL (served by the dev server as `image/png`), and the direct confirm link with the `redirect_to` slug intact.
-  - **For you (hosted):** paste both templates and the subject `Open your Welcome to Vydia page` into Auth → Email Templates → **Magic Link** and **Confirm signup** on `lsihwkbnrheczirlkswo` (E3), and set `NEXT_PUBLIC_SITE_URL`/Site URL to the real domain so the logo URL resolves in a received email. The hosted email render can only be confirmed once Resend sending works (0.9/0.10).
+  - **For you (hosted):** paste both templates and the subject `Open your Vydia Onboarding page` into Auth → Email Templates → **Magic Link** and **Confirm signup** on `lsihwkbnrheczirlkswo` (E3), and set `NEXT_PUBLIC_SITE_URL`/Site URL to the real domain so the logo URL resolves in a received email. The hosted email render can only be confirmed once Resend sending works (0.9/0.10).
 
 - [x] **4.8** `[dev]` `app/api/resources/[id]/file/route.ts` (RLS check → 1 h signed URL → 302, otherwise a `no-store` 404).
   - Verified live: an approved user gets a **302** to a working signed URL (the file downloads); signed out and an unknown id get **404**; the private bucket's public URL is refused (400); after the email is removed the same session gets **404** on the next request.
@@ -3099,7 +3099,7 @@ Google sign-in can't be automated. Admin CRUD flows run against a local Supabase
   - Global setup uses `generate_link` and a plain GET of `/auth/confirm` (no Continue click), then saves each persona's storage state. Emails are attached to clients before users are created, so the sign-up hook allows them whether or not it fires for admin-generated links.
 
 - [x] **10.4** `[dev]` `tests/e2e/access.spec.ts`: the parity rows from §13.3 (signed-out real vs fake slug; A opening B; the removed email revoked on reload; admins gate).
-  - `access.spec.ts` (9 tests): a real and a made-up slug render the same `<main>` (status 200, title "Welcome to Vydia", no client name); `/` is public; security headers; A opening B's URL shows only the email screen with no trace of B; an unknown slug looks identical to an inaccessible one; no sign-out, account menu, or links on the client page.
+  - `access.spec.ts` (9 tests): a real and a made-up slug render the same `<main>` (status 200, title "Vydia Onboarding", no client name); `/` is public; security headers; A opening B's URL shows only the email screen with no trace of B; an unknown slug looks identical to an inaccessible one; no sign-out, account menu, or links on the client page.
 
 - [x] **10.5** `[dev]` `tests/e2e/sign-in.spec.ts`: wrong email vs unknown slug give the identical message; no `auth.users` row is created; the approved email shows the sent state and a disabled countdown; the link signs in directly; a bogus or used link goes to expired.
   - `sign-in.spec.ts` (10 tests): the wrong-email and unknown-slug messages are identical, the input stays filled, and **no `auth.users` row is created** (checked through the admin API); another client's email on the wrong slug is also not approved; the auxiliary email (typed in capitals) shows the sent state and a disabled `Resend email (Ns)`; a fresh link signs in directly (307 with `sb-` cookies); bogus, missing, and already-used links go to the expired screen with a way back; signing in as a different email replaces the old session.
