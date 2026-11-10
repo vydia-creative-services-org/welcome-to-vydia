@@ -8,6 +8,8 @@ const securityHeaders = [
   {key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains'},
 ]
 
+const supabaseUrl = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://invalid.supabase.co')
+
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
@@ -15,9 +17,10 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: 'cdn.sanity.io',
-        pathname: `/images/${process.env.NEXT_PUBLIC_SANITY_PROJECT_ID}/**`,
+        protocol: supabaseUrl.protocol === 'http:' ? 'http' : 'https',
+        hostname: supabaseUrl.hostname,
+        port: supabaseUrl.port,
+        pathname: '/storage/v1/object/public/resource-images/**',
       },
     ],
   },

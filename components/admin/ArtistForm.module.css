@@ -1,0 +1,49 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--admin-space-5);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--admin-space-5);
+}
+
+.section > .legend {
+  margin: 0;
+}
+
+.slug {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-space-2);
+}
+
+.host {
+  color: var(--admin-muted);
+  white-space: nowrap;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--admin-space-2);
+}
+
+.category {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--admin-muted);
+}
+
+.save {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-space-3);
+}
+
+.row[data-hidden] .rowTitle {
+  color: var(--admin-muted);
+  text-decoration: line-through;
+}

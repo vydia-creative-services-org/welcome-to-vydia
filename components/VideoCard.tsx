@@ -1,7 +1,7 @@
 'use client'
 import {X} from 'lucide-react'
 import {useRef} from 'react'
-import type {ResourceCardData} from '@/lib/sanity/types'
+import type {ResourceCardData} from '@/lib/resources/types'
 import {CardBody} from './CardBody'
 import cardStyles from './ResourceCard.module.css'
 import styles from './VideoCard.module.css'

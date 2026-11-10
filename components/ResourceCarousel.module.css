@@ -296,6 +296,15 @@
   animation: title-in 320ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
+.titleType {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  opacity: 0.87;
+}
+
 @media (max-width: 768px) {
   .carousel {
     --pad-top: 72px;

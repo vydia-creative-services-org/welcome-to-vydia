@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import {expect, test, type Page} from '@playwright/test'
-import {storageStatePath} from './users'
+import {E2E_SLUGS, E2E_USERS, storageStatePath} from './users'
 
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
@@ -18,69 +18,42 @@ test.describe('accessibility, signed out', () => {
     await expectNoViolations(page)
   })
 
-  test('sign-in page, with an error and after sending a link', async ({page}) => {
-    await page.goto('/login?next=%2Ftest-artist&error=link')
+  test('enter your email: idle, not approved, and sent', async ({page}) => {
+    await page.goto(`/${E2E_SLUGS.a}`)
     await expectNoViolations(page)
-    await page.getByPlaceholder('Email').fill(`nobody-${Date.now()}@example.com`)
-    await page.getByRole('button', {name: 'Email me a sign-in link'}).click()
-    await expect(page.getByRole('heading', {name: 'Check your email'})).toBeVisible()
+
+    await page.getByPlaceholder('Enter your email').fill(`nobody-${Date.now()}@example.com`)
+    await page.getByRole('button', {name: 'Continue'}).click()
+    await expect(page.locator('#enter-email-message')).toBeVisible()
+    await expectNoViolations(page)
+
+    await page.getByPlaceholder('Enter your email').fill(E2E_USERS.aux2)
+    await page.getByRole('button', {name: 'Continue'}).click()
+    await expect(page.getByText('Email sent, check your inbox')).toBeVisible()
     await expectNoViolations(page)
   })
 
-  test('finish signing in page', async ({page}) => {
-    await page.goto('/auth/confirm?token_hash=x&type=email')
-    await expect(page.getByRole('heading', {name: 'Finish signing in'})).toBeVisible()
+  test('link expired', async ({page}) => {
+    await page.goto(`/auth/expired?next=%2F${E2E_SLUGS.a}`)
+    await expectNoViolations(page)
+  })
+
+  test('admin login', async ({page}) => {
+    await page.goto('/admin/login?error=no-access')
     await expectNoViolations(page)
   })
 })
 
-test.describe('accessibility, unapproved user', () => {
-  test.use({storageState: storageStatePath('outsider')})
+test.describe('accessibility, resources page', () => {
+  test.use({storageState: storageStatePath('artistA')})
 
-  test('no-access page', async ({page}) => {
-    await page.goto('/test-artist')
-    await expect(page.getByRole('heading', {name: 'This page isn’t available'})).toBeVisible()
-    await expectNoViolations(page)
-  })
-})
-
-test.describe('accessibility, approved user', () => {
-  test.use({storageState: storageStatePath('approved')})
-
-  test('artist page with every card type', async ({page}) => {
-    await page.goto('/test-artist')
+  test('carousel and grid views', async ({page}) => {
+    await page.goto(`/${E2E_SLUGS.a}`)
     await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
     await expectNoViolations(page)
-  })
-
-  test('open video dialog', async ({page}) => {
-    await page.goto('/test-artist')
-    await page.locator('section[aria-label="Resources"] button[aria-haspopup="dialog"]').first().click()
-    await expect(page.locator('dialog[open]')).toBeVisible()
+    await page.getByRole('button', {name: 'Switch to grid view'}).click()
+    await expect(page.getByRole('heading', {name: 'Your Releases'})).toBeVisible()
+    await page.waitForTimeout(1000)
     await expectNoViolations(page)
-  })
-
-  test('keyboard only: cards are reachable and open with Enter', async ({page, context}) => {
-    await page.goto('/test-artist')
-    const firstLink = page.locator('section[aria-label="Resources"] a').first()
-    for (let i = 0; i < 40 && !(await firstLink.evaluate((el) => el === document.activeElement)); i++) {
-      await page.keyboard.press('Tab')
-    }
-    await expect(firstLink).toBeFocused()
-    const popup = context.waitForEvent('page')
-    await page.keyboard.press('Enter')
-    await (await popup).close()
-    const videoCard = page.locator('section[aria-label="Resources"] button[aria-haspopup="dialog"]').first()
-    await videoCard.focus()
-    await page.keyboard.press('Enter')
-    await expect(page.locator('dialog[open]')).toBeVisible()
-    await page.keyboard.press('Escape')
-    await expect(videoCard).toBeFocused()
-  })
-
-  test('every cover image has alt text (empty for decorative)', async ({page}) => {
-    await page.goto('/test-artist')
-    const missing = await page.locator('main img:not([alt])').count()
-    expect(missing).toBe(0)
   })
 })

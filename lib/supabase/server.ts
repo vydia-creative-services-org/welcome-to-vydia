@@ -3,12 +3,15 @@ import {createServerClient} from '@supabase/ssr'
 import {cookies} from 'next/headers'
 import {connection} from 'next/server'
 import {SUPABASE_KEY, SUPABASE_URL} from '@/lib/env'
+import type {Database} from './database.types'
+
+export type ServerClient = Awaited<ReturnType<typeof createClient>>
 
 export async function createClient() {
   // Supabase checks token expiry against Date.now(), which Next only allows at request time.
   await connection()
   const cookieStore = await cookies()
-  return createServerClient(SUPABASE_URL, SUPABASE_KEY, {
+  return createServerClient<Database>(SUPABASE_URL, SUPABASE_KEY, {
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll: (toSet) => {

@@ -1,0 +1,48 @@
+.page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: var(--admin-space-5);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--admin-space-4);
+  width: 100%;
+  max-width: 400px;
+  padding: var(--admin-space-6);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.error {
+  padding: var(--admin-space-3) var(--admin-space-4);
+  color: var(--admin-danger);
+  background: var(--admin-danger-bg);
+  border-radius: var(--admin-radius);
+  font-weight: 500;
+}
+
+.google {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--admin-space-4);
+  color: var(--admin-accent-text);
+  background: var(--admin-accent);
+  border: 1px solid var(--admin-accent);
+  border-radius: var(--admin-radius);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.google:hover {
+  background: #000;
+}

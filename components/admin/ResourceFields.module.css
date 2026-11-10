@@ -1,0 +1,41 @@
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--admin-space-5);
+}
+
+.types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--admin-space-2) var(--admin-space-5);
+}
+
+.types legend {
+  margin-bottom: var(--admin-space-2);
+}
+
+.radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--admin-space-2);
+}
+
+.current,
+.preview {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-space-3);
+}
+
+.fileName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.thumb {
+  object-fit: cover;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+}

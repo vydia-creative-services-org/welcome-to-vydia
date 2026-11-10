@@ -1,0 +1,108 @@
+/* Centered on the viewport itself; the header and footer are fixed overlays and don't take part. */
+.panel {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  overflow-y: auto;
+}
+
+.panel > :not(h1) {
+  width: 100%;
+  max-width: 384px;
+}
+
+.fields {
+  position: relative;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.input {
+  min-height: 44px;
+  font-size: 16px;
+  box-shadow:
+    0 0 24px rgb(255 255 255 / 0.15),
+    inset 0 0 24px rgb(255 255 255 / 0.1);
+  background-color: transparent;
+}
+
+.form button {
+  min-height: 44px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Muted until the email looks valid; stays clickable so the browser can still point at a bad address. */
+.send {
+  position: relative;
+  opacity: 0.4;
+  transition:
+    opacity 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.send[data-ready] {
+  opacity: 1;
+  box-shadow: 0 0 24px rgb(255 255 255 / 0.15);
+}
+
+.resend {
+  position: relative;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+/* Sending keeps the button exactly as it was; only the spinner appears. */
+.form .send:disabled,
+.form .resend[data-pending]:disabled {
+  opacity: 1;
+  cursor: progress;
+}
+
+.spinner {
+  /* Out of flow, so the label never shifts. */
+  position: absolute;
+  top: 50%;
+  left: var(--space-4);
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sent {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.panel .message {
+  /* Hangs below the form so it never pushes the input or button around. */
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  margin-top: var(--space-3);
+  text-align: center;
+  line-height: 1.5;
+  color: #ff7b7b;
+}

@@ -1,102 +1,94 @@
-import {encodeSignatureHeader, SIGNATURE_HEADER_NAME} from '@sanity/webhook'
-import {getCliClient} from 'sanity/cli'
-import {E2E_PERSONAS, E2E_USERS} from '../tests/e2e/users'
+import {adminClient, personaEmails} from '../tests/e2e/admin-client'
+import {E2E_NAMES, E2E_SLUGS, E2E_TITLES, E2E_USERS} from '../tests/e2e/users'
 
-type AdminUser = {id: string; email?: string}
-type AdminUserList = {users: AdminUser[]}
+const supabase = adminClient()
+const slugs = [E2E_SLUGS.a, E2E_SLUGS.b]
 
-const sanity = getCliClient({apiVersion: '2025-02-19'})
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-if (!supabaseUrl || !serviceKey) throw new Error('NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.')
+async function teardown() {
+  const {data: exclusives} = await supabase
+    .from('resources')
+    .select('file, artist_id, artists!inner(slug)')
+    .in('artists.slug', slugs)
+  const files = (exclusives ?? []).flatMap((row) => (row.file ? [row.file] : []))
+  if (files.length) await supabase.storage.from('resource-files').remove(files)
 
-const headers = {apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json'}
-const approvedEmail = E2E_USERS.approved
-const artistsWithAccess = ['test-artist', 'test-renamed']
+  await supabase.from('artists').delete().in('slug', slugs)
+  await supabase.from('resources').delete().like('title', 'E2E %').is('artist_id', null)
 
-async function findUser(email: string): Promise<AdminUser | undefined> {
-  const response = await fetch(`${supabaseUrl}/auth/v1/admin/users?per_page=1000`, {headers})
-  const list: AdminUserList = await response.json()
-  return list.users.find((user) => user.email === email)
-}
-
-async function upsertUser(email: string) {
-  const existing = await findUser(email)
-  const response = existing
-    ? await fetch(`${supabaseUrl}/auth/v1/admin/users/${existing.id}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({email_confirm: true}),
-      })
-    : await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({email, email_confirm: true}),
-      })
-  if (!response.ok) throw new Error(`Could not create ${email}: ${response.status} ${await response.text()}`)
-  console.log(`${existing ? 'updated' : 'created'} ${email}`)
-}
-
-async function deleteUser(email: string) {
-  const existing = await findUser(email)
-  if (!existing) return
-  await fetch(`${supabaseUrl}/auth/v1/admin/users/${existing.id}`, {method: 'DELETE', headers})
-  console.log(`deleted ${email}`)
-}
-
-async function revalidateArtists() {
-  const secret = process.env.SANITY_REVALIDATE_SECRET
-  const baseUrl = process.env.E2E_BASE_URL ?? 'http://localhost:3000'
-  if (!secret) return console.warn('SANITY_REVALIDATE_SECRET not set: skipping cache revalidation.')
-  const payload = JSON.stringify({_type: 'artist'})
-  try {
-    const response = await fetch(`${baseUrl}/api/revalidate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        [SIGNATURE_HEADER_NAME]: await encodeSignatureHeader(payload, Date.now(), secret),
-      },
-      body: payload,
-    })
-    console.log(`revalidated artist cache on ${baseUrl}: ${response.status}`)
-  } catch {
-    console.warn(`${baseUrl} is not reachable: start the app, or rely on the Sanity webhook to revalidate.`)
+  const {data} = await supabase.auth.admin.listUsers({page: 1, perPage: 1000})
+  for (const user of data?.users ?? []) {
+    if (user.email && personaEmails.some((email) => email === user.email)) await supabase.auth.admin.deleteUser(user.id)
   }
 }
 
-async function artistIds() {
-  return sanity.fetch<string[]>('*[_type == "artist" && slug.current in $slugs]._id', {slugs: artistsWithAccess})
+async function insertArtist(name: string, slug: string, emails: {email: string; label: string; primary: boolean}[]) {
+  const {data, error} = await supabase.from('artists').insert({name, slug}).select('id').single()
+  if (error) throw error
+  const {error: emailError} = await supabase
+    .from('artist_emails')
+    .insert(emails.map((e) => ({artist_id: data.id, email: e.email, label: e.label, is_primary: e.primary})))
+  if (emailError) throw emailError
+  return data.id
 }
 
 async function setup() {
-  for (const persona of E2E_PERSONAS) await upsertUser(E2E_USERS[persona])
-  for (const id of await artistIds()) {
-    const emails = await sanity.fetch<string[] | null>('*[_id == $id][0].allowedEmails', {id})
-    if ((emails ?? []).some((email) => email.toLowerCase() === approvedEmail)) continue
-    await sanity
-      .patch(id)
-      .setIfMissing({allowedEmails: []})
-      .insert('after', 'allowedEmails[-1]', [approvedEmail])
-      .commit()
-    console.log(`allowed ${approvedEmail} on ${id}`)
-  }
-  await revalidateArtists()
-}
+  await teardown()
 
-async function teardown() {
-  for (const id of await artistIds()) {
-    await sanity
-      .patch(id)
-      .unset([`allowedEmails[@ == "${approvedEmail}"]`])
-      .commit()
-  }
-  console.log(`removed ${approvedEmail} from ${artistsWithAccess.join(', ')}`)
-  await revalidateArtists()
-  for (const persona of E2E_PERSONAS) await deleteUser(E2E_USERS[persona])
+  const artistA = await insertArtist(E2E_NAMES.a, E2E_SLUGS.a, [
+    {email: E2E_USERS.artistA, label: 'Artist', primary: true},
+    {email: E2E_USERS.manager, label: 'Manager', primary: false},
+    {email: E2E_USERS.aux2, label: 'Alt', primary: false},
+  ])
+  await insertArtist(E2E_NAMES.b, E2E_SLUGS.b, [{email: E2E_USERS.artistB, label: 'Artist', primary: true}])
+
+  const {data: main, error} = await supabase
+    .from('resources')
+    .insert([
+      {title: E2E_TITLES.mainOne, type: 'link', url: 'https://example.com/e2e-one', category: 'Getting Started'},
+      {title: E2E_TITLES.mainTwo, type: 'link', url: 'https://example.com/e2e-two', category: 'getting started'},
+    ])
+    .select('id, title')
+  if (error) throw error
+  const hidden = main.find((row) => row.title === E2E_TITLES.mainTwo)
+  if (!hidden) throw new Error('The hidden main resource was not created.')
+  const {error: hideError} = await supabase
+    .from('artist_hidden_resources')
+    .insert({artist_id: artistA, resource_id: hidden.id})
+  if (hideError) throw hideError
+
+  const videoId = crypto.randomUUID()
+  const videoPath = `${videoId}/file-e2e.mp4`
+  const {error: uploadError} = await supabase.storage
+    .from('resource-files')
+    .upload(videoPath, new Blob([new Uint8Array(2048)], {type: 'video/mp4'}), {contentType: 'video/mp4'})
+  if (uploadError) throw uploadError
+
+  const {error: exclusiveError} = await supabase.from('resources').insert([
+    {
+      id: crypto.randomUUID(),
+      artist_id: artistA,
+      title: E2E_TITLES.exclusive,
+      type: 'link',
+      url: 'https://example.com/e2e-a',
+      category: 'Your Releases',
+    },
+    {
+      id: videoId,
+      artist_id: artistA,
+      title: E2E_TITLES.video,
+      type: 'video',
+      file: videoPath,
+      category: 'Your Releases',
+    },
+  ])
+  if (exclusiveError) throw exclusiveError
+  console.log('e2e fixtures ready')
 }
 
 const run = process.argv.includes('teardown') ? teardown : setup
-run().catch((error) => {
-  console.error(error)
-  process.exit(1)
-})
+run()
+  .then(() => process.argv.includes('teardown') && console.log('e2e fixtures removed'))
+  .catch((error) => {
+    console.error(error)
+    process.exit(1)
+  })

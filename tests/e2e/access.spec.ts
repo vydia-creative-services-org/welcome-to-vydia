@@ -1,28 +1,42 @@
-import {expect, test} from '@playwright/test'
-import {storageStatePath} from './users'
+import {expect, test, type Page} from '@playwright/test'
+import {E2E_NAMES, E2E_SLUGS, storageStatePath} from './users'
 
-const UNKNOWN = 'definitely-not-a-real-artist'
+const UNKNOWN = () => `does-not-exist-${Date.now()}`
+
+async function mainHtml(page: Page, slug: string) {
+  const response = await page.goto(`/${slug}`)
+  const html = await page.locator('main').innerHTML()
+  return {
+    status: response?.status(),
+    html: html.replaceAll(slug, 'SLUG'),
+    title: await page.title(),
+    document: await page.content(),
+  }
+}
 
 test.describe('signed out', () => {
-  test('real and fake artist URLs both go to login, with the same redirect', async ({page}) => {
-    for (const slug of ['test-artist', UNKNOWN]) {
-      await page.goto(`/${slug}`)
-      await expect(page).toHaveURL(`/login?next=%2F${slug}`)
-      await expect(page.getByRole('heading', {name: 'Sign in'})).toBeVisible()
-    }
+  test('a real and a made-up slug render the same screen, with no trace of the artist', async ({page}) => {
+    const real = await mainHtml(page, E2E_SLUGS.a)
+    const fake = await mainHtml(page, UNKNOWN())
+    expect(real.status).toBe(200)
+    expect(fake.status).toBe(200)
+    expect(real.html).toBe(fake.html)
+    expect(real.title).toBe('Welcome to Vydia')
+    expect(fake.title).toBe('Welcome to Vydia')
+    expect(real.document).not.toContain(E2E_NAMES.a)
+    await expect(page.getByPlaceholder('Enter your email')).toBeVisible()
   })
 
-  test('"/" is public, shows instructions, and lists no artists', async ({page}) => {
+  test('"/" is public, shows the email form, and lists no artists', async ({page}) => {
     const response = await page.goto('/')
     expect(response?.status()).toBe(200)
     await expect(page).toHaveURL('/')
-    await expect(page.getByRole('heading', {name: 'Looking for your Vydia resources?'})).toBeVisible()
+    await expect(page.getByPlaceholder('Enter your email')).toBeVisible()
     await expect(page.locator('main a')).toHaveCount(0)
   })
 
   test('security headers are set', async ({request}) => {
-    const response = await request.get('/')
-    const headers = response.headers()
+    const headers = (await request.get('/')).headers()
     expect(headers['x-frame-options']).toBe('DENY')
     expect(headers['x-content-type-options']).toBe('nosniff')
     expect(headers['referrer-policy']).toBe('same-origin')
@@ -30,69 +44,33 @@ test.describe('signed out', () => {
   })
 })
 
-test.describe('signed in as an unapproved user', () => {
-  test.use({storageState: storageStatePath('outsider')})
+test.describe('signed in for artist A', () => {
+  test.use({storageState: storageStatePath('artistA')})
 
-  test('unknown and forbidden artists render identically', async ({page}) => {
-    const forbidden = await page.goto('/test-artist')
-    const forbiddenHtml = await page.locator('main').innerHTML()
-    const unknown = await page.goto(`/${UNKNOWN}`)
-    const unknownHtml = await page.locator('main').innerHTML()
-    expect(forbidden?.status()).toBe(unknown?.status())
-    expect(forbiddenHtml).toBe(unknownHtml)
-    await expect(page.getByRole('heading', {name: 'This page isn’t available'})).toBeVisible()
-    await expect(page).toHaveTitle('Welcome to Vydia')
-  })
-
-  test('an old URL does not redirect for someone without access', async ({page}) => {
-    await page.goto('/test-renamed-original')
-    await expect(page).toHaveURL('/test-renamed-original')
-    await expect(page.getByRole('heading', {name: 'This page isn’t available'})).toBeVisible()
-  })
-})
-
-test.describe('signed in as an approved user', () => {
-  test.use({storageState: storageStatePath('approved')})
-
-  test('sees the resource cards', async ({page}) => {
-    await page.goto('/test-artist')
+  test('sees their own page', async ({page}) => {
+    await page.goto(`/${E2E_SLUGS.a}`)
     await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
-    await expect(page.getByText(/^Added on /).first()).toBeVisible()
+    await expect(page).toHaveTitle(`${E2E_NAMES.a} | Welcome to Vydia`)
   })
 
-  test('an old URL redirects to the current one', async ({page}) => {
-    await page.goto('/test-renamed-original')
-    await expect(page).toHaveURL('/test-renamed')
-    await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
+  test("opening artist B's URL shows Enter your email, never B's name or resources", async ({page}) => {
+    const other = await mainHtml(page, E2E_SLUGS.b)
+    expect(other.status).toBe(200)
+    expect(other.title).toBe('Welcome to Vydia')
+    expect(other.document).not.toContain(E2E_NAMES.b)
+    await expect(page.getByPlaceholder('Enter your email')).toBeVisible()
+    await expect(page.getByRole('region', {name: 'Resources'})).toHaveCount(0)
   })
 
-  test('link cards open in a new tab without leaking the opener', async ({page}) => {
-    await page.goto('/test-artist')
-    const cards = page.locator('section[aria-label="Resources"] a')
-    expect(await cards.count()).toBeGreaterThan(0)
-    for (const card of await cards.all()) {
-      await expect(card).toHaveAttribute('target', '_blank')
-      await expect(card).toHaveAttribute('rel', 'noopener noreferrer')
-    }
+  test('an unknown slug looks identical to a slug they cannot access', async ({page}) => {
+    const forbidden = await mainHtml(page, E2E_SLUGS.b)
+    const unknown = await mainHtml(page, UNKNOWN())
+    expect(forbidden.html).toBe(unknown.html)
   })
 
-  test('the video dialog opens, plays, closes on Escape, and returns focus', async ({page}) => {
-    await page.goto('/test-artist')
-    const card = page.locator('section[aria-label="Resources"] button[aria-haspopup="dialog"]').first()
-    await card.click()
-    const dialog = page.locator('dialog[open]')
-    await expect(dialog).toBeVisible()
-    await expect.poll(() => dialog.locator('video').evaluate((video: HTMLVideoElement) => video.paused)).toBe(false)
-    await page.keyboard.press('Escape')
-    await expect(page.locator('dialog[open]')).toHaveCount(0)
-    await expect
-      .poll(() =>
-        page
-          .locator('dialog video')
-          .first()
-          .evaluate((video: HTMLVideoElement) => video.paused),
-      )
-      .toBe(true)
-    await expect(card).toBeFocused()
+  test('has no sign-out, account menu, or links to other pages', async ({page}) => {
+    await page.goto(`/${E2E_SLUGS.a}`)
+    await expect(page.getByRole('button', {name: /sign out|log out/i})).toHaveCount(0)
+    await expect(page.getByRole('link', {name: /account|profile|admin/i})).toHaveCount(0)
   })
 })

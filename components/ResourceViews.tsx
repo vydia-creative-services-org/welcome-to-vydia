@@ -1,21 +1,16 @@
 'use client'
-import type {ResourceCardData} from '@/lib/sanity/types'
+import type {CategoryGroup} from '@/lib/resources/group'
+import type {ResourceCardData} from '@/lib/resources/types'
 import {ResourceCarousel} from './ResourceCarousel'
 import {ResourceGrid} from './ResourceGrid'
 import {useViewMode} from './ViewMode'
 
-export function ResourceViews({
-  resources,
-  additionalInfo,
-}: {
-  resources: ResourceCardData[]
-  /** Shown below the grid; the carousel fills the screen, so there's no room for it there. */
-  additionalInfo?: React.ReactNode
-}) {
+export function ResourceViews({groups}: {groups: CategoryGroup<ResourceCardData>[]}) {
   const viewMode = useViewMode()
+  const resources = groups.flatMap((group) => group.items)
   if (!resources.length) return null
 
-  if (viewMode?.view === 'grid') return <ResourceGrid resources={resources} additionalInfo={additionalInfo} />
+  if (viewMode?.view === 'grid') return <ResourceGrid groups={groups} />
 
   return <ResourceCarousel resources={resources} />
 }

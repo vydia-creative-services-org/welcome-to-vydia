@@ -1,0 +1,113 @@
+'use client'
+import {useState, type Dispatch, type SetStateAction} from 'react'
+import {newDraft, validateDraft, type DraftErrors, type ResourceDraft} from '@/lib/admin/drafts'
+import {typeLabel} from '@/components/TypeLabel'
+import controls from './controls.module.css'
+import styles from './ResourceEditor.module.css'
+import {ResourceFields} from './ResourceFields'
+
+type Props = {
+  drafts: ResourceDraft[]
+  setDrafts: Dispatch<SetStateAction<ResourceDraft[]>>
+  categories: string[]
+  serverErrors: Partial<Record<string, DraftErrors>>
+}
+
+export function ResourceEditor({drafts, setDrafts, categories, serverErrors}: Props) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [snapshot, setSnapshot] = useState<ResourceDraft | null>(null)
+  const [shownErrors, setShownErrors] = useState<Partial<Record<string, DraftErrors>>>({})
+
+  const update = (id: string) => (change: (draft: ResourceDraft) => ResourceDraft) =>
+    setDrafts((list) => list.map((draft) => (draft.id === id ? change(draft) : draft)))
+
+  const add = () => {
+    const draft = newDraft()
+    setDrafts((list) => [...list, draft])
+    setSnapshot(null)
+    setEditingId(draft.id)
+  }
+
+  const edit = (draft: ResourceDraft) => {
+    setSnapshot(draft)
+    setEditingId(draft.id)
+  }
+
+  const finish = (draft: ResourceDraft) => {
+    const errors = validateDraft(draft)
+    setShownErrors((current) => ({...current, [draft.id]: errors}))
+    if (Object.keys(errors).length === 0) setEditingId(null)
+  }
+
+  const cancel = (draft: ResourceDraft) => {
+    setDrafts((list) =>
+      snapshot
+        ? list.map((item) => (item.id === draft.id ? snapshot : item))
+        : list.filter((item) => item.id !== draft.id),
+    )
+    setShownErrors((current) => ({...current, [draft.id]: {}}))
+    setEditingId(null)
+  }
+
+  return (
+    <div className={styles.editor}>
+      <ul className={controls.rows}>
+        {drafts.map((draft) => {
+          const editing = editingId === draft.id
+          const errors = {...serverErrors[draft.id], ...shownErrors[draft.id]}
+          return (
+            <li key={draft.id} className={editing ? undefined : controls.row}>
+              {editing ? (
+                <div className={styles.panel}>
+                  <ResourceFields draft={draft} onChange={update(draft.id)} categories={categories} errors={errors} />
+                  <div className={controls.rowActions}>
+                    <button
+                      type="button"
+                      className={`${controls.button} ${controls.primary}`}
+                      disabled={draft.uploads > 0}
+                      onClick={() => finish(draft)}
+                    >
+                      Done
+                    </button>
+                    <button type="button" className={`${controls.button}`} onClick={() => cancel(draft)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <span className={controls.rowTitle}>{draft.title || 'Untitled'}</span>
+                  {Object.keys(errors).length > 0 ? (
+                    <span role="alert" className={controls.error}>
+                      Needs attention
+                    </span>
+                  ) : (
+                    <span className={controls.hint}>{typeLabel(draft.type)}</span>
+                  )}
+                  <div className={controls.rowActions}>
+                    <button type="button" className={`${controls.button}`} onClick={() => edit(draft)}>
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className={`${controls.button} ${controls.danger}`}
+                      aria-label={`Delete ${draft.title || 'resource'}`}
+                      onClick={() => setDrafts((list) => list.filter((item) => item.id !== draft.id))}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      <div>
+        <button type="button" className={`${controls.button}`} onClick={add} disabled={editingId !== null}>
+          Add artist-specific resource
+        </button>
+      </div>
+    </div>
+  )
+}

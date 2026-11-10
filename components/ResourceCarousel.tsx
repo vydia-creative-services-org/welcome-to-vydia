@@ -1,8 +1,7 @@
 'use client'
 import Image from 'next/image'
 import {useEffect, useEffectEvent, useLayoutEffect, useRef, useState} from 'react'
-import {coverSource, urlFor} from '@/lib/sanity/image'
-import type {ResourceCardData} from '@/lib/sanity/types'
+import type {ResourceCardData} from '@/lib/resources/types'
 import styles from './ResourceCarousel.module.css'
 import {ResourceCard} from './ResourceCard'
 import {useScrollInertia} from './useScrollInertia'
@@ -11,14 +10,9 @@ import {useViewMode} from './ViewMode'
 /** Backdrop layers kept mounted so outgoing ones can finish fading while new ones fade in. */
 const MAX_BACKDROP_LAYERS = 4
 
-/**
- * The cover shown behind the carousel: the full image, plus its tiny blurred placeholder (shipped with
- * the page) to show instantly while the full one loads.
- */
 function backdropSrc(resource: ResourceCardData): {full: string; placeholder?: string} | null {
-  const source = resource.cover && coverSource(resource.cover)
-  if (!source) return null
-  return {full: urlFor(source).width(2000).fit('max').url(), placeholder: resource.cover?.asset?.lqip ?? undefined}
+  if (!resource.cover) return null
+  return {full: resource.cover.src, placeholder: resource.cover.lqip ?? undefined}
 }
 
 /** Quiet time after which a horizontal wheel gesture (incl. trackpad momentum) is over. */
@@ -62,11 +56,11 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
   // the view transition captures it (useScrollInertia then starts from this scroll position too).
   const viewMode = useViewMode()
   useEffect(() => {
-    viewMode?.setFocus(resources[current]._id)
+    viewMode?.setFocus(resources[current].id)
   }, [current, resources, viewMode])
   const openOnFocus = useEffectEvent(() => {
     const el = scroller.current
-    const index = resources.findIndex((resource) => resource._id === viewMode?.getFocus())
+    const index = resources.findIndex((resource) => resource.id === viewMode?.getFocus())
     if (!el || index <= 0) return
     cell.current = el.querySelector<HTMLElement>('[data-snap="1"]')?.offsetTop || 1
     el.scrollTop = index * cell.current
@@ -225,12 +219,12 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
   // Crossfade: each newly active resource adds a layer on top; older layers fade out underneath.
   // Updating state during render (rather than in an effect) avoids a frame with the wrong layer.
   // `n` keys each layer, since A → B → A can briefly mount two layers for the same resource.
-  const [backdrops, setBackdrops] = useState(() => [{id: activeResource._id, n: 0, src: backdropSrc(activeResource)}])
+  const [backdrops, setBackdrops] = useState(() => [{id: activeResource.id, n: 0, src: backdropSrc(activeResource)}])
   const top = backdrops[backdrops.length - 1]
-  if (top.id !== activeResource._id) {
+  if (top.id !== activeResource.id) {
     setBackdrops([
       ...backdrops.slice(1 - MAX_BACKDROP_LAYERS),
-      {id: activeResource._id, n: top.n + 1, src: backdropSrc(activeResource)},
+      {id: activeResource.id, n: top.n + 1, src: backdropSrc(activeResource)},
     ])
   }
 
@@ -272,7 +266,7 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
               const isActive = index === current
               return (
                 <div
-                  key={resource._id}
+                  key={resource.id}
                   className={styles.slide}
                   aria-roledescription="slide"
                   aria-label={`${index + 1} of ${resources.length}`}
@@ -285,7 +279,7 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
                   <div
                     inert={!isActive}
                     className={styles.card}
-                    data-morph-id={resource._id}
+                    data-morph-id={resource.id}
                     data-morph-depth={Math.abs(index - current)}
                   >
                     <ResourceCard resource={resource} hideTitle />
@@ -310,7 +304,7 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
         <div ref={track} className={styles.track} aria-hidden>
           {resources.map((resource, index) => (
             <span
-              key={resource._id}
+              key={resource.id}
               data-snap={index}
               className={styles.snap}
               style={{'--i': index} as React.CSSProperties}
@@ -323,6 +317,7 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
         {/* Keyed so each new title remounts and replays its entrance. */}
         <span key={current} className={styles.titleText}>
           {activeResource.title}
+          <span className={styles.titleType}>{activeResource.category}</span>
         </span>
       </h2>
     </section>

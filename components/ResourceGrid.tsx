@@ -1,17 +1,13 @@
 'use client'
 import {useLayoutEffect, useRef} from 'react'
-import type {ResourceCardData} from '@/lib/sanity/types'
+import type {CategoryGroup} from '@/lib/resources/group'
+import type {ResourceCardData} from '@/lib/resources/types'
 import {ResourceCard} from './ResourceCard'
+import categories from './ResourceCategories.module.css'
 import styles from './ResourceViews.module.css'
 import {useViewMode} from './ViewMode'
 
-export function ResourceGrid({
-  resources,
-  additionalInfo,
-}: {
-  resources: ResourceCardData[]
-  additionalInfo?: React.ReactNode
-}) {
+export function ResourceGrid({groups}: {groups: CategoryGroup<ResourceCardData>[]}) {
   const scroller = useRef<HTMLDivElement>(null)
   const viewMode = useViewMode()
 
@@ -28,19 +24,21 @@ export function ResourceGrid({
   return (
     <div ref={scroller} className={styles.gridScroller}>
       <section aria-label="Resources">
-        <ul className={styles.grid}>
-          {resources.map((resource) => (
-            <li key={resource._id} className={styles.item} data-morph-id={resource._id}>
-              <ResourceCard resource={resource} />
-            </li>
-          ))}
-        </ul>
+        {groups.map((group, index) => (
+          <section key={group.key} aria-labelledby={`category-${index}`} className={categories.category}>
+            <h2 id={`category-${index}`} className={categories.categoryTitle}>
+              {group.category}
+            </h2>
+            <ul className={styles.grid}>
+              {group.items.map((resource) => (
+                <li key={resource.id} className={styles.item} data-morph-id={resource.id}>
+                  <ResourceCard resource={resource} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
       </section>
-      {additionalInfo && (
-        <section aria-label="Additional information" className={styles.additionalInfo}>
-          {additionalInfo}
-        </section>
-      )}
     </div>
   )
 }

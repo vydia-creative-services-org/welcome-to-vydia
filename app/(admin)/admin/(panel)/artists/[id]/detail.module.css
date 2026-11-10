@@ -1,0 +1,15 @@
+.heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--admin-space-4);
+}
+
+.actions {
+  display: flex;
+  gap: var(--admin-space-2);
+}
+
+.danger {
+  padding-top: var(--admin-space-5);
+  border-top: 1px solid var(--admin-border);
+}

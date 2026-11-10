@@ -1,0 +1,64 @@
+.shell {
+  min-height: 100vh;
+}
+
+.bar {
+  background: var(--admin-bg);
+  border-bottom: 1px solid var(--admin-border);
+}
+
+.barInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--admin-space-5);
+  max-width: var(--admin-content-width);
+  margin: 0 auto;
+  padding: 0 var(--admin-space-5);
+  min-height: 56px;
+}
+
+.me {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-space-3);
+  min-width: 0;
+}
+
+.avatar {
+  border-radius: 50%;
+}
+
+.name {
+  overflow: hidden;
+  max-width: 220px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.main {
+  max-width: var(--admin-content-width);
+  margin: 0 auto;
+  padding: var(--admin-space-6) var(--admin-space-5) var(--admin-space-7);
+}
+
+.pageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--admin-space-4);
+  margin-bottom: var(--admin-space-5);
+}
+
+.pageTitle {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--admin-space-5);
+}

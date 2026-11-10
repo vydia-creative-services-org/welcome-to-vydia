@@ -1,28 +1,28 @@
-<!-- Subject: Your Welcome to Vydia sign-in link -->
+<!-- Subject: Open your Welcome to Vydia page -->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 16px;font-family:'Public Sans',Helvetica,Arial,sans-serif;color:#262626;">
   <tr>
     <td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;">
         <tr>
-          <td style="background:#121212;border-radius:12px 12px 0 0;padding:24px;text-align:center;color:#ffffff;font-size:20px;font-weight:600;letter-spacing:0.2em;">
-            VYDIA
+          <td align="center" bgcolor="#121212" style="background:#121212;border-radius:12px 12px 0 0;padding:28px 24px;text-align:center;">
+            <img src="{{ .SiteURL }}/vydia-logo.png" alt="Vydia" width="160" style="display:block;margin:0 auto;width:160px;max-width:100%;height:auto;border:0;" />
           </td>
         </tr>
         <tr>
           <td style="padding:32px 24px;">
-            <h1 style="margin:0 0 12px;font-size:20px;font-weight:600;">Sign in to Welcome to Vydia</h1>
+            <h1 style="margin:0 0 12px;font-size:20px;font-weight:600;">Open your Welcome to Vydia page</h1>
             <p style="margin:0 0 24px;font-size:16px;line-height:1.5;color:#404040;">
-              Use this button to sign in as {{ .Email }}. It works once and expires in 1 hour. Open it in the browser you
-              want to stay signed in on.
+              Use this button to open your page as {{ .Email }}. This link works once and expires in 1 hour. Open it in the
+              browser you want to stay signed in on.
             </p>
             <p style="margin:0 0 24px;">
               <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&redirect_to={{ .RedirectTo }}"
                  style="display:inline-block;padding:12px 20px;background:#121212;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;">
-                Sign in
+                Open my page
               </a>
             </p>
             <p style="margin:0;font-size:14px;line-height:1.5;color:#6b7280;">
-              If you didn’t ask to sign in, you can ignore this email.
+              If you didn’t ask for this link, you can ignore this email.
             </p>
           </td>
         </tr>

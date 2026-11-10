@@ -1,22 +1,20 @@
 import Image from 'next/image'
-import {coverSource, urlFor} from '@/lib/sanity/image'
-import type {ResourceCardData} from '@/lib/sanity/types'
+import type {ResourceCardData} from '@/lib/resources/types'
 import styles from './CardCover.module.css'
 
 export function CardCover({resource}: {resource: ResourceCardData}) {
   const {cover, title} = resource
-  const source = cover && coverSource(cover)
-  if (cover && source) {
-    const lqip = cover.asset?.lqip ?? undefined
+  if (cover) {
     return (
       <Image
-        src={urlFor(source).maxWidth(800).maxHeight(450).fit('max').url()}
-        alt={cover.alt ?? ''}
+        src={cover.src}
+        alt={cover.alt}
         fill
         sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
         className={styles.image}
-        placeholder={lqip ? 'blur' : 'empty'}
-        blurDataURL={lqip}
+        style={{objectPosition: cover.position}}
+        placeholder={cover.lqip ? 'blur' : 'empty'}
+        blurDataURL={cover.lqip ?? undefined}
       />
     )
   }
