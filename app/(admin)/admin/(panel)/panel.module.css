@@ -3,7 +3,7 @@
 }
 
 .bar {
-  background: var(--admin-surface);
+  background: var(--admin-bg);
   border-bottom: 1px solid var(--admin-border);
 }
 
@@ -15,7 +15,7 @@
   max-width: var(--admin-content-width);
   margin: 0 auto;
   padding: 0 var(--admin-space-5);
-  min-height: 60px;
+  min-height: 56px;
 }
 
 .me {
@@ -37,20 +37,6 @@
   text-overflow: ellipsis;
 }
 
-.signOut {
-  padding: var(--admin-space-2) var(--admin-space-3);
-  color: var(--admin-muted);
-  background: none;
-  border: 1px solid var(--admin-border);
-  border-radius: var(--admin-radius);
-  cursor: pointer;
-}
-
-.signOut:hover {
-  color: var(--admin-text);
-  border-color: var(--admin-border-strong);
-}
-
 .main {
   max-width: var(--admin-content-width);
   margin: 0 auto;
@@ -66,14 +52,9 @@
 }
 
 .pageTitle {
-  font-size: 26px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 600;
   line-height: 1.2;
-}
-
-.pageNote {
-  margin: calc(var(--admin-space-3) * -1) 0 var(--admin-space-5);
-  color: var(--admin-muted);
 }
 
 .stack {

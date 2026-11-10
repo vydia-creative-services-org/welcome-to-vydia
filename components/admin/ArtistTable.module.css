@@ -28,10 +28,12 @@
 
 .table th {
   color: var(--admin-muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.table tbody tr:hover {
+  background: var(--admin-hover);
 }
 
 .table tbody tr:last-child td {
@@ -39,17 +41,17 @@
 }
 
 .name {
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .email {
-  max-width: 260px;
+  max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.number {
+.copy {
   text-align: right !important;
 }
 
@@ -67,8 +69,7 @@
 }
 
 .emptyTitle {
-  font-size: 18px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .none {

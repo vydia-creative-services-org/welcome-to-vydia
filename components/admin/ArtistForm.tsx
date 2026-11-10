@@ -41,7 +41,6 @@ export function ArtistForm({initial, mainResources, categories}: Props) {
   const mainIds = useMemo(() => new Set(mainResources.map((resource) => resource.id)), [mainResources])
   const slugChanged = !isNew && slug !== initial.slug
   const uploading = exclusives.some((draft) => draft.uploads > 0)
-  const hiddenCount = [...hidden].filter((id) => mainIds.has(id)).length
 
   const draftErrors = useMemo(() => {
     const byId: Partial<Record<string, DraftErrors>> = {}
@@ -116,10 +115,10 @@ export function ArtistForm({initial, mainResources, categories}: Props) {
       }}
     >
       <section className={`${controls.card} ${styles.section}`}>
-        <h2 className={controls.legend}>Artist</h2>
+        <h2 className={controls.legend}>Details</h2>
         <div className={controls.field}>
           <label htmlFor="artist-name" className={controls.label}>
-            Artist name
+            Name
           </label>
           <input
             id="artist-name"
@@ -147,7 +146,6 @@ export function ArtistForm({initial, mainResources, categories}: Props) {
               value={slug}
               maxLength={60}
               aria-invalid={errors.slug ? true : undefined}
-              aria-describedby="artist-slug-help"
               onChange={(event) => {
                 setSlugTouched(true)
                 setSlug(event.target.value.toLowerCase())
@@ -155,12 +153,9 @@ export function ArtistForm({initial, mainResources, categories}: Props) {
               className={controls.input}
             />
           </div>
-          <p id="artist-slug-help" className={controls.hint}>
-            3 to 60 characters: lowercase letters, numbers, and hyphens.
-          </p>
           {slugChanged && (
             <p role="status" className={controls.error}>
-              The old link will stop working - send the artist the new one.
+              The old link will stop working.
             </p>
           )}
           {errors.slug && (
@@ -172,7 +167,7 @@ export function ArtistForm({initial, mainResources, categories}: Props) {
 
         <div className={controls.field}>
           <label htmlFor="artist-email" className={controls.label}>
-            Primary email
+            Email
           </label>
           <input
             id="artist-email"
@@ -197,42 +192,42 @@ export function ArtistForm({initial, mainResources, categories}: Props) {
         )}
       </section>
 
-      <section className={`${controls.card} ${styles.section}`}>
-        <h2 className={controls.legend}>Main resources</h2>
-        <p className={controls.hint}>
-          Everyone sees these. Remove one to hide it for this artist only.
-          {hiddenCount > 0 && ` ${hiddenCount} hidden for this artist.`}
-        </p>
-        {groups.length === 0 && <p className={controls.hint}>There are no main resources yet.</p>}
-        {groups.map((group) => (
-          <div key={group.key} className={styles.group}>
-            <h3 className={styles.category}>{group.category}</h3>
-            <ul className={styles.resources}>
-              {group.items.map((resource) => {
-                const isHidden = hidden.has(resource.id)
-                return (
-                  <li key={resource.id} className={styles.resource} data-hidden={isHidden || undefined}>
-                    <span className={styles.resourceTitle}>{resource.title}</span>
-                    <span className={controls.hint}>{typeLabel(resource.type)}</span>
-                    <button
-                      type="button"
-                      className={`${controls.button} ${controls.small}`}
-                      aria-label={`${isHidden ? 'Restore' : 'Remove'} ${resource.title}`}
-                      onClick={() => toggleHidden(resource.id)}
+      {groups.length > 0 && (
+        <section className={`${controls.card} ${styles.section}`}>
+          <h2 className={controls.legend}>Resources</h2>
+          {groups.map((group) => (
+            <div key={group.key} className={styles.group}>
+              <h3 className={styles.category}>{group.category}</h3>
+              <ul className={controls.rows}>
+                {group.items.map((resource) => {
+                  const isHidden = hidden.has(resource.id)
+                  return (
+                    <li
+                      key={resource.id}
+                      className={`${controls.row} ${styles.row}`}
+                      data-hidden={isHidden || undefined}
                     >
-                      {isHidden ? 'Restore' : 'Remove'}
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        ))}
-      </section>
+                      <span className={controls.rowTitle}>{resource.title}</span>
+                      <span className={controls.hint}>{typeLabel(resource.type)}</span>
+                      <button
+                        type="button"
+                        className={`${controls.button}`}
+                        aria-label={`${isHidden ? 'Restore' : 'Remove'} ${resource.title}`}
+                        onClick={() => toggleHidden(resource.id)}
+                      >
+                        {isHidden ? 'Restore' : 'Remove'}
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ))}
+        </section>
+      )}
 
       <section className={`${controls.card} ${styles.section}`}>
-        <h2 className={controls.legend}>Exclusive resources</h2>
-        <p className={controls.hint}>Only this artist sees these.</p>
+        <h2 className={controls.legend}>Artist specific</h2>
         <ResourceEditor
           drafts={exclusives}
           setDrafts={setExclusives}
@@ -249,9 +244,8 @@ export function ArtistForm({initial, mainResources, categories}: Props) {
 
       <div className={styles.save}>
         <button className={`${controls.button} ${controls.primary}`} disabled={saving || uploading}>
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? 'Saving…' : uploading ? 'Uploading…' : 'Save'}
         </button>
-        {uploading && <span className={controls.hint}>Wait for uploads to finish.</span>}
       </div>
 
       <ConfirmDialog

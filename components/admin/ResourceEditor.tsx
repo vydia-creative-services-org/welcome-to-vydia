@@ -51,80 +51,61 @@ export function ResourceEditor({drafts, setDrafts, categories, serverErrors}: Pr
 
   return (
     <div className={styles.editor}>
-      {drafts.length === 0 && (
-        <p className={controls.hint}>No exclusive resources. Only the main resources above are shown.</p>
-      )}
-      <ul className={styles.list}>
+      <ul className={controls.rows}>
         {drafts.map((draft) => {
           const editing = editingId === draft.id
           const errors = {...serverErrors[draft.id], ...shownErrors[draft.id]}
           return (
-            <li key={draft.id} className={styles.item}>
+            <li key={draft.id} className={editing ? undefined : controls.row}>
               {editing ? (
                 <div className={styles.panel}>
                   <ResourceFields draft={draft} onChange={update(draft.id)} categories={categories} errors={errors} />
-                  <div className={styles.actions}>
+                  <div className={controls.rowActions}>
                     <button
                       type="button"
-                      className={`${controls.button} ${controls.primary} ${controls.small}`}
+                      className={`${controls.button} ${controls.primary}`}
                       disabled={draft.uploads > 0}
                       onClick={() => finish(draft)}
                     >
                       Done
                     </button>
-                    <button
-                      type="button"
-                      className={`${controls.button} ${controls.small}`}
-                      onClick={() => cancel(draft)}
-                    >
+                    <button type="button" className={`${controls.button}`} onClick={() => cancel(draft)}>
                       Cancel
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className={styles.summary}>
-                  <div className={styles.text}>
-                    <span className={styles.title}>{draft.title || 'Untitled resource'}</span>
-                    <span className={controls.hint}>
-                      {typeLabel(draft.type)} · {draft.category || 'No category'}
+                <>
+                  <span className={controls.rowTitle}>{draft.title || 'Untitled'}</span>
+                  {Object.keys(errors).length > 0 ? (
+                    <span role="alert" className={controls.error}>
+                      Needs attention
                     </span>
-                    {Object.keys(errors).length > 0 && (
-                      <span role="alert" className={controls.error}>
-                        Fix the highlighted fields: edit this resource.
-                      </span>
-                    )}
-                  </div>
-                  <div className={styles.actions}>
-                    <button
-                      type="button"
-                      className={`${controls.button} ${controls.small}`}
-                      onClick={() => edit(draft)}
-                    >
+                  ) : (
+                    <span className={controls.hint}>{typeLabel(draft.type)}</span>
+                  )}
+                  <div className={controls.rowActions}>
+                    <button type="button" className={`${controls.button}`} onClick={() => edit(draft)}>
                       Edit
                     </button>
                     <button
                       type="button"
-                      className={`${controls.button} ${controls.danger} ${controls.small}`}
+                      className={`${controls.button} ${controls.danger}`}
                       aria-label={`Delete ${draft.title || 'resource'}`}
                       onClick={() => setDrafts((list) => list.filter((item) => item.id !== draft.id))}
                     >
                       Delete
                     </button>
                   </div>
-                </div>
+                </>
               )}
             </li>
           )
         })}
       </ul>
       <div>
-        <button
-          type="button"
-          className={`${controls.button} ${controls.small}`}
-          onClick={add}
-          disabled={editingId !== null}
-        >
-          Add exclusive resource
+        <button type="button" className={`${controls.button}`} onClick={add} disabled={editingId !== null}>
+          Add artist-specific resource
         </button>
       </div>
     </div>

@@ -33,7 +33,7 @@ export function DeleteArtistButton({id, name}: {id: string; name: string}) {
       <ConfirmDialog
         open={open}
         title={`Delete ${name}?`}
-        body="Their page, emails, hidden resources, and exclusive resources are permanently deleted. Anyone attached only to this artist loses access. The link can be reused."
+        body="This permanently deletes the artist, their emails, and their artist-specific resources."
         confirmLabel="Delete artist"
         tone="danger"
         pending={pending}

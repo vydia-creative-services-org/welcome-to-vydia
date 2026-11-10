@@ -7,7 +7,7 @@
 .section {
   display: flex;
   flex-direction: column;
-  gap: var(--admin-space-4);
+  gap: var(--admin-space-5);
 }
 
 .section > .legend {
@@ -32,49 +32,18 @@
 }
 
 .category {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--admin-muted);
-}
-
-.resources {
-  display: flex;
-  flex-direction: column;
-  gap: var(--admin-space-2);
-  padding: 0;
-  list-style: none;
-}
-
-.resource {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: var(--admin-space-3);
-  padding: var(--admin-space-2) var(--admin-space-3);
-  border: 1px solid var(--admin-border);
-  border-radius: var(--admin-radius);
-}
-
-.resource[data-hidden] {
-  background: var(--admin-bg);
-}
-
-.resource[data-hidden] .resourceTitle {
-  color: var(--admin-muted);
-  text-decoration: line-through;
-}
-
-.resourceTitle {
-  overflow: hidden;
+  font-size: 14px;
   font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--admin-muted);
 }
 
 .save {
   display: flex;
   align-items: center;
   gap: var(--admin-space-3);
+}
+
+.row[data-hidden] .rowTitle {
+  color: var(--admin-muted);
+  text-decoration: line-through;
 }

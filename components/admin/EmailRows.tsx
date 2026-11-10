@@ -22,15 +22,14 @@ export function EmailRows({rows, onChange, errors}: Props) {
 
   return (
     <fieldset className={styles.group}>
-      <legend className={controls.label}>Auxiliary emails</legend>
-      <p className={controls.hint}>Managers or alternate addresses. Each one signs in with its own link.</p>
+      <legend className={controls.label}>Additional emails</legend>
       {rows.map((row, index) => {
         const error = errors[`emails.${index + 1}.email`]
         return (
           <div key={row.key} className={styles.row}>
             <div className={controls.field}>
               <label htmlFor={`${listId}-email-${row.key}`} className="visually-hidden">
-                Auxiliary email {index + 1}
+                Additional email {index + 1}
               </label>
               <input
                 id={`${listId}-email-${row.key}`}
@@ -50,22 +49,22 @@ export function EmailRows({rows, onChange, errors}: Props) {
             </div>
             <div className={controls.field}>
               <label htmlFor={`${listId}-label-${row.key}`} className="visually-hidden">
-                Label for auxiliary email {index + 1}
+                Label for additional email {index + 1}
               </label>
               <input
                 id={`${listId}-label-${row.key}`}
                 list={`${listId}-labels`}
                 value={row.label}
                 maxLength={40}
-                placeholder="Label (optional)"
+                placeholder="Label"
                 onChange={(event) => update(row.key, {label: event.target.value})}
                 className={controls.input}
               />
             </div>
             <button
               type="button"
-              className={`${controls.button} ${controls.small}`}
-              aria-label={`Remove auxiliary email ${index + 1}`}
+              className={`${controls.button} ${controls.danger}`}
+              aria-label={`Remove additional email ${index + 1}`}
               onClick={() => onChange(rows.filter((item) => item.key !== row.key))}
             >
               Remove
@@ -79,11 +78,7 @@ export function EmailRows({rows, onChange, errors}: Props) {
         ))}
       </datalist>
       <div>
-        <button
-          type="button"
-          className={`${controls.button} ${controls.small}`}
-          onClick={() => onChange([...rows, newEmailRow()])}
-        >
+        <button type="button" className={`${controls.button}`} onClick={() => onChange([...rows, newEmailRow()])}>
           Add email
         </button>
       </div>

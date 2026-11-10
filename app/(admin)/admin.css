@@ -1,20 +1,19 @@
 :root {
-  --admin-bg: #f6f6f7;
+  --admin-bg: #fafafa;
   --admin-surface: #ffffff;
-  --admin-border: #e2e2e5;
-  --admin-border-strong: #c9c9ce;
-  --admin-text: #18181b;
-  --admin-muted: #6b6b73;
-  --admin-accent: #121212;
+  --admin-border: #ebebeb;
+  --admin-hover: #f2f2f2;
+  --admin-selected: #ebebeb;
+  --admin-text: #171717;
+  --admin-muted: #4d4d4d;
+  --admin-accent: #171717;
   --admin-accent-text: #ffffff;
   --admin-danger: #b91c1c;
   --admin-danger-bg: #fef2f2;
   --admin-success: #15803d;
   --admin-focus: #2563eb;
 
-  --admin-radius: 8px;
-  --admin-radius-lg: 12px;
-  --admin-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+  --admin-radius: 6px;
   --admin-content-width: 1200px;
 
   --admin-space-1: 4px;
@@ -34,14 +33,19 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Reserve the scrollbar's space so short and long pages share one content width. */
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
   background: var(--admin-bg);
   color: var(--admin-text);
   font-family: var(--admin-font);
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 20px;
   -webkit-font-smoothing: antialiased;
 }
 

@@ -1,26 +1,25 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: var(--admin-space-1);
+  gap: var(--admin-space-2);
   min-width: 0;
 }
 
 .label {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .hint {
   color: var(--admin-muted);
-  font-size: 13px;
 }
 
 .input {
   width: 100%;
-  min-height: 40px;
+  min-height: 32px;
   padding: 0 var(--admin-space-3);
   background: var(--admin-surface);
-  border: 1px solid var(--admin-border-strong);
+  border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius);
 }
 
@@ -30,7 +29,6 @@
 
 .error {
   color: var(--admin-danger);
-  font-size: 13px;
   font-weight: 500;
 }
 
@@ -44,7 +42,7 @@
 
 .success {
   color: var(--admin-success);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .button {
@@ -52,20 +50,20 @@
   align-items: center;
   justify-content: center;
   gap: var(--admin-space-2);
-  min-height: 40px;
-  padding: 0 var(--admin-space-4);
+  min-height: 32px;
+  padding: 0 var(--admin-space-3);
   color: var(--admin-text);
   background: var(--admin-surface);
-  border: 1px solid var(--admin-border-strong);
+  border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius);
-  font-weight: 600;
+  font-weight: 500;
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
 }
 
 .button:hover:not(:disabled) {
-  background: var(--admin-bg);
+  background: var(--admin-hover);
 }
 
 .button:disabled {
@@ -85,30 +83,55 @@
 
 .danger {
   color: var(--admin-danger);
-  border-color: var(--admin-danger);
 }
 
 .danger:hover:not(:disabled) {
   background: var(--admin-danger-bg);
 }
 
-.small {
-  min-height: 32px;
-  padding: 0 var(--admin-space-3);
-  font-size: 13px;
-}
-
 .card {
   padding: var(--admin-space-5);
   background: var(--admin-surface);
   border: 1px solid var(--admin-border);
-  border-radius: var(--admin-radius-lg);
-  box-shadow: var(--admin-shadow);
+  border-radius: var(--admin-radius);
 }
 
 .legend {
   padding: 0;
   margin-bottom: var(--admin-space-3);
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* One row pattern for every list: title, optional meta, actions. */
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--admin-space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-space-3);
+  padding: var(--admin-space-3);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+}
+
+.rowTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowActions {
+  display: flex;
+  gap: var(--admin-space-2);
 }

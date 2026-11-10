@@ -21,12 +21,12 @@ import {useOptimistic, useState, useTransition} from 'react'
 import {deleteMainResource, reorderMainResources} from '@/app/(admin)/admin/(panel)/resources/actions'
 import {typeLabel} from '@/components/TypeLabel'
 import {draftFromResource, newDraft, type ResourceDraft} from '@/lib/admin/drafts'
-import {formatDate} from '@/lib/format'
 import type {CategoryGroup} from '@/lib/resources/group'
 import type {Resource} from '@/lib/resources/types'
 import {ConfirmDialog} from './ConfirmDialog'
 import controls from './controls.module.css'
 import {ResourceDialog} from './ResourceDialog'
+import panel from '@/app/(admin)/admin/(panel)/panel.module.css'
 import styles from './SortableResourceList.module.css'
 
 type Groups = CategoryGroup<Resource>[]
@@ -84,19 +84,15 @@ function ResourceRow({resource, onEdit, onDelete}: RowProps) {
       >
         ⠿
       </button>
-      <div className={styles.text}>
-        <span className={styles.title}>{resource.title}</span>
-        <span className={controls.hint}>
-          {typeLabel(resource.type)} · Added {formatDate(resource.addedOn)}
-        </span>
-      </div>
+      <span className={styles.title}>{resource.title}</span>
+      <span className={controls.hint}>{typeLabel(resource.type)}</span>
       <div className={styles.actions}>
-        <button type="button" className={`${controls.button} ${controls.small}`} onClick={onEdit}>
+        <button type="button" className={`${controls.button}`} onClick={onEdit}>
           Edit
         </button>
         <button
           type="button"
-          className={`${controls.button} ${controls.danger} ${controls.small}`}
+          className={`${controls.button} ${controls.danger}`}
           aria-label={`Delete ${resource.title}`}
           onClick={onDelete}
         >
@@ -148,7 +144,6 @@ function ResourceGroup({group, onItems, onEdit, onDelete}: GroupProps) {
           ⠿
         </button>
         <h2 className={styles.category}>{group.category}</h2>
-        <span className={controls.hint}>{group.items.length}</span>
       </header>
       <DndContext
         id={`items-${group.key}`}
@@ -222,16 +217,16 @@ export function SortableResourceList({groups, categories}: Props) {
 
   return (
     <div className={styles.manager}>
-      <div className={styles.toolbar}>
-        <p className={controls.hint}>Drag the handles to reorder. Changes apply to every artist immediately.</p>
+      <header className={panel.pageHeader}>
+        <h1 className={panel.pageTitle}>Resources</h1>
         <button
           type="button"
           className={`${controls.button} ${controls.primary}`}
           onClick={() => setEditing({draft: newDraft(), isNew: true})}
         >
-          New main resource
+          New resource
         </button>
-      </div>
+      </header>
 
       {error && (
         <p role="alert" className={controls.notice}>
@@ -241,8 +236,7 @@ export function SortableResourceList({groups, categories}: Props) {
 
       {optimistic.length === 0 ? (
         <div className={`${controls.card} ${styles.empty}`}>
-          <p className={styles.emptyTitle}>No main resources yet</p>
-          <p className={controls.hint}>Every artist will see the resources you add here.</p>
+          <p className={styles.emptyTitle}>No resources yet</p>
         </div>
       ) : (
         <DndContext
@@ -287,7 +281,7 @@ export function SortableResourceList({groups, categories}: Props) {
       <ConfirmDialog
         open={deleting !== null}
         title={`Delete ${deleting?.title ?? 'this resource'}?`}
-        body="It is removed from every artist’s page, and any per-artist hides for it are removed too."
+        body="It’s removed from every artist’s page."
         confirmLabel="Delete resource"
         tone="danger"
         onCancel={() => setDeleting(null)}

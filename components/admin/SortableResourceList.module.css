@@ -1,27 +1,20 @@
 .manager {
   display: flex;
   flex-direction: column;
-  gap: var(--admin-space-4);
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--admin-space-4);
+  gap: var(--admin-space-3);
 }
 
 .groups {
   display: flex;
   flex-direction: column;
-  gap: var(--admin-space-4);
+  gap: var(--admin-space-3);
 }
 
 .group {
   display: flex;
   flex-direction: column;
   gap: var(--admin-space-3);
-  padding: var(--admin-space-4);
+  padding: var(--admin-space-3);
   background: var(--admin-surface);
 }
 
@@ -38,8 +31,8 @@
 }
 
 .category {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .rows {
@@ -52,10 +45,10 @@
 
 .row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--admin-space-3);
-  padding: var(--admin-space-2) var(--admin-space-3);
+  padding: var(--admin-space-3);
   background: var(--admin-surface);
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius);
@@ -76,28 +69,17 @@
   background: none;
   border: 1px solid transparent;
   border-radius: var(--admin-radius);
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
   cursor: grab;
   touch-action: none;
+  padding: 0px;
+  margin: 0px -6px;
 }
 
 .handle:hover {
   color: var(--admin-text);
   background: var(--admin-bg);
-}
-
-.text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.title {
-  overflow: hidden;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .actions {
@@ -114,6 +96,12 @@
 }
 
 .emptyTitle {
-  font-size: 18px;
-  font-weight: 700;
+  font-weight: 500;
+}
+
+.title {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

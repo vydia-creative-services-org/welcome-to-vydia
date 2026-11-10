@@ -1,7 +1,7 @@
 .fields {
   display: flex;
   flex-direction: column;
-  gap: var(--admin-space-4);
+  gap: var(--admin-space-5);
 }
 
 .types {
@@ -38,14 +38,4 @@
   object-fit: cover;
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius);
-}
-
-.more summary {
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.more > div {
-  margin-top: var(--admin-space-3);
-  max-width: 220px;
 }

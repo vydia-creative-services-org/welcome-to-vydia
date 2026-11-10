@@ -5,7 +5,6 @@ import {CopyLinkButton} from '@/components/admin/CopyLinkButton'
 import {DeleteArtistButton} from '@/components/admin/DeleteArtistButton'
 import {requireAdmin} from '@/lib/admin/auth'
 import {toFormInitial} from '@/lib/admin/form-initial'
-import {welcomeLink} from '@/lib/admin/welcome-link'
 import {loadResourceContext} from '@/lib/admin/resource-context'
 import styles from '../../panel.module.css'
 import detail from './detail.module.css'
@@ -30,29 +29,24 @@ export default async function ArtistDetail({params, searchParams}: PageProps<'/a
   if (error) throw new Error(`Couldn’t load the artist: ${error.message}`)
   if (!artist) notFound()
 
-  const link = welcomeLink(artist.slug)
   return (
     <div className={styles.stack}>
-      <section className={`${controls.card} ${detail.welcome}`} aria-labelledby="welcome-title">
+      <header className={styles.pageHeader}>
         <div className={detail.heading}>
-          <h1 id="welcome-title" className={styles.pageTitle}>
-            {artist.name}
-          </h1>
+          <h1 className={styles.pageTitle}>{artist.name}</h1>
           {saved && (
             <p role="status" className={controls.success}>
-              Saved.
+              Saved
             </p>
           )}
         </div>
-        <p className={controls.hint}>Welcome link. Copy it into your own email to the artist.</p>
-        <div className={detail.link}>
-          <code className={detail.url}>{link}</code>
-          <CopyLinkButton slug={artist.slug} size="regular" />
+        <div className={detail.actions}>
+          <CopyLinkButton slug={artist.slug} />
           <a href={`/${artist.slug}`} target="_blank" rel="noopener" className={controls.button}>
-            Open page
+            Open
           </a>
         </div>
-      </section>
+      </header>
 
       <ArtistForm key={`${artist.id}:${artist.updated_at}`} initial={toFormInitial(artist)} {...context} />
 

@@ -6,9 +6,10 @@
 }
 
 .brand {
-  font-weight: 700;
   text-decoration: none;
-  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 18px;
 }
 
 .links {
@@ -19,20 +20,24 @@
 }
 
 .link {
-  display: block;
-  padding: var(--admin-space-2) var(--admin-space-3);
-  color: var(--admin-muted);
-  border-radius: var(--admin-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0px 12px;
+  height: 32px;
+
+  border-radius: 6px;
   font-weight: 500;
   text-decoration: none;
+  font-size: 14px;
 }
 
 .link:hover {
   color: var(--admin-text);
-  background: var(--admin-bg);
+  background: var(--admin-hover);
 }
 
 .link[aria-current='page'] {
   color: var(--admin-text);
-  background: var(--admin-bg);
+  background: var(--admin-selected);
 }

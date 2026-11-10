@@ -28,13 +28,6 @@ const FILE_ACCEPT: Record<ResourceType, string> = {
   link: '',
 }
 
-const FILE_LABEL: Record<ResourceType, string> = {
-  pdf: 'PDF file',
-  video: 'Video file (MP4, 1080p or smaller keeps it fast)',
-  slides: 'Slide deck (PDF, PowerPoint, or Keynote)',
-  link: 'File',
-}
-
 export function ResourceFields({draft, onChange, categories, errors}: Props) {
   const id = useId()
   const showFile = draft.type !== 'link'
@@ -157,14 +150,14 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
       {showFile && (
         <div className={controls.field}>
           <label htmlFor={`${id}-file`} className={controls.label}>
-            {FILE_LABEL[draft.type]}
+            File
           </label>
           {draft.file && (
             <p className={styles.current}>
               <span className={styles.fileName}>{draft.fileName ?? draft.file}</span>
               <button
                 type="button"
-                className={`${controls.button} ${controls.small}`}
+                className={`${controls.button}`}
                 onClick={() =>
                   onChange((d) => ({...d, file: null, fileName: null, pdfPreview: null, pdfPreviewLqip: null}))
                 }
@@ -196,7 +189,7 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
       {showUrl && (
         <div className={controls.field}>
           <label htmlFor={`${id}-url`} className={controls.label}>
-            {draft.type === 'slides' ? 'Or a link (for example Google Slides)' : 'Link URL'}
+            URL
           </label>
           <input
             id={`${id}-url`}
@@ -217,9 +210,8 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
 
       <div className={controls.field}>
         <label htmlFor={`${id}-cover`} className={controls.label}>
-          Cover image (optional)
+          Cover image
         </label>
-        <p className={controls.hint}>JPG, PNG, or WebP up to 5 MB. PDFs use their first page when there is no cover.</p>
         {previewPath && (
           <div className={styles.preview}>
             <Image
@@ -233,7 +225,7 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
             {draft.coverImage && (
               <button
                 type="button"
-                className={`${controls.button} ${controls.small}`}
+                className={`${controls.button}`}
                 onClick={() => onChange((d) => ({...d, coverImage: null, coverImageLqip: null, coverImageAlt: ''}))}
               >
                 Remove cover
@@ -257,7 +249,7 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
       {draft.coverImage && (
         <div className={controls.field}>
           <label htmlFor={`${id}-alt`} className={controls.label}>
-            Cover alt text
+            Alt text
           </label>
           <input
             id={`${id}-alt`}
@@ -286,22 +278,18 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
         )}
       </div>
 
-      <details className={styles.more}>
-        <summary>Added on</summary>
-        <div className={controls.field}>
-          <label htmlFor={`${id}-added`} className="visually-hidden">
-            Added on
-          </label>
-          <input
-            id={`${id}-added`}
-            type="date"
-            value={dateInputValue(draft.addedOn)}
-            onChange={(event) => onChange((d) => ({...d, addedOn: dateInputToIso(event.target.value)}))}
-            className={controls.input}
-          />
-          <p className={controls.hint}>Defaults to today. Editing a resource later does not change it.</p>
-        </div>
-      </details>
+      <div className={controls.field}>
+        <label htmlFor={`${id}-added`} className={controls.label}>
+          Added on
+        </label>
+        <input
+          id={`${id}-added`}
+          type="date"
+          value={dateInputValue(draft.addedOn)}
+          onChange={(event) => onChange((d) => ({...d, addedOn: dateInputToIso(event.target.value)}))}
+          className={controls.input}
+        />
+      </div>
 
       {busy && (
         <p role="status" className={controls.hint}>

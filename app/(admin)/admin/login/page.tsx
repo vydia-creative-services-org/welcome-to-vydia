@@ -18,8 +18,7 @@ export default async function AdminLogin({searchParams}: PageProps<'/admin/login
   return (
     <main className={styles.page}>
       <div className={styles.card}>
-        <h1 className={styles.title}>Welcome to Vydia admin</h1>
-        <p className={styles.lede}>Sign in with your Vydia Google account.</p>
+        <h1 className={styles.title}>Welcome to Vydia</h1>
         {message && (
           <p role="alert" className={styles.error}>
             {message}

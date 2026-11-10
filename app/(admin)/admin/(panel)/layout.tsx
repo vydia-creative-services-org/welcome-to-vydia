@@ -1,6 +1,7 @@
 import Image from 'next/image'
 import {AdminNav} from '@/components/admin/AdminNav'
 import {requireAdmin} from '@/lib/admin/auth'
+import controls from '@/components/admin/controls.module.css'
 import styles from './panel.module.css'
 
 export const instant = false
@@ -28,7 +29,7 @@ export default async function PanelLayout({children}: {children: React.ReactNode
             )}
             <span className={styles.name}>{name}</span>
             <form action="/admin/auth/signout" method="post">
-              <button className={styles.signOut}>Sign out</button>
+              <button className={controls.button}>Sign out</button>
             </form>
           </div>
         </div>

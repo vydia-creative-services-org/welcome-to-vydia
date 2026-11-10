@@ -51,9 +51,8 @@ export function ResourceDialog({initial, isNew, categories, onClose}: Props) {
         }}
       >
         <h2 id={titleId} className={styles.title}>
-          {isNew ? 'New main resource' : 'Edit main resource'}
+          {isNew ? 'New resource' : 'Edit resource'}
         </h2>
-        <p className={controls.hint}>Changes apply to every artist as soon as you save.</p>
         <ResourceFields draft={draft} onChange={(update) => setDraft(update)} categories={categories} errors={errors} />
         {errors.form && (
           <p role="alert" className={controls.notice}>

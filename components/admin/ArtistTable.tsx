@@ -31,38 +31,30 @@ export function ArtistTable({rows}: {rows: ArtistRow[]}) {
     return (
       <div className={`${controls.card} ${styles.empty}`}>
         <p className={styles.emptyTitle}>No artists yet</p>
-        <p className={controls.hint}>Create the first artist to get a Welcome link you can send.</p>
       </div>
     )
   }
 
   return (
     <div className={styles.wrap}>
-      <div className={controls.field}>
-        <label htmlFor="artist-search" className="visually-hidden">
-          Search artists by name or email
-        </label>
-        <input
-          id="artist-search"
-          type="search"
-          value={query}
-          placeholder="Search by name or email"
-          onChange={(event) => setQuery(event.target.value)}
-          className={`${controls.input} ${styles.search}`}
-        />
-      </div>
+      <input
+        type="search"
+        value={query}
+        aria-label="Search artists"
+        placeholder="Search artists"
+        onChange={(event) => setQuery(event.target.value)}
+        className={`${controls.input} ${styles.search}`}
+      />
       <div className={`${controls.card} ${styles.card}`}>
         <table className={styles.table}>
           <thead>
             <tr>
               <th scope="col">Artist</th>
-              <th scope="col">Primary email</th>
-              <th scope="col" className={styles.number}>
-                Aux emails
-              </th>
-              <th scope="col">Slug</th>
-              <th scope="col">Link</th>
+              <th scope="col">Email</th>
               <th scope="col">Created</th>
+              <th scope="col">
+                <span className="visually-hidden">Link</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -73,15 +65,14 @@ export function ArtistTable({rows}: {rows: ArtistRow[]}) {
                     {row.name}
                   </Link>
                 </td>
-                <td className={styles.email}>{row.primaryEmail}</td>
-                <td className={styles.number}>{row.auxCount}</td>
-                <td>
-                  <code>{row.slug}</code>
-                </td>
-                <td>
-                  <CopyLinkButton slug={row.slug} />
+                <td className={styles.email}>
+                  {row.primaryEmail}
+                  {row.auxCount > 0 && <span className={controls.hint}> +{row.auxCount}</span>}
                 </td>
                 <td className={styles.date}>{formatDate(row.createdAt)}</td>
+                <td className={styles.copy}>
+                  <CopyLinkButton slug={row.slug} />
+                </td>
               </tr>
             ))}
           </tbody>
