@@ -1,4 +1,4 @@
-# Welcome to Vydia: Admin Guide
+# Vydia Onboarding: Admin Guide
 
 For label services and creative services. It covers everything you do in the admin panel at `welcometovydia.com/admin`. You never edit anything on a client's page directly: you change the client or the main resources here, and the page updates the next time anyone opens it.
 
@@ -68,7 +68,7 @@ Open **Resources** in the top bar. Changes here apply to **every client immediat
 ## What clients see
 
 1. They open the Welcome link and see **Enter your email**.
-2. They type their address and click **Send link**. If it's attached to that client, they get a link by email ("Open your Welcome to Vydia page") and the screen says **Email sent, check your inbox**. **Resend email** unlocks after 60 seconds.
+2. They type their address and click **Send link**. If it's attached to that client, they get a link by email ("Open your Vydia Onboarding page") and the screen says **Email sent, check your inbox**. **Resend email** unlocks after 60 seconds.
 3. If it isn't, nothing is sent and they see: "This email isn't approved to view this page. Please contact Vydia label services if you're having trouble."
 4. They click the link in the email and land on their page. They stay signed in on that browser.
 

@@ -63,7 +63,7 @@ Numbering continues from the main plan (D1–D15).
                               ▼
                  supabase.auth.signInWithOtp({email, emailRedirectTo: SITE_URL + next})
                               ▼
-            Email: "Sign in to Welcome to Vydia" → {{SiteURL}}/auth/confirm?token_hash=…&type=email&redirect_to=…
+            Email: "Sign in to Vydia Onboarding" → {{SiteURL}}/auth/confirm?token_hash=…&type=email&redirect_to=…
                               ▼
             /auth/confirm (page): "Finish signing in"  [Continue]
                               ▼   (POST, server action)
@@ -515,7 +515,7 @@ Supabase sends **Magic Link** to existing users and **Confirm signup** to an ema
 
 ```html
 <!-- supabase/templates/magic-link.html -->
-<!-- Subject: Your Welcome to Vydia sign-in link -->
+<!-- Subject: Your Vydia Onboarding sign-in link -->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 16px;font-family:'Public Sans',Helvetica,Arial,sans-serif;color:#262626;">
   <tr>
     <td align="center">
@@ -527,7 +527,7 @@ Supabase sends **Magic Link** to existing users and **Confirm signup** to an ema
         </tr>
         <tr>
           <td style="padding:32px 24px;">
-            <h1 style="margin:0 0 12px;font-size:20px;font-weight:600;">Sign in to Welcome to Vydia</h1>
+            <h1 style="margin:0 0 12px;font-size:20px;font-weight:600;">Sign in to Vydia Onboarding</h1>
             <p style="margin:0 0 24px;font-size:16px;line-height:1.5;color:#404040;">
               Use this button to sign in as {{ .Email }}. It works once and expires in 1 hour. Open it in the browser you
               want to stay signed in on.
@@ -549,7 +549,7 @@ Supabase sends **Magic Link** to existing users and **Confirm signup** to an ema
 </table>
 ```
 
-`confirm-signup.html` gets the same body with subject `<!-- Subject: Your Welcome to Vydia sign-in link -->`. A first-time client shouldn't see "confirm your account" wording. Verifying the link also confirms the email, which sets `email_confirmed_at` (the field `verifiedEmail` requires).
+`confirm-signup.html` gets the same body with subject `<!-- Subject: Your Vydia Onboarding sign-in link -->`. A first-time client shouldn't see "confirm your account" wording. Verifying the link also confirms the email, which sets `email_confirmed_at` (the field `verifiedEmail` requires).
 
 ---
 

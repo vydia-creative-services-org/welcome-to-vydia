@@ -1,6 +1,6 @@
-# Welcome to Vydia
+# Vydia Onboarding
 
-An internal tool for Vydia's label services team. When a new client signs, label services creates a personalized "Welcome to Vydia" page for them, copies the link, and emails it to the client from their own inbox. The client opens the link, enters an approved email, gets a magic link, and lands on their resources page. It replaces the Seismic link label services used to send.
+An internal tool for Vydia's label services team. When a new client signs, label services creates a personalized "Vydia Onboarding" page for them, copies the link, and emails it to the client from their own inbox. The client opens the link, enters an approved email, gets a magic link, and lands on their resources page. It replaces the Seismic link label services used to send.
 
 - Spec: [`docs/iteration-two.md`](docs/iteration-two.md)
 - Implementation plan, decisions, and task list: [`docs/iteration-two-plan.md`](docs/iteration-two-plan.md)

@@ -1,4 +1,4 @@
-# **Welcome to Vydia Microsite Research**
+# **Vydia Onboarding Microsite Research**
 
 ## **Overview**
 
@@ -19,7 +19,7 @@ Each page consists of a header, an intro, and a library of resource cards groupe
 ### **Page Structure**
 
 1. Header Banner: A styled background featuring the Vydia logo (`docs/logo/gamma-vydia-white.svg`).  
-2. Intro: Globally used rich text editable from Sanity. The initial text provided is: "Welcome to Vydia\! Check out the resources below to get started:" followed by three bullet points that name and describe each section.  
+2. Intro: Globally used rich text editable from Sanity. The initial text provided is: "Vydia Onboarding\! Check out the resources below to get started:" followed by three bullet points that name and describe each section.  
 3. Resource Card Sections: Each section is a titled grid containing resource cards.
 
 ### **Initial Sections**

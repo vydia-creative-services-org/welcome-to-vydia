@@ -13,7 +13,7 @@ export function AdminNav() {
   return (
     <nav aria-label="Admin" className={styles.nav}>
       <Link href="/admin" className={styles.brand}>
-        Welcome to Vydia
+        Vydia Onboarding
       </Link>
       <ul className={styles.links}>
         {LINKS.map((link) => (
