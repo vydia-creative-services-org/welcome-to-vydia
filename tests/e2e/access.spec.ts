@@ -15,7 +15,7 @@ async function mainHtml(page: Page, slug: string) {
 }
 
 test.describe('signed out', () => {
-  test('a real and a made-up slug render the same screen, with no trace of the artist', async ({page}) => {
+  test('a real and a made-up slug render the same screen, with no trace of the client', async ({page}) => {
     const real = await mainHtml(page, E2E_SLUGS.a)
     const fake = await mainHtml(page, UNKNOWN())
     expect(real.status).toBe(200)
@@ -27,7 +27,7 @@ test.describe('signed out', () => {
     await expect(page.getByPlaceholder('Enter your email')).toBeVisible()
   })
 
-  test('"/" is public, shows the email form, and lists no artists', async ({page}) => {
+  test('"/" is public, shows the email form, and lists no clients', async ({page}) => {
     const response = await page.goto('/')
     expect(response?.status()).toBe(200)
     await expect(page).toHaveURL('/')
@@ -44,8 +44,8 @@ test.describe('signed out', () => {
   })
 })
 
-test.describe('signed in for artist A', () => {
-  test.use({storageState: storageStatePath('artistA')})
+test.describe('signed in for client A', () => {
+  test.use({storageState: storageStatePath('clientA')})
 
   test('sees their own page', async ({page}) => {
     await page.goto(`/${E2E_SLUGS.a}`)
@@ -53,7 +53,7 @@ test.describe('signed in for artist A', () => {
     await expect(page).toHaveTitle(`${E2E_NAMES.a} | Welcome to Vydia`)
   })
 
-  test("opening artist B's URL shows Enter your email, never B's name or resources", async ({page}) => {
+  test("opening client B's URL shows Enter your email, never B's name or resources", async ({page}) => {
     const other = await mainHtml(page, E2E_SLUGS.b)
     expect(other.status).toBe(200)
     expect(other.title).toBe('Welcome to Vydia')

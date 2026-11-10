@@ -24,7 +24,7 @@ test.describe('enter your email', () => {
 })
 
 test.describe('resources page', () => {
-  test.use({storageState: storageStatePath('artistA')})
+  test.use({storageState: storageStatePath('clientA')})
 
   test('carousel, grid, and video dialog work', async ({page}) => {
     const errors: string[] = []

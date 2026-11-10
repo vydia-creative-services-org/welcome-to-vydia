@@ -105,7 +105,7 @@ export function ResourceEditor({drafts, setDrafts, categories, serverErrors}: Pr
       </ul>
       <div>
         <button type="button" className={`${controls.button}`} onClick={add} disabled={editingId !== null}>
-          Add artist-specific resource
+          Add client-specific resource
         </button>
       </div>
     </div>

@@ -7,11 +7,11 @@ import {RESOURCE_TYPE_VALUES, type ResourceCardData} from '@/lib/resources/types
 import {isValidSlug, normalizeSlug} from '@/lib/slug'
 import {createClient} from '@/lib/supabase/server'
 
-export type ArtistPage = {artistName: string; groups: CategoryGroup<ResourceCardData>[]}
+export type ClientPage = {clientName: string; groups: CategoryGroup<ResourceCardData>[]}
 
 const resourceRow = z.object({
   id: z.string(),
-  artist_id: z.string().nullable(),
+  client_id: z.string().nullable(),
   title: z.string(),
   type: z.enum(RESOURCE_TYPE_VALUES),
   file: z.string().nullable(),
@@ -30,11 +30,11 @@ const resourceRow = z.object({
 })
 
 const pagePayload = z.object({
-  artist: z.object({id: z.string(), name: z.string()}),
+  client: z.object({id: z.string(), name: z.string()}),
   resources: z.array(resourceRow),
 })
 
-export const getArtistPage = cache(async (rawSlug: string): Promise<ArtistPage | null> => {
+export const getClientPage = cache(async (rawSlug: string): Promise<ClientPage | null> => {
   const slug = normalizeSlug(rawSlug)
   if (!isValidSlug(slug)) return null
 
@@ -42,21 +42,21 @@ export const getArtistPage = cache(async (rawSlug: string): Promise<ArtistPage |
   const {data: auth} = await supabase.auth.getClaims()
   if (!auth?.claims) return null
 
-  const {data, error} = await supabase.rpc('get_artist_page', {p_slug: slug})
+  const {data, error} = await supabase.rpc('get_client_page', {p_slug: slug})
   if (error) {
-    console.error('get_artist_page failed:', error.code)
+    console.error('get_client_page failed:', error.code)
     return null
   }
   if (!data) return null
 
   const parsed = pagePayload.safeParse(data)
   if (!parsed.success) {
-    console.error('get_artist_page returned an unexpected shape')
+    console.error('get_client_page returned an unexpected shape')
     return null
   }
 
   const cards = parsed.data.resources
     .map((row) => toCard(fromRow(row)))
     .filter((card): card is ResourceCardData => card !== null)
-  return {artistName: parsed.data.artist.name, groups: groupByCategory(cards)}
+  return {clientName: parsed.data.client.name, groups: groupByCategory(cards)}
 })

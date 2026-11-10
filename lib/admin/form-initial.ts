@@ -5,7 +5,7 @@ import {draftFromResource, type ResourceDraft} from './drafts'
 
 type ResourceRow = Database['public']['Tables']['resources']['Row']
 
-export type ArtistFormInitial = {
+export type ClientFormInitial = {
   id?: string
   name: string
   slug: string
@@ -15,16 +15,16 @@ export type ArtistFormInitial = {
   exclusiveResources: ResourceDraft[]
 }
 
-export type ArtistRecord = {
+export type ClientRecord = {
   id: string
   name: string
   slug: string
-  artist_emails: {email: string; label: string | null; is_primary: boolean}[]
-  artist_hidden_resources: {resource_id: string}[]
+  client_emails: {email: string; label: string | null; is_primary: boolean}[]
+  client_hidden_resources: {resource_id: string}[]
   resources: ResourceRow[]
 }
 
-export const emptyArtistForm: ArtistFormInitial = {
+export const emptyClientForm: ClientFormInitial = {
   name: '',
   slug: '',
   primaryEmail: '',
@@ -33,18 +33,18 @@ export const emptyArtistForm: ArtistFormInitial = {
   exclusiveResources: [],
 }
 
-export function toFormInitial(artist: ArtistRecord): ArtistFormInitial {
-  const primary = artist.artist_emails.find((email) => email.is_primary)
+export function toFormInitial(client: ClientRecord): ClientFormInitial {
+  const primary = client.client_emails.find((email) => email.is_primary)
   return {
-    id: artist.id,
-    name: artist.name,
-    slug: artist.slug,
+    id: client.id,
+    name: client.name,
+    slug: client.slug,
     primaryEmail: primary?.email ?? '',
-    auxEmails: artist.artist_emails
+    auxEmails: client.client_emails
       .filter((email) => !email.is_primary)
       .map((email) => ({key: crypto.randomUUID(), email: email.email, label: email.label ?? ''})),
-    hiddenResourceIds: artist.artist_hidden_resources.map((hide) => hide.resource_id),
-    exclusiveResources: [...artist.resources]
+    hiddenResourceIds: client.client_hidden_resources.map((hide) => hide.resource_id),
+    exclusiveResources: [...client.resources]
       .sort((a, b) => a.sort_order - b.sort_order)
       .map((row) => draftFromResource(fromRow(row))),
   }

@@ -13,7 +13,7 @@ export type Hotspot = {x: number; y: number}
 
 export type Resource = {
   id: string
-  artistId: string | null
+  clientId: string | null
   title: string
   type: ResourceType
   file: string | null

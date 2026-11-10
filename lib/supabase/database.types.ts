@@ -48,9 +48,9 @@ export type Database = {
         }
         Relationships: []
       }
-      artist_emails: {
+      client_emails: {
         Row: {
-          artist_id: string
+          client_id: string
           created_at: string
           email: string
           id: string
@@ -59,7 +59,7 @@ export type Database = {
         }
         ComputedFields: never
         Insert: {
-          artist_id: string
+          client_id: string
           created_at?: string
           email: string
           id?: string
@@ -67,7 +67,7 @@ export type Database = {
           label?: string | null
         }
         Update: {
-          artist_id?: string
+          client_id?: string
           created_at?: string
           email?: string
           id?: string
@@ -76,38 +76,38 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'artist_emails_artist_id_fkey'
-            columns: ['artist_id']
+            foreignKeyName: 'client_emails_client_id_fkey'
+            columns: ['client_id']
             isOneToOne: false
-            referencedRelation: 'artists'
+            referencedRelation: 'clients'
             referencedColumns: ['id']
           },
         ]
       }
-      artist_hidden_resources: {
+      client_hidden_resources: {
         Row: {
-          artist_id: string
+          client_id: string
           resource_id: string
         }
         ComputedFields: never
         Insert: {
-          artist_id: string
+          client_id: string
           resource_id: string
         }
         Update: {
-          artist_id?: string
+          client_id?: string
           resource_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: 'artist_hidden_resources_artist_id_fkey'
-            columns: ['artist_id']
+            foreignKeyName: 'client_hidden_resources_client_id_fkey'
+            columns: ['client_id']
             isOneToOne: false
-            referencedRelation: 'artists'
+            referencedRelation: 'clients'
             referencedColumns: ['id']
           },
           {
-            foreignKeyName: 'artist_hidden_resources_resource_id_fkey'
+            foreignKeyName: 'client_hidden_resources_resource_id_fkey'
             columns: ['resource_id']
             isOneToOne: false
             referencedRelation: 'resources'
@@ -115,7 +115,7 @@ export type Database = {
           },
         ]
       }
-      artists: {
+      clients: {
         Row: {
           created_at: string
           created_by: string | null
@@ -146,8 +146,8 @@ export type Database = {
       resources: {
         Row: {
           added_on: string
-          artist_id: string | null
           category: string
+          client_id: string | null
           cover_image: string | null
           cover_image_alt: string | null
           cover_image_hotspot: Json | null
@@ -166,8 +166,8 @@ export type Database = {
         ComputedFields: never
         Insert: {
           added_on?: string
-          artist_id?: string | null
           category: string
+          client_id?: string | null
           cover_image?: string | null
           cover_image_alt?: string | null
           cover_image_hotspot?: Json | null
@@ -185,8 +185,8 @@ export type Database = {
         }
         Update: {
           added_on?: string
-          artist_id?: string | null
           category?: string
+          client_id?: string | null
           cover_image?: string | null
           cover_image_alt?: string | null
           cover_image_hotspot?: Json | null
@@ -204,10 +204,10 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: 'resources_artist_id_fkey'
-            columns: ['artist_id']
+            foreignKeyName: 'resources_client_id_fkey'
+            columns: ['client_id']
             isOneToOne: false
-            referencedRelation: 'artists'
+            referencedRelation: 'clients'
             referencedColumns: ['id']
           },
         ]
@@ -217,18 +217,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      can_view_artist: {Args: {target: string}; Returns: boolean}
+      can_view_client: {Args: {target: string}; Returns: boolean}
       can_view_main_resource: {Args: {target: string}; Returns: boolean}
       claim_admin_profile: {Args: Record<PropertyKey, never>; Returns: boolean}
       claim_link_send: {Args: {p_email: string}; Returns: boolean}
       email_can_access_slug: {Args: {p_email: string; p_slug: string}; Returns: boolean}
-      get_artist_page: {Args: {p_slug: string}; Returns: Json}
+      get_client_page: {Args: {p_slug: string}; Returns: Json}
       hit_rate_limit: {Args: {p_key: string; p_limit: number; p_window: string}; Returns: boolean}
       hook_before_user_created: {Args: {event: Json}; Returns: Json}
       is_admin: {Args: Record<PropertyKey, never>; Returns: boolean}
       jwt_email: {Args: Record<PropertyKey, never>; Returns: string}
       reorder_main_resources: {Args: {ids: string[]}; Returns: undefined}
-      save_artist: {Args: {payload: Json}; Returns: string}
+      save_client: {Args: {payload: Json}; Returns: string}
       take_storage_garbage: {
         Args: Record<PropertyKey, never>
         Returns: {

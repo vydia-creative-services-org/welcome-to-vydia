@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest'
-import {artistPayload, resourceInput} from '@/lib/validation'
+import {clientPayload, resourceInput} from '@/lib/validation'
 
 const id = () => crypto.randomUUID()
 
@@ -18,11 +18,11 @@ const resource = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
-const artist = (overrides: Record<string, unknown> = {}) => ({
+const client = (overrides: Record<string, unknown> = {}) => ({
   name: 'Lil Example',
   slug: 'lil-example',
   emails: [
-    {email: 'lil@example.com', label: 'Artist', isPrimary: true},
+    {email: 'lil@example.com', label: 'Client', isPrimary: true},
     {email: 'manager@mgmt.com', label: 'Manager', isPrimary: false},
   ],
   hiddenResourceIds: [],
@@ -101,13 +101,13 @@ describe('resourceInput field limits', () => {
   })
 })
 
-describe('artistPayload', () => {
+describe('clientPayload', () => {
   it('accepts the spec sample and lowercases emails and the slug', () => {
-    const parsed = artistPayload.parse(
-      artist({
+    const parsed = clientPayload.parse(
+      client({
         slug: ' Lil-Example ',
         emails: [
-          {email: ' LIL@Example.com ', label: 'Artist', isPrimary: true},
+          {email: ' LIL@Example.com ', label: 'Client', isPrimary: true},
           {email: 'manager@mgmt.com', label: '', isPrimary: false},
         ],
       }),
@@ -117,53 +117,53 @@ describe('artistPayload', () => {
   })
 
   it('limits the name to 100 characters', () => {
-    expect(artistPayload.safeParse(artist({name: 'a'.repeat(100)})).success).toBe(true)
-    expect(artistPayload.safeParse(artist({name: 'a'.repeat(101)})).success).toBe(false)
-    expect(artistPayload.safeParse(artist({name: ''})).success).toBe(false)
+    expect(clientPayload.safeParse(client({name: 'a'.repeat(100)})).success).toBe(true)
+    expect(clientPayload.safeParse(client({name: 'a'.repeat(101)})).success).toBe(false)
+    expect(clientPayload.safeParse(client({name: ''})).success).toBe(false)
   })
 
   it.each(['ab', 'a'.repeat(61), 'Lil Example', 'lil--example', 'admin', 'login'])('rejects the slug "%s"', (slug) => {
-    expect(artistPayload.safeParse(artist({slug})).success).toBe(false)
+    expect(clientPayload.safeParse(client({slug})).success).toBe(false)
   })
 
   it('rejects a malformed email', () => {
-    const bad = artist({emails: [{email: 'not-an-email', label: '', isPrimary: true}]})
-    expect(messages(artistPayload.safeParse(bad))).toContain('Enter a valid email address.')
+    const bad = client({emails: [{email: 'not-an-email', label: '', isPrimary: true}]})
+    expect(messages(clientPayload.safeParse(bad))).toContain('Enter a valid email address.')
   })
 
   it('rejects the same email twice, ignoring case', () => {
-    const dup = artist({
+    const dup = client({
       emails: [
         {email: 'lil@example.com', label: '', isPrimary: true},
         {email: 'LIL@example.com', label: '', isPrimary: false},
       ],
     })
-    expect(messages(artistPayload.safeParse(dup))).toContain('This email is listed twice.')
+    expect(messages(clientPayload.safeParse(dup))).toContain('This email is listed twice.')
   })
 
   it('requires exactly one primary email', () => {
-    const none = artist({emails: [{email: 'a@example.com', label: '', isPrimary: false}]})
-    const two = artist({
+    const none = client({emails: [{email: 'a@example.com', label: '', isPrimary: false}]})
+    const two = client({
       emails: [
         {email: 'a@example.com', label: '', isPrimary: true},
         {email: 'b@example.com', label: '', isPrimary: true},
       ],
     })
-    expect(messages(artistPayload.safeParse(none))).toContain('Add a primary email.')
-    expect(messages(artistPayload.safeParse(two))).toContain('Add a primary email.')
-    expect(artistPayload.safeParse(artist({emails: []})).success).toBe(false)
+    expect(messages(clientPayload.safeParse(none))).toContain('Add a primary email.')
+    expect(messages(clientPayload.safeParse(two))).toContain('Add a primary email.')
+    expect(clientPayload.safeParse(client({emails: []})).success).toBe(false)
   })
 
   it('limits the email label to 40 characters', () => {
-    const long = artist({emails: [{email: 'a@example.com', label: 'a'.repeat(41), isPrimary: true}]})
-    expect(artistPayload.safeParse(long).success).toBe(false)
+    const long = client({emails: [{email: 'a@example.com', label: 'a'.repeat(41), isPrimary: true}]})
+    expect(clientPayload.safeParse(long).success).toBe(false)
   })
 
   it('validates nested exclusive resources and hidden ids', () => {
-    expect(artistPayload.safeParse(artist({exclusiveResources: [resource()], hiddenResourceIds: [id()]})).success).toBe(
+    expect(clientPayload.safeParse(client({exclusiveResources: [resource()], hiddenResourceIds: [id()]})).success).toBe(
       true,
     )
-    expect(artistPayload.safeParse(artist({exclusiveResources: [resource({file: null})]})).success).toBe(false)
-    expect(artistPayload.safeParse(artist({hiddenResourceIds: ['nope']})).success).toBe(false)
+    expect(clientPayload.safeParse(client({exclusiveResources: [resource({file: null})]})).success).toBe(false)
+    expect(clientPayload.safeParse(client({hiddenResourceIds: ['nope']})).success).toBe(false)
   })
 })

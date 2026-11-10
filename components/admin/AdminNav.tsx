@@ -4,7 +4,7 @@ import {usePathname} from 'next/navigation'
 import styles from './AdminNav.module.css'
 
 const LINKS = [
-  {href: '/admin', label: 'Artists', match: (path: string) => path === '/admin' || path.startsWith('/admin/artists')},
+  {href: '/admin', label: 'Clients', match: (path: string) => path === '/admin' || path.startsWith('/admin/clients')},
   {href: '/admin/resources', label: 'Resources', match: (path: string) => path.startsWith('/admin/resources')},
 ]
 

@@ -7,13 +7,13 @@ const slugs = [E2E_SLUGS.a, E2E_SLUGS.b]
 async function teardown() {
   const {data: exclusives} = await supabase
     .from('resources')
-    .select('file, artist_id, artists!inner(slug)')
-    .in('artists.slug', slugs)
+    .select('file, client_id, clients!inner(slug)')
+    .in('clients.slug', slugs)
   const files = (exclusives ?? []).flatMap((row) => (row.file ? [row.file] : []))
   if (files.length) await supabase.storage.from('resource-files').remove(files)
 
-  await supabase.from('artists').delete().in('slug', slugs)
-  await supabase.from('resources').delete().like('title', 'E2E %').is('artist_id', null)
+  await supabase.from('clients').delete().in('slug', slugs)
+  await supabase.from('resources').delete().like('title', 'E2E %').is('client_id', null)
 
   const {data} = await supabase.auth.admin.listUsers({page: 1, perPage: 1000})
   for (const user of data?.users ?? []) {
@@ -21,12 +21,12 @@ async function teardown() {
   }
 }
 
-async function insertArtist(name: string, slug: string, emails: {email: string; label: string; primary: boolean}[]) {
-  const {data, error} = await supabase.from('artists').insert({name, slug}).select('id').single()
+async function insertClient(name: string, slug: string, emails: {email: string; label: string; primary: boolean}[]) {
+  const {data, error} = await supabase.from('clients').insert({name, slug}).select('id').single()
   if (error) throw error
   const {error: emailError} = await supabase
-    .from('artist_emails')
-    .insert(emails.map((e) => ({artist_id: data.id, email: e.email, label: e.label, is_primary: e.primary})))
+    .from('client_emails')
+    .insert(emails.map((e) => ({client_id: data.id, email: e.email, label: e.label, is_primary: e.primary})))
   if (emailError) throw emailError
   return data.id
 }
@@ -34,12 +34,12 @@ async function insertArtist(name: string, slug: string, emails: {email: string; 
 async function setup() {
   await teardown()
 
-  const artistA = await insertArtist(E2E_NAMES.a, E2E_SLUGS.a, [
-    {email: E2E_USERS.artistA, label: 'Artist', primary: true},
+  const clientA = await insertClient(E2E_NAMES.a, E2E_SLUGS.a, [
+    {email: E2E_USERS.clientA, label: 'Client', primary: true},
     {email: E2E_USERS.manager, label: 'Manager', primary: false},
     {email: E2E_USERS.aux2, label: 'Alt', primary: false},
   ])
-  await insertArtist(E2E_NAMES.b, E2E_SLUGS.b, [{email: E2E_USERS.artistB, label: 'Artist', primary: true}])
+  await insertClient(E2E_NAMES.b, E2E_SLUGS.b, [{email: E2E_USERS.clientB, label: 'Client', primary: true}])
 
   const {data: main, error} = await supabase
     .from('resources')
@@ -52,8 +52,8 @@ async function setup() {
   const hidden = main.find((row) => row.title === E2E_TITLES.mainTwo)
   if (!hidden) throw new Error('The hidden main resource was not created.')
   const {error: hideError} = await supabase
-    .from('artist_hidden_resources')
-    .insert({artist_id: artistA, resource_id: hidden.id})
+    .from('client_hidden_resources')
+    .insert({client_id: clientA, resource_id: hidden.id})
   if (hideError) throw hideError
 
   const videoId = crypto.randomUUID()
@@ -66,7 +66,7 @@ async function setup() {
   const {error: exclusiveError} = await supabase.from('resources').insert([
     {
       id: crypto.randomUUID(),
-      artist_id: artistA,
+      client_id: clientA,
       title: E2E_TITLES.exclusive,
       type: 'link',
       url: 'https://example.com/e2e-a',
@@ -74,7 +74,7 @@ async function setup() {
     },
     {
       id: videoId,
-      artist_id: artistA,
+      client_id: clientA,
       title: E2E_TITLES.video,
       type: 'video',
       file: videoPath,

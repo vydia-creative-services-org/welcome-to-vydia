@@ -16,7 +16,7 @@ beforeAll(async () => {
 
 const row = (overrides: Partial<Row> = {}): Row => ({
   id: 'r1',
-  artist_id: null,
+  client_id: null,
   title: 'Vydia Dashboard Walkthrough',
   type: 'link',
   file: null,
@@ -47,7 +47,7 @@ describe('fromRow', () => {
   it('maps the columns to the Sanity field names', () => {
     expect(resource({sort_order: 4})).toMatchObject({
       id: 'r1',
-      artistId: null,
+      clientId: null,
       title: 'Vydia Dashboard Walkthrough',
       type: 'link',
       category: 'Getting Started',

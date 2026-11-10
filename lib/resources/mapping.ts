@@ -28,7 +28,7 @@ function toHotspot(value: Json | null): Hotspot | null {
 export function fromRow(row: Row): Resource {
   return {
     id: row.id,
-    artistId: row.artist_id,
+    clientId: row.client_id,
     title: row.title,
     type: row.type,
     file: row.file,

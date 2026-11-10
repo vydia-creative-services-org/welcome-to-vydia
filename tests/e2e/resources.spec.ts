@@ -4,8 +4,8 @@ import {E2E_NAMES, E2E_SLUGS, E2E_TITLES, storageStatePath, type E2EPersona} fro
 
 const visibleTitles = async (page: Page) => page.locator('h2.visually-hidden').allTextContents()
 
-test.describe('artist A', () => {
-  test.use({storageState: storageStatePath('artistA')})
+test.describe('client A', () => {
+  test.use({storageState: storageStatePath('clientA')})
 
   test('sees their exclusive resources and the main resources they have not hidden', async ({page}) => {
     await page.goto(`/${E2E_SLUGS.a}`)
@@ -51,10 +51,10 @@ test.describe('artist A', () => {
   })
 })
 
-test.describe('artist B', () => {
-  test.use({storageState: storageStatePath('artistB')})
+test.describe('client B', () => {
+  test.use({storageState: storageStatePath('clientB')})
 
-  test('does not see artist A’s exclusive resources, and sees the resource A hides', async ({page}) => {
+  test('does not see client A’s exclusive resources, and sees the resource A hides', async ({page}) => {
     await page.goto(`/${E2E_SLUGS.b}`)
     await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
     const titles = await visibleTitles(page)
@@ -85,11 +85,11 @@ test.describe('signed out', () => {
   })
 })
 
-for (const persona of ['artistA', 'manager', 'aux2'] as const satisfies readonly E2EPersona[]) {
-  test.describe(`${persona}, one of artist A's three emails`, () => {
+for (const persona of ['clientA', 'manager', 'aux2'] as const satisfies readonly E2EPersona[]) {
+  test.describe(`${persona}, one of client A's three emails`, () => {
     test.use({storageState: storageStatePath(persona)})
 
-    test('sees the same page, greeted by the artist', async ({page}) => {
+    test('sees the same page, greeted by the client', async ({page}) => {
       await page.goto(`/${E2E_SLUGS.a}`)
       await expect(page.getByRole('region', {name: 'Resources'})).toBeVisible()
       await expect(page).toHaveTitle(`${E2E_NAMES.a} | Welcome to Vydia`)

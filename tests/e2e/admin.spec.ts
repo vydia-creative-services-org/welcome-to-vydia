@@ -3,7 +3,7 @@ import {E2E_SLUGS, storageStatePath} from './users'
 
 test.describe('signed out', () => {
   test('every admin page redirects to the admin login', async ({page}) => {
-    for (const path of ['/admin', '/admin/resources', '/admin/artists/new']) {
+    for (const path of ['/admin', '/admin/resources', '/admin/clients/new']) {
       await page.goto(path)
       await expect(page).toHaveURL('/admin/login')
     }
@@ -39,10 +39,10 @@ test.describe('signed out', () => {
   })
 })
 
-test.describe('signed in as an artist, not an admin', () => {
+test.describe('signed in as a client, not an admin', () => {
   test.use({storageState: storageStatePath('manager')})
 
-  test('the panel shows "You don’t have access." and the artist page keeps working', async ({page}) => {
+  test('the panel shows "You don’t have access." and the client page keeps working', async ({page}) => {
     await page.goto('/admin')
     await expect(page).toHaveURL('/admin/login?error=no-access')
     await expect(page.getByRole('alert').filter({hasText: 'You don’t have access.'})).toBeVisible()
@@ -51,7 +51,7 @@ test.describe('signed in as an artist, not an admin', () => {
   })
 
   test('the admin routes never serve data to a magic-link session', async ({page}) => {
-    for (const path of ['/admin/resources', '/admin/artists/new']) {
+    for (const path of ['/admin/resources', '/admin/clients/new']) {
       await page.goto(path)
       await expect(page).toHaveURL('/admin/login?error=no-access')
     }

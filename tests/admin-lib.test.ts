@@ -26,7 +26,7 @@ beforeAll(async () => {
 
 const row = (overrides: Partial<Row> = {}): Row => ({
   id: crypto.randomUUID(),
-  artist_id: null,
+  client_id: null,
   title: 'Q1 Release Plan',
   type: 'pdf',
   file: 'abc/file-1.pdf',
@@ -94,7 +94,7 @@ describe('drafts', () => {
 function formInitialResource() {
   return {
     id: 'r1',
-    artistId: null,
+    clientId: null,
     title: 'Q1 Release Plan',
     type: 'pdf' as const,
     file: 'abc/file-1.pdf',
@@ -108,21 +108,21 @@ function formInitialResource() {
 }
 
 describe('toFormInitial', () => {
-  const artist = {
+  const client = {
     id: 'a1',
     name: 'Lil Example',
     slug: 'lil-example',
-    artist_emails: [
+    client_emails: [
       {email: 'manager@mgmt.com', label: 'Manager', is_primary: false},
-      {email: 'lil@example.com', label: 'Artist', is_primary: true},
+      {email: 'lil@example.com', label: 'Client', is_primary: true},
       {email: 'alt@example.com', label: null, is_primary: false},
     ],
-    artist_hidden_resources: [{resource_id: 'h1'}, {resource_id: 'h2'}],
+    client_hidden_resources: [{resource_id: 'h1'}, {resource_id: 'h2'}],
     resources: [row({title: 'Second', sort_order: 2}), row({title: 'First', sort_order: 1})],
   }
 
   it('puts the primary email first and the rest in rows with labels', () => {
-    const initial = formInitial.toFormInitial(artist)
+    const initial = formInitial.toFormInitial(client)
     expect(initial.primaryEmail).toBe('lil@example.com')
     expect(initial.auxEmails.map((r) => [r.email, r.label])).toEqual([
       ['manager@mgmt.com', 'Manager'],
@@ -132,7 +132,7 @@ describe('toFormInitial', () => {
   })
 
   it('carries the hides and orders exclusive resources by sort order', () => {
-    const initial = formInitial.toFormInitial(artist)
+    const initial = formInitial.toFormInitial(client)
     expect(initial.hiddenResourceIds).toEqual(['h1', 'h2'])
     expect(initial.exclusiveResources.map((d) => d.title)).toEqual(['First', 'Second'])
     expect(initial.id).toBe('a1')
@@ -141,9 +141,9 @@ describe('toFormInitial', () => {
 
 describe('mapSaveError', () => {
   it.each([
-    [{code: '23505', message: 'duplicate key value violates unique constraint "artists_slug_key"'}, 'slug'],
+    [{code: '23505', message: 'duplicate key value violates unique constraint "clients_slug_key"'}, 'slug'],
     [{code: '23505', message: 'duplicate email'}, 'emails'],
-    [{code: '23514', message: 'new row violates check constraint "artists_slug_check"'}, 'slug'],
+    [{code: '23514', message: 'new row violates check constraint "clients_slug_check"'}, 'slug'],
     [{code: '23514', message: 'exactly one primary email is required'}, 'emails'],
   ])('maps %j to the %s field', (error, field) => {
     expect(mapSaveError(error)?.field).toBe(field)

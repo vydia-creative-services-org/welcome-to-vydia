@@ -45,7 +45,7 @@ test.describe('accessibility, signed out', () => {
 })
 
 test.describe('accessibility, resources page', () => {
-  test.use({storageState: storageStatePath('artistA')})
+  test.use({storageState: storageStatePath('clientA')})
 
   test('carousel and grid views', async ({page}) => {
     await page.goto(`/${E2E_SLUGS.a}`)

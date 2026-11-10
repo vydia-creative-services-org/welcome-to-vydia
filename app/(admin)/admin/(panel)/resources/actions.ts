@@ -17,12 +17,12 @@ export async function upsertMainResource(input: ResourceInputValue): Promise<Res
   }
   const resource = parsed.data
 
-  const {data: existing} = await supabase.from('resources').select('artist_id').eq('id', resource.id).maybeSingle()
-  if (existing && existing.artist_id !== null) return {ok: false, errors: {form: 'That resource belongs to an artist.'}}
+  const {data: existing} = await supabase.from('resources').select('client_id').eq('id', resource.id).maybeSingle()
+  if (existing && existing.client_id !== null) return {ok: false, errors: {form: 'That resource belongs to a client.'}}
 
   const {error} = await supabase.from('resources').upsert({
     id: resource.id,
-    artist_id: null,
+    client_id: null,
     title: resource.title,
     type: resource.type,
     file: resource.file,
@@ -49,7 +49,7 @@ export async function deleteMainResource(id: string): Promise<{ok: boolean}> {
   const {supabase} = await requireAdmin()
   const parsed = z.uuid().safeParse(id)
   if (!parsed.success) return {ok: false}
-  const {error} = await supabase.from('resources').delete().eq('id', parsed.data).is('artist_id', null)
+  const {error} = await supabase.from('resources').delete().eq('id', parsed.data).is('client_id', null)
   if (error) return {ok: false}
   await sweepStorage(supabase)
   refresh()

@@ -1,29 +1,29 @@
 'use client'
 import {useMemo, useState, useTransition} from 'react'
-import {saveArtist, type SaveResult} from '@/app/(admin)/admin/(panel)/artists/actions'
+import {saveClient, type SaveResult} from '@/app/(admin)/admin/(panel)/clients/actions'
 import {typeLabel} from '@/components/TypeLabel'
 import {draftToInput, type DraftErrors} from '@/lib/admin/drafts'
-import type {ArtistFormInitial} from '@/lib/admin/form-initial'
+import type {ClientFormInitial} from '@/lib/admin/form-initial'
 import {SITE_URL} from '@/lib/env'
 import {groupByCategory} from '@/lib/resources/group'
 import type {Resource} from '@/lib/resources/types'
 import {slugify} from '@/lib/slug'
-import {artistPayload, type ArtistInput} from '@/lib/validation'
+import {clientPayload, type ClientInput} from '@/lib/validation'
 import {ConfirmDialog} from './ConfirmDialog'
 import controls from './controls.module.css'
-import styles from './ArtistForm.module.css'
+import styles from './ClientForm.module.css'
 import {EmailRows} from './EmailRows'
 import {ResourceEditor} from './ResourceEditor'
 
 type Props = {
-  initial: ArtistFormInitial
+  initial: ClientFormInitial
   mainResources: Resource[]
   categories: string[]
 }
 
 const siteHost = new URL(SITE_URL).host
 
-export function ArtistForm({initial, mainResources, categories}: Props) {
+export function ClientForm({initial, mainResources, categories}: Props) {
   const isNew = !initial.id
   const [name, setName] = useState(initial.name)
   const [slug, setSlug] = useState(initial.slug)
@@ -55,12 +55,12 @@ export function ArtistForm({initial, mainResources, categories}: Props) {
     return byId
   }, [errors, exclusives])
 
-  const buildPayload = (): ArtistInput => ({
+  const buildPayload = (): ClientInput => ({
     id: initial.id,
     name,
     slug,
     emails: [
-      {email: primaryEmail, label: 'Artist', isPrimary: true},
+      {email: primaryEmail, label: 'Client', isPrimary: true},
       ...auxEmails
         .filter((row) => row.email.trim())
         .map((row) => ({email: row.email, label: row.label, isPrimary: false})),
@@ -71,7 +71,7 @@ export function ArtistForm({initial, mainResources, categories}: Props) {
 
   const submit = () => {
     const payload = buildPayload()
-    const parsed = artistPayload.safeParse(payload)
+    const parsed = clientPayload.safeParse(payload)
     if (!parsed.success) {
       const found: Record<string, string> = {}
       for (const issue of parsed.error.issues) found[issue.path.join('.')] ??= issue.message
@@ -83,7 +83,7 @@ export function ArtistForm({initial, mainResources, categories}: Props) {
     setFormError(null)
     startSaving(async () => {
       try {
-        const result: SaveResult = await saveArtist(payload)
+        const result: SaveResult = await saveClient(payload)
         setErrors(result.fieldErrors)
         setFormError(result.formError ?? null)
       } catch {
@@ -117,11 +117,11 @@ export function ArtistForm({initial, mainResources, categories}: Props) {
       <section className={`${controls.card} ${styles.section}`}>
         <h2 className={controls.legend}>Details</h2>
         <div className={controls.field}>
-          <label htmlFor="artist-name" className={controls.label}>
+          <label htmlFor="client-name" className={controls.label}>
             Name
           </label>
           <input
-            id="artist-name"
+            id="client-name"
             value={name}
             maxLength={100}
             aria-invalid={errors.name ? true : undefined}
@@ -136,13 +136,13 @@ export function ArtistForm({initial, mainResources, categories}: Props) {
         </div>
 
         <div className={controls.field}>
-          <label htmlFor="artist-slug" className={controls.label}>
+          <label htmlFor="client-slug" className={controls.label}>
             Link
           </label>
           <div className={styles.slug}>
             <span className={styles.host}>{siteHost}/</span>
             <input
-              id="artist-slug"
+              id="client-slug"
               value={slug}
               maxLength={60}
               aria-invalid={errors.slug ? true : undefined}
@@ -166,11 +166,11 @@ export function ArtistForm({initial, mainResources, categories}: Props) {
         </div>
 
         <div className={controls.field}>
-          <label htmlFor="artist-email" className={controls.label}>
+          <label htmlFor="client-email" className={controls.label}>
             Email
           </label>
           <input
-            id="artist-email"
+            id="client-email"
             type="email"
             value={primaryEmail}
             aria-invalid={errors['emails.0.email'] ? true : undefined}
@@ -227,7 +227,7 @@ export function ArtistForm({initial, mainResources, categories}: Props) {
       )}
 
       <section className={`${controls.card} ${styles.section}`}>
-        <h2 className={controls.legend}>Artist specific</h2>
+        <h2 className={controls.legend}>Client specific</h2>
         <ResourceEditor
           drafts={exclusives}
           setDrafts={setExclusives}
@@ -250,8 +250,8 @@ export function ArtistForm({initial, mainResources, categories}: Props) {
 
       <ConfirmDialog
         open={confirmingSlug}
-        title="Change this artist’s link?"
-        body={`The old link will stop working - send the artist the new one: ${siteHost}/${slug}`}
+        title="Change this client’s link?"
+        body={`The old link will stop working - send the client the new one: ${siteHost}/${slug}`}
         confirmLabel="Save and change link"
         onCancel={() => setConfirmingSlug(false)}
         onConfirm={() => {
