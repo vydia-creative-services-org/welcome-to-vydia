@@ -38,12 +38,14 @@
 }
 
 .roleBadge {
-  padding: 2px var(--admin-space-2);
+  background: var(--admin-border);
+  padding: 0px 6px;
   border: 1px solid var(--admin-border);
-  border-radius: var(--admin-radius);
+  border-radius: 100px;
   color: var(--admin-muted);
-  font-size: 12px;
   white-space: nowrap;
+  font-size: 13px;
+  margin-left: -6px;
 }
 
 .main {
