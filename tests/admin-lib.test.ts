@@ -149,6 +149,10 @@ describe('mapSaveError', () => {
     expect(mapSaveError(error)?.field).toBe(field)
   })
 
+  it('leaves a missing or unowned client to the form-level message', () => {
+    expect(mapSaveError({code: 'P0002', message: 'client not found'})).toBeNull()
+  })
+
   it('leaves unknown errors for the generic message', () => {
     expect(mapSaveError({code: '57014', message: 'canceling statement due to statement timeout'})).toBeNull()
   })

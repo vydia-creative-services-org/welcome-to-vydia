@@ -37,6 +37,15 @@
   text-overflow: ellipsis;
 }
 
+.roleBadge {
+  padding: 2px var(--admin-space-2);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  color: var(--admin-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .main {
   max-width: var(--admin-content-width);
   margin: 0 auto;

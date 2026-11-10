@@ -4,8 +4,31 @@
   gap: var(--admin-space-4);
 }
 
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--admin-space-3);
+}
+
 .search {
+  width: 100%;
   max-width: 360px;
+}
+
+.scopes {
+  display: flex;
+  gap: var(--admin-space-2);
+}
+
+.scopes button[aria-pressed='true'] {
+  background: var(--admin-text);
+  border-color: var(--admin-text);
+  color: var(--admin-surface);
+}
+
+.owner {
+  white-space: nowrap;
 }
 
 .card {
