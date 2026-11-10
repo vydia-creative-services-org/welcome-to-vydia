@@ -1,7 +1,6 @@
 import type {ResourceCardData} from '@/lib/resources/types'
 import {CardCover} from './CardCover'
 import styles from './ResourceCard.module.css'
-import {TypeLabel} from './TypeLabel'
 
 export function CardBody({resource, hideTitle}: {resource: ResourceCardData; hideTitle?: boolean}) {
   return (
@@ -14,7 +13,6 @@ export function CardBody({resource, hideTitle}: {resource: ResourceCardData; hid
       ) : (
         <div className={styles.body}>
           <h3 className={styles.title}>{resource.title}</h3>
-          <TypeLabel type={resource.type} />
         </div>
       )}
     </>

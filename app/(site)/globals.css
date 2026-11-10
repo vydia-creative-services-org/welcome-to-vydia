@@ -8,10 +8,6 @@
   --color-ink: #121212;
   --color-danger: #dc2626;
   --color-success: #15803d;
-  --color-badge-pdf: #e5322d;
-  --color-badge-video: #8e1b5a;
-  --color-badge-link: #f5a524;
-  --color-badge-slides: #f4b400;
 
   /* Gallery ⇄ grid switch: quick off the mark, decelerating into place, no overshoot. */
   --switch-duration: 800ms;

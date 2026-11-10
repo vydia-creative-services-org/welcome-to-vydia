@@ -4,7 +4,6 @@ import {useEffect, useEffectEvent, useLayoutEffect, useRef, useState} from 'reac
 import type {ResourceCardData} from '@/lib/resources/types'
 import styles from './ResourceCarousel.module.css'
 import {ResourceCard} from './ResourceCard'
-import {typeLabel} from './TypeLabel'
 import {useScrollInertia} from './useScrollInertia'
 import {useViewMode} from './ViewMode'
 
@@ -318,7 +317,7 @@ export function ResourceCarousel({resources}: {resources: ResourceCardData[]}) {
         {/* Keyed so each new title remounts and replays its entrance. */}
         <span key={current} className={styles.titleText}>
           {activeResource.title}
-          <span className={styles.titleType}>{typeLabel(activeResource.type)}</span>
+          <span className={styles.titleType}>{activeResource.category}</span>
         </span>
       </h2>
     </section>
