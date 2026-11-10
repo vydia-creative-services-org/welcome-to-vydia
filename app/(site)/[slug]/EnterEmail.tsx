@@ -16,13 +16,17 @@ async function submit(previous: ClientState, form: FormData): Promise<ClientStat
 }
 
 function useSecondsLeft(sentAt: number | undefined) {
-  const [now, setNow] = useState(() => Date.now())
+  const [now, setNow] = useState(0)
   useEffect(() => {
     if (!sentAt) return
-    const id = setInterval(() => setNow(Date.now()), 1000)
+    const tick = () => setNow(Date.now())
+    tick()
+    const id = setInterval(tick, 1000)
     return () => clearInterval(id)
   }, [sentAt])
   if (!sentAt) return 0
+  // Before the first tick, `now` is 0; treat as just sent so the full countdown shows.
+  if (!now) return RESEND_AFTER_MS / 1000
   return Math.min(RESEND_AFTER_MS / 1000, Math.max(0, Math.ceil((sentAt + RESEND_AFTER_MS - now) / 1000)))
 }
 
