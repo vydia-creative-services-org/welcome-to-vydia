@@ -21,7 +21,7 @@
 
   /* Main blur layer */
   .mobileFooter::before {
-    content: "";
+    content: '';
     position: absolute;
     inset: 0;
     z-index: 0;
@@ -59,7 +59,7 @@
 
   /* Softer, wider diffusion */
   .mobileFooter::after {
-    content: "";
+    content: '';
     position: absolute;
     inset: 0 0 -20px;
     z-index: 0;
@@ -68,25 +68,10 @@
     -webkit-backdrop-filter: blur(60px);
     backdrop-filter: blur(60px);
 
-    background: linear-gradient(
-      to top,
-      rgb(0 0 0 / 25%) 0%,
-      rgb(0 0 0 / 12%) 45%,
-      transparent 85%
-    );
+    background: linear-gradient(to top, rgb(0 0 0 / 25%) 0%, rgb(0 0 0 / 12%) 45%, transparent 85%);
 
-    -webkit-mask-image: linear-gradient(
-      to top,
-      black 0%,
-      rgb(0 0 0 / 80%) 30%,
-      transparent 85%
-    );
+    -webkit-mask-image: linear-gradient(to top, black 0%, rgb(0 0 0 / 80%) 30%, transparent 85%);
 
-    mask-image: linear-gradient(
-      to top,
-      black 0%,
-      rgb(0 0 0 / 80%) 30%,
-      transparent 85%
-    );
+    mask-image: linear-gradient(to top, black 0%, rgb(0 0 0 / 80%) 30%, transparent 85%);
   }
 }

@@ -7,7 +7,7 @@
 
 ## Medium
 
-- [ ] the background needs to be more liek the original, i liek the ease between them but needs to be a bit more like the orginal. add a bit of grain to the backgroudn as well. 
+- [ ] the background needs to be more liek the original, i liek the ease between them but needs to be a bit more like the orginal. add a bit of grain to the backgroudn as well.
 - [ ] add a search bar where documents that dont fit the search have a dark filter go over them and they become moved to the back
 - [ ] the vertical and horizontal gallerys need to feel mroe "skatey"
 
