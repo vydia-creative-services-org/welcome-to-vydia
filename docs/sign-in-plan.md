@@ -1,5 +1,7 @@
 # Passwordless Sign-in: Implementation Plan
 
+> **Superseded by iteration two** ([`iteration-two-plan.md`](./iteration-two-plan.md)). Artists now sign in from the artist's own page with a magic link only, the server checks the email against that artist first, and the link signs in directly (no Continue page). Google sign-in is for admins only, at `/admin`. This document is kept for history.
+>
 > Scope: the "Email and sign in" block in [`TASKS.md`](../TASKS.md).
 > Builds on [`docs/plan.md`](./plan.md) §4.3 (Supabase setup), §8 (Authentication), and §9 (Access control). This plan **replaces** §8.4 (login page) and §8.5 (auth routes) of that document. Everything else there still holds.
 
