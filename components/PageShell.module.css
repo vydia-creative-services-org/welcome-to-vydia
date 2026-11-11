@@ -25,9 +25,12 @@
   overflow: hidden;
 }
 
-/* No document scrolling (or iOS rubber-banding) while a fullscreen shell is mounted. */
+/*
+ * No rubber-banding while a fullscreen shell is mounted. The document itself is deliberately NOT
+ * overflow: hidden: iOS 26 Safari only lets a page run behind its toolbars when the document is
+ * scrollable, and with overflow hidden it fills the bars with a flat colour instead.
+ */
 :global(html):has(.fullscreen),
 :global(body):has(.fullscreen) {
-  overflow: hidden;
   overscroll-behavior: none;
 }
