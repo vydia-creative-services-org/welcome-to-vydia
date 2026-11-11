@@ -615,7 +615,7 @@ export function AssignAdminSelect({clientId, current, admins}: Props) {
 }
 ```
 
-The client's own form (`ClientForm`) needs no change. Its core resource section only offers Remove/Restore (hides), and regular admins keep that ability on their own clients. Its "Client specific" section writes through `save_client`, which is now ownership-checked.
+The client's own form (`ClientForm`) needs no change. Its core resource section only offers Remove/Restore (hides), and regular admins keep that ability on their own clients. Its "Client-Specific Resources" section writes through `save_client`, which is now ownership-checked.
 
 ### Core resources: `app/(admin)/admin/(panel)/resources/page.tsx` and `SortableResourceList`
 
@@ -991,7 +991,7 @@ Work through the phases in order. Each phase ends with a check that has to pass 
   - [x] Add a `canEdit` prop.
   - [x] Add a `ReadOnlyResourceList` (no DnD, no Add / Edit / Delete), reusing the existing classes.
   - [x] Return it early when `!canEdit`.
-- [ ] **`ClientForm`**: no changes. Confirm the Remove/Restore toggles and the "Client specific" section still work for a regular admin.
+- [ ] **`ClientForm`**: no changes. Confirm the Remove/Restore toggles and the "Client-Specific Resources" section still work for a regular admin.
 - [ ] Manual pass in the browser as each role:
   - [ ] Super admin: sees all clients, owner column, and filter. Reassigns a client. Edits, reorders, and deletes core resources.
   - [ ] Regular admin: empty list at first. Creates a client, which then appears. Adds client-specific resources. Hides a core resource on that client. Deletes the client.

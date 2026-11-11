@@ -227,7 +227,7 @@ export function ClientForm({initial, mainResources, categories}: Props) {
       )}
 
       <section className={`${controls.card} ${styles.section}`}>
-        <h2 className={controls.legend}>Client specific</h2>
+        <h2 className={controls.legend}>Client-Specific Resources</h2>
         <ResourceEditor
           drafts={exclusives}
           setDrafts={setExclusives}
