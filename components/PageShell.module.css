@@ -14,7 +14,12 @@
 }
 
 .fullscreen {
-  height: 100dvh;
+  /*
+   * Pinned to every edge of the screen rather than sized with dvh: dvh stops at the Safari toolbars,
+   * so on iOS 26 the page (and the header/footer fade) ended above the bar instead of running behind it.
+   */
+  position: fixed;
+  inset: 0;
   max-width: none;
   padding: 0;
   overflow: hidden;
