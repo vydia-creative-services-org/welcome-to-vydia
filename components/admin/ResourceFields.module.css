@@ -39,3 +39,14 @@
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius);
 }
+
+.urlRow {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-space-2);
+}
+
+.urlPrefix {
+  color: var(--admin-muted);
+  white-space: nowrap;
+}

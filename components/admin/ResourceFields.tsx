@@ -12,6 +12,8 @@ import {CategoryInput} from './CategoryInput'
 import controls from './controls.module.css'
 import styles from './ResourceFields.module.css'
 
+const URL_PREFIX = 'https://www.'
+
 export type DraftUpdate = (update: (draft: ResourceDraft) => ResourceDraft) => void
 
 type Props = {
@@ -32,6 +34,12 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
   const id = useId()
   const showFile = draft.type !== 'link'
   const showUrl = draft.type === 'link' || draft.type === 'slides'
+  const prefixed = !draft.url || draft.url.startsWith(URL_PREFIX)
+  const changeUrl = (typed: string) => {
+    const value = prefixed && !/^https?:\/\//i.test(typed) ? URL_PREFIX + typed : typed
+    // Typed (or pasted) text with its own scheme is kept as-is; clearing it restores the prefix
+    onChange((d) => ({...d, url: prefixed && value === URL_PREFIX ? '' : value}))
+  }
   const busy = draft.uploads > 0
   const previewPath = draft.coverImage ?? draft.pdfPreview
 
@@ -191,15 +199,17 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
           <label htmlFor={`${id}-url`} className={controls.label}>
             URL
           </label>
-          <input
-            id={`${id}-url`}
-            type="url"
-            value={draft.url}
-            placeholder="https://"
-            aria-invalid={errors.url ? true : undefined}
-            onChange={(event) => onChange((d) => ({...d, url: event.target.value}))}
-            className={controls.input}
-          />
+          <div className={styles.urlRow}>
+            {prefixed && <span className={styles.urlPrefix}>{URL_PREFIX}</span>}
+            <input
+              id={`${id}-url`}
+              type={prefixed ? 'text' : 'url'}
+              value={prefixed ? draft.url.slice(URL_PREFIX.length) : draft.url}
+              aria-invalid={errors.url ? true : undefined}
+              onChange={(event) => changeUrl(event.target.value)}
+              className={controls.input}
+            />
+          </div>
           {errors.url && (
             <p role="alert" className={controls.error}>
               {errors.url}
