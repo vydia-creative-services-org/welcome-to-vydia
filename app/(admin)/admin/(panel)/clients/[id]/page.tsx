@@ -4,6 +4,7 @@ import {ClientForm} from '@/components/admin/ClientForm'
 import controls from '@/components/admin/controls.module.css'
 import {CopyLinkButton} from '@/components/admin/CopyLinkButton'
 import {DeleteClientButton} from '@/components/admin/DeleteClientButton'
+import {OpenLinkButton} from '@/components/admin/OpenLinkButton'
 import {requireAdmin} from '@/lib/admin/auth'
 import {toFormInitial} from '@/lib/admin/form-initial'
 import {loadResourceContext} from '@/lib/admin/resource-context'
@@ -46,9 +47,7 @@ export default async function ClientDetail({params, searchParams}: PageProps<'/a
         </div>
         <div className={detail.actions}>
           <CopyLinkButton slug={client.slug} />
-          <a href={`/${client.slug}`} target="_blank" rel="noopener" className={controls.button}>
-            Open
-          </a>
+          <OpenLinkButton slug={client.slug} />
         </div>
       </header>
 

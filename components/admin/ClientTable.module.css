@@ -104,3 +104,9 @@
   padding: var(--admin-space-5);
   text-align: center;
 }
+
+.actions {
+  display: inline-flex;
+  gap: var(--admin-space-2);
+  justify-content: flex-end;
+}

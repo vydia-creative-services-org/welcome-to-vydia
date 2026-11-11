@@ -4,6 +4,7 @@ import {useMemo, useState} from 'react'
 import {filterClients, type ClientScope} from '@/lib/admin/client-filter'
 import {formatDate} from '@/lib/format'
 import {CopyLinkButton} from './CopyLinkButton'
+import {OpenLinkButton} from './OpenLinkButton'
 import controls from './controls.module.css'
 import styles from './ClientTable.module.css'
 
@@ -75,7 +76,7 @@ export function ClientTable({rows, showOwner}: {rows: ClientRow[]; showOwner: bo
               {showOwner && <th scope="col">Owner</th>}
               <th scope="col">Created</th>
               <th scope="col">
-                <span className="visually-hidden">Link</span>
+                <span className="visually-hidden">Actions</span>
               </th>
             </tr>
           </thead>
@@ -96,7 +97,10 @@ export function ClientTable({rows, showOwner}: {rows: ClientRow[]; showOwner: bo
                 )}
                 <td className={styles.date}>{formatDate(row.createdAt)}</td>
                 <td className={styles.copy}>
-                  <CopyLinkButton slug={row.slug} />
+                  <div className={styles.actions}>
+                    <CopyLinkButton slug={row.slug} />
+                    <OpenLinkButton slug={row.slug} />
+                  </div>
                 </td>
               </tr>
             ))}
