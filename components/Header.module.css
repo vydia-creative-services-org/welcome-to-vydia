@@ -7,8 +7,8 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 120px;
-  padding: 20px 20px;
+  height: calc(120px + env(safe-area-inset-top));
+  padding: calc(20px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) 20px calc(20px + env(safe-area-inset-left));
   z-index: 50;
 
   background: transparent;

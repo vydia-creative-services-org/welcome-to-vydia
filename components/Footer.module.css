@@ -11,7 +11,7 @@
     left: 0;
     right: 0;
 
-    height: 150px;
+    height: calc(150px + env(safe-area-inset-bottom));
     z-index: 49;
 
     background: transparent;
