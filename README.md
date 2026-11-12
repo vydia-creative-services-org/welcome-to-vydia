@@ -54,25 +54,23 @@ To use the hosted project instead, put its URL and keys in `.env.local`.
 | `SUPABASE_SECRET_KEY`                  | Supabase → API Keys (`sb_secret_…`). **Server only. Never `NEXT_PUBLIC_`.** | `lib/supabase/service.ts` (sign-in approval, rate limits), the scripts, and the e2e fixtures |
 | `SUPABASE_PROJECT_ID`                  | The project ref (`lsihwkbnrheczirlkswo`)                                    | Supabase CLI commands                                                                        |
 
-`.env.local` is gitignored; `.env.example` lists every variable. The one-time Sanity import also reads `NEXT_PUBLIC_SANITY_PROJECT_ID`, `NEXT_PUBLIC_SANITY_DATASET`, and `SANITY_API_READ_TOKEN` (see `.env.example`).
+`.env.local` is gitignored; `.env.example` lists every variable.
 
 ## Scripts
 
-| Script                                       | What it does                                                                                                                                       |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run dev`                                | Dev server on http://localhost:3000                                                                                                                |
-| `npm run build` / `npm run start`            | Production build / serve it                                                                                                                        |
-| `npm run lint`                               | ESLint                                                                                                                                             |
-| `npm run typecheck`                          | Regenerates Next route types, then `tsc`                                                                                                           |
-| `npm run test`                               | Unit tests (Vitest, `tests/*.test.ts`)                                                                                                             |
-| `npm run db:test`                            | Database tests (pgTAP, `supabase/tests`) against the local stack                                                                                   |
-| `npm run db:types`                           | Regenerates `lib/supabase/database.types.ts` from the **local** database. Run it after every migration.                                            |
-| `npm run db:push`                            | Pushes migrations. With no flag it targets the **local** stack; use `supabase db push --remote` for the hosted project.                            |
-| `npm run e2e`                                | End-to-end tests (Playwright, `tests/e2e`)                                                                                                         |
-| `npm run e2e:setup` / `npm run e2e:teardown` | Create / remove the e2e clients, resources, and test users                                                                                         |
-| `npm run storage:sweep`                      | Lists uploaded files nothing references and that are over 24 hours old. Add `--delete` to remove them. Run it monthly.                             |
-| `npm run migrate:sanity`                     | The one-time import of resources from Sanity. Flags: `--dry-run`, `--include-drafts`, `--default-category`, `--max-file-mb`. Removed after launch. |
-| `npm run format` / `npm run format:check`    | Prettier                                                                                                                                           |
+| Script                                       | What it does                                                                                                           |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                                | Dev server on http://localhost:3000                                                                                    |
+| `npm run build` / `npm run start`            | Production build / serve it                                                                                            |
+| `npm run lint`                               | ESLint                                                                                                                 |
+| `npm run typecheck`                          | Regenerates Next route types, then `tsc`                                                                               |
+| `npm run test`                               | Unit tests (Vitest, `tests/*.test.ts`)                                                                                 |
+| `npm run db:test`                            | Database tests (pgTAP, `supabase/tests`) against the local stack                                                       |
+| `npm run db:types`                           | Regenerates `lib/supabase/database.types.ts` from the **local** database. Run it after every migration.                |
+| `npm run e2e`                                | End-to-end tests (Playwright, `tests/e2e`)                                                                             |
+| `npm run e2e:setup` / `npm run e2e:teardown` | Create / remove the e2e clients, resources, and test users                                                             |
+| `npm run storage:sweep`                      | Lists uploaded files nothing references and that are over 24 hours old. Add `--delete` to remove them. Run it monthly. |
+| `npm run format` / `npm run format:check`    | Prettier                                                                                                               |
 
 ### Database changes
 
@@ -155,8 +153,7 @@ app/(admin)/         admin side: /admin/login, /admin/auth/*, and the panel unde
 app/api/resources/   the signed-URL file route
 components/          client UI; components/admin/ for the admin panel
 lib/                 Supabase clients, client page data, validation, resource mapping, admin helpers
-sanity/              schema.json: the frozen resource field contract (Sanity is not used at runtime)
-scripts/             migrate-sanity, storage-sweep, e2e-fixtures
+scripts/             storage-sweep, e2e-fixtures, preview-email, export-brand-assets
 supabase/            migrations, pgTAP tests, config, and email templates
 tests/               unit tests (Vitest) and tests/e2e (Playwright)
 docs/                spec, plans, and the admin guide
