@@ -1,9 +1,16 @@
 .shell {
+  --admin-frost: 82%;
+
   min-height: 100vh;
 }
 
 .bar {
-  background: var(--admin-bg);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--admin-bg) var(--admin-frost), transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  backdrop-filter: saturate(180%) blur(12px);
   border-bottom: 1px solid var(--admin-border);
 }
 
@@ -18,34 +25,11 @@
   min-height: 56px;
 }
 
-.me {
-  display: flex;
-  align-items: center;
-  gap: var(--admin-space-3);
-  min-width: 0;
-}
-
-.avatar {
-  border-radius: 50%;
-}
-
-.name {
-  overflow: hidden;
-  max-width: 220px;
-  font-weight: 500;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.roleBadge {
-  background: var(--admin-border);
-  padding: 0px 6px;
-  border: 1px solid var(--admin-border);
-  border-radius: 100px;
-  color: var(--admin-muted);
-  white-space: nowrap;
-  font-size: 13px;
-  margin-left: -6px;
+@media (max-width: 520px) {
+  .barInner {
+    gap: var(--admin-space-3);
+    padding: 0 var(--admin-space-4);
+  }
 }
 
 .main {
@@ -59,17 +43,30 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--admin-space-4);
-  margin-bottom: var(--admin-space-5);
+  margin-bottom: var(--admin-space-6);
 }
 
 .pageTitle {
-  font-size: 24px;
+  font-size: var(--text-24);
+  line-height: var(--leading-24);
   font-weight: 600;
-  line-height: 1.2;
+  letter-spacing: var(--tracking-tight);
 }
 
 .stack {
   display: flex;
   flex-direction: column;
   gap: var(--admin-space-5);
+}
+
+@media (max-width: 520px) {
+  .main {
+    padding: var(--admin-space-5) var(--admin-space-4) var(--admin-space-7);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .shell {
+    --admin-frost: 100%;
+  }
 }

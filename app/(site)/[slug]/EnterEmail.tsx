@@ -47,7 +47,7 @@ export function EnterEmail({slug}: {slug: string}) {
   if (state.status === 'sent') {
     return (
       <div className={styles.panel}>
-        <h1 className="visually-hidden">Check your inbox</h1>
+        <h1 className="visually-hidden">Check Your Inbox</h1>
         <p role="status" className={styles.sent}>
           Email sent, check your inbox
         </p>
@@ -70,7 +70,7 @@ export function EnterEmail({slug}: {slug: string}) {
   const message = MESSAGES[state.status]
   return (
     <div className={styles.panel}>
-      <h1 className="visually-hidden">Enter your email</h1>
+      <h1 className="visually-hidden">Enter Your Email</h1>
       <div className={styles.fields}>
         <form action={action} className={styles.form}>
           <input type="hidden" name="slug" value={slug} />

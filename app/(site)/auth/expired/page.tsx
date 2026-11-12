@@ -13,7 +13,7 @@ export default async function ExpiredPage({searchParams}: PageProps<'/auth/expir
   return (
     <PageShell>
       <Notice
-        title="This link has expired"
+        title="This Link Has Expired"
         action={
           <Link href={back} className={cx(ui.button, ui.primary)}>
             Send a new link

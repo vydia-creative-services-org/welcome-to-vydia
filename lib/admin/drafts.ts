@@ -17,6 +17,7 @@ export type ResourceDraft = {
   addedOn: string
   uploads: number
   message: string | null
+  messageTone: 'info' | null
 }
 
 export type DraftErrors = Partial<Record<string, string>>
@@ -38,6 +39,7 @@ export function newDraft(category = ''): ResourceDraft {
     addedOn: '',
     uploads: 0,
     message: null,
+    messageTone: null,
   }
 }
 
@@ -60,6 +62,7 @@ export function draftFromResource(resource: Resource): ResourceDraft {
     addedOn: resource.addedOn,
     uploads: 0,
     message: null,
+    messageTone: null,
   }
 }
 

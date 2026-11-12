@@ -1,5 +1,7 @@
 'use client'
+import {Plus} from 'lucide-react'
 import {useId} from 'react'
+import {cx} from '@/lib/cx'
 import controls from './controls.module.css'
 import styles from './EmailRows.module.css'
 
@@ -63,7 +65,7 @@ export function EmailRows({rows, onChange, errors}: Props) {
             </div>
             <button
               type="button"
-              className={`${controls.button} ${controls.danger}`}
+              className={cx(controls.button, controls.danger)}
               aria-label={`Remove additional email ${index + 1}`}
               onClick={() => onChange(rows.filter((item) => item.key !== row.key))}
             >
@@ -78,7 +80,8 @@ export function EmailRows({rows, onChange, errors}: Props) {
         ))}
       </datalist>
       <div>
-        <button type="button" className={`${controls.button}`} onClick={() => onChange([...rows, newEmailRow()])}>
+        <button type="button" className={controls.button} onClick={() => onChange([...rows, newEmailRow()])}>
+          <Plus aria-hidden size={14} />
           Add email
         </button>
       </div>

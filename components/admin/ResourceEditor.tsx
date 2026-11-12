@@ -1,7 +1,9 @@
 'use client'
+import {Plus, Trash2} from 'lucide-react'
 import {useState, type Dispatch, type SetStateAction} from 'react'
 import {newDraft, validateDraft, type DraftErrors, type ResourceDraft} from '@/lib/admin/drafts'
 import {typeLabel} from '@/components/TypeLabel'
+import {cx} from '@/lib/cx'
 import controls from './controls.module.css'
 import styles from './ResourceEditor.module.css'
 import {ResourceFields} from './ResourceFields'
@@ -63,13 +65,13 @@ export function ResourceEditor({drafts, setDrafts, categories, serverErrors}: Pr
                   <div className={controls.rowActions}>
                     <button
                       type="button"
-                      className={`${controls.button} ${controls.primary}`}
+                      className={cx(controls.button, controls.primary)}
                       disabled={draft.uploads > 0}
                       onClick={() => finish(draft)}
                     >
                       Done
                     </button>
-                    <button type="button" className={`${controls.button}`} onClick={() => cancel(draft)}>
+                    <button type="button" className={controls.button} onClick={() => cancel(draft)}>
                       Cancel
                     </button>
                   </div>
@@ -85,16 +87,20 @@ export function ResourceEditor({drafts, setDrafts, categories, serverErrors}: Pr
                     <span className={controls.hint}>{typeLabel(draft.type)}</span>
                   )}
                   <div className={controls.rowActions}>
-                    <button type="button" className={`${controls.button}`} onClick={() => edit(draft)}>
+                    <button
+                      type="button"
+                      className={cx(controls.button, controls.ghost, controls.sm)}
+                      onClick={() => edit(draft)}
+                    >
                       Edit
                     </button>
                     <button
                       type="button"
-                      className={`${controls.button} ${controls.danger}`}
+                      className={cx(controls.button, controls.ghost, controls.danger, controls.sm, controls.iconOnly)}
                       aria-label={`Delete ${draft.title || 'resource'}`}
                       onClick={() => setDrafts((list) => list.filter((item) => item.id !== draft.id))}
                     >
-                      Delete
+                      <Trash2 aria-hidden size={14} />
                     </button>
                   </div>
                 </>
@@ -104,7 +110,8 @@ export function ResourceEditor({drafts, setDrafts, categories, serverErrors}: Pr
         })}
       </ul>
       <div>
-        <button type="button" className={`${controls.button}`} onClick={add} disabled={editingId !== null}>
+        <button type="button" className={controls.button} onClick={add} disabled={editingId !== null}>
+          <Plus aria-hidden size={14} />
           Add client-specific resource
         </button>
       </div>

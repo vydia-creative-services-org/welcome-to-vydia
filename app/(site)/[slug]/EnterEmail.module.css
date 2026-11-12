@@ -57,8 +57,12 @@
 
 .resend {
   position: relative;
-  font-size: 14px !important;
-  font-weight: 500 !important;
+}
+
+.form .resend {
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Sending keeps the button exactly as it was; only the spinner appears. */
@@ -104,5 +108,30 @@
   margin-top: var(--space-3);
   text-align: center;
   line-height: 1.5;
-  color: #ff7b7b;
+  color: var(--color-danger-on-dark);
+}
+
+.input:focus-visible {
+  box-shadow:
+    0 0 32px rgb(255 255 255 / 0.22),
+    inset 0 0 24px rgb(255 255 255 / 0.12);
+}
+
+.panel > :not(h1) {
+  transition:
+    opacity 280ms var(--switch-ease),
+    translate 280ms var(--switch-ease);
+}
+
+@starting-style {
+  .panel > :not(h1) {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel > :not(h1) {
+    transition: none;
+  }
 }

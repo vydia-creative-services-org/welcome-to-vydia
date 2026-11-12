@@ -11,5 +11,5 @@
   padding: var(--admin-space-4);
   background: var(--admin-surface);
   border: 1px solid var(--admin-border);
-  border-radius: var(--admin-radius);
+  border-radius: var(--radius-control);
 }

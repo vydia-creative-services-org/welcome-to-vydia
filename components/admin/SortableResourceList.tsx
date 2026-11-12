@@ -17,15 +17,18 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import {CSS} from '@dnd-kit/utilities'
+import {GripVertical, Layers, Plus, Trash2} from 'lucide-react'
 import {useOptimistic, useState, useTransition} from 'react'
 import {deleteMainResource, reorderMainResources} from '@/app/(admin)/admin/(panel)/resources/actions'
 import {typeLabel} from '@/components/TypeLabel'
+import {cx} from '@/lib/cx'
 import {draftFromResource, newDraft, type ResourceDraft} from '@/lib/admin/drafts'
 import type {CategoryGroup} from '@/lib/resources/group'
 import type {Resource} from '@/lib/resources/types'
 import {ConfirmDialog} from './ConfirmDialog'
 import controls from './controls.module.css'
 import {ResourceDialog} from './ResourceDialog'
+import {useToast} from './Toaster'
 import panel from '@/app/(admin)/admin/(panel)/panel.module.css'
 import styles from './SortableResourceList.module.css'
 
@@ -82,20 +85,21 @@ function ResourceRow({resource, onEdit, onDelete}: RowProps) {
         {...attributes}
         {...listeners}
       >
-        ⠿
+        <GripVertical aria-hidden size={16} />
       </button>
       <span className={styles.title}>{resource.title}</span>
       <span className={controls.hint}>{typeLabel(resource.type)}</span>
       <div className={styles.actions}>
-        <button type="button" className={`${controls.button}`} onClick={onEdit}>
+        <button type="button" className={cx(controls.button, controls.ghost, controls.sm)} onClick={onEdit}>
           Edit
         </button>
         <button
           type="button"
-          className={`${controls.button} ${controls.danger}`}
+          className={cx(controls.button, controls.ghost, controls.danger, controls.sm)}
           aria-label={`Delete ${resource.title}`}
           onClick={onDelete}
         >
+          <Trash2 aria-hidden size={14} />
           Delete
         </button>
       </div>
@@ -127,7 +131,7 @@ function ResourceGroup({group, onItems, onEdit, onDelete}: GroupProps) {
   return (
     <section
       ref={setNodeRef}
-      className={`${controls.card} ${styles.group}`}
+      className={cx(controls.surface, styles.group)}
       data-dragging={isDragging || undefined}
       style={{transform: CSS.Transform.toString(transform), transition}}
       aria-label={group.category}
@@ -141,7 +145,7 @@ function ResourceGroup({group, onItems, onEdit, onDelete}: GroupProps) {
           {...attributes}
           {...listeners}
         >
-          ⠿
+          <GripVertical aria-hidden size={16} />
         </button>
         <h2 className={styles.category}>{group.category}</h2>
       </header>
@@ -175,6 +179,7 @@ export function SortableResourceList({groups, categories}: Props) {
   const [deleting, setDeleting] = useState<Resource | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const toast = useToast()
   const sensors = useReorderSensors()
 
   const apply = (next: Groups) =>
@@ -183,7 +188,8 @@ export function SortableResourceList({groups, categories}: Props) {
       setError(null)
       try {
         const result = await reorderMainResources(flatten(next))
-        if (!result.ok) setError('Couldn’t save the new order. It has been put back.')
+        if (result.ok) toast('Order saved')
+        else setError('Couldn’t save the new order. It has been put back.')
       } catch {
         setError('Couldn’t save the new order. It has been put back.')
       }
@@ -206,7 +212,8 @@ export function SortableResourceList({groups, categories}: Props) {
     startTransition(async () => {
       try {
         const result = await deleteMainResource(target.id)
-        if (!result.ok) setError('Couldn’t delete the resource. Nothing was changed.')
+        if (result.ok) toast('Resource deleted')
+        else setError('Couldn’t delete the resource. Nothing was changed.')
       } catch {
         setError('Couldn’t delete the resource. Nothing was changed.')
       }
@@ -221,9 +228,10 @@ export function SortableResourceList({groups, categories}: Props) {
         <h1 className={panel.pageTitle}>Resources</h1>
         <button
           type="button"
-          className={`${controls.button} ${controls.primary}`}
+          className={cx(controls.button, controls.primary)}
           onClick={() => setEditing({draft: newDraft(), isNew: true})}
         >
+          <Plus aria-hidden size={14} />
           New resource
         </button>
       </header>
@@ -235,8 +243,9 @@ export function SortableResourceList({groups, categories}: Props) {
       )}
 
       {optimistic.length === 0 ? (
-        <div className={`${controls.card} ${styles.empty}`}>
-          <p className={styles.emptyTitle}>No resources yet</p>
+        <div className={cx(controls.card, styles.empty)}>
+          <Layers aria-hidden size={24} className={styles.emptyIcon} />
+          <h2 className={styles.emptyTitle}>No Resources Yet</h2>
         </div>
       ) : (
         <DndContext

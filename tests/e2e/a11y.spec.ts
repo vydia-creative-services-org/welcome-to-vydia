@@ -57,3 +57,18 @@ test.describe('accessibility, resources page', () => {
     await expectNoViolations(page)
   })
 })
+
+test.describe('accessibility, admin login in dark mode', () => {
+  test.use({colorScheme: 'dark'})
+
+  test('admin login', async ({page}) => {
+    await page.goto('/admin/login?error=no-access')
+    await expectNoViolations(page)
+  })
+})
+
+test('a saved admin theme is applied before paint', async ({page}) => {
+  await page.addInitScript(() => localStorage.setItem('vydia-admin-theme', 'dark'))
+  await page.goto('/admin/login')
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+})

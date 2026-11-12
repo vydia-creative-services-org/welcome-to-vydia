@@ -1,7 +1,9 @@
 'use client'
+import {LoaderCircle} from 'lucide-react'
 import {useEffect, useId, useRef} from 'react'
+import {cx} from '@/lib/cx'
 import controls from './controls.module.css'
-import styles from './ConfirmDialog.module.css'
+import styles from './dialog.module.css'
 
 type Props = {
   open: boolean
@@ -44,24 +46,26 @@ export function ConfirmDialog({
         if (event.target === event.currentTarget) onCancel()
       }}
     >
-      <div className={styles.content}>
+      <header className={styles.header}>
         <h2 id={titleId} className={styles.title}>
           {title}
         </h2>
-        <p className={styles.body}>{body}</p>
-        <div className={styles.actions}>
-          <button type="button" className={controls.button} onClick={onCancel}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={pending}
-            className={`${controls.button} ${tone === 'danger' ? controls.danger : controls.primary}`}
-            onClick={onConfirm}
-          >
-            {confirmLabel}
-          </button>
-        </div>
+      </header>
+      <p className={styles.body}>{body}</p>
+      <div className={styles.footer}>
+        <button type="button" className={controls.button} onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={pending}
+          data-loading={pending || undefined}
+          className={cx(controls.button, tone === 'danger' ? controls.destructive : controls.primary)}
+          onClick={onConfirm}
+        >
+          {pending && <LoaderCircle aria-hidden size={14} className={controls.spin} />}
+          {confirmLabel}
+        </button>
       </div>
     </dialog>
   )

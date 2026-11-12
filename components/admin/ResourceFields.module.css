@@ -6,18 +6,9 @@
 
 .types {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--admin-space-2) var(--admin-space-5);
-}
-
-.types legend {
-  margin-bottom: var(--admin-space-2);
-}
-
-.radio {
-  display: inline-flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--admin-space-2);
+  align-items: flex-start;
 }
 
 .current,
@@ -37,16 +28,11 @@
 .thumb {
   object-fit: cover;
   border: 1px solid var(--admin-border);
-  border-radius: var(--admin-radius);
+  border-radius: var(--radius-control);
 }
 
-.urlRow {
+.status {
   display: flex;
   align-items: center;
   gap: var(--admin-space-2);
-}
-
-.urlPrefix {
-  color: var(--admin-muted);
-  white-space: nowrap;
 }

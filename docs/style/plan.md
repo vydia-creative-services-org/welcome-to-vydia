@@ -10,7 +10,7 @@
 > - **The email headline is "Welcome to Vydia"** (§7.3).
 > - **Concentric geometry is now a strict rule**, and every manual style override in the current code is audited against it (§2.5).
 >
-> Nothing is implemented yet.
+> 
 
 ## 0. What this plan does
 
@@ -69,7 +69,7 @@ These are the rules the code below implements. When a decision isn't covered her
 
 ---
 
-## 2. Foundations (Phase 1)
+## 2. Foundations (Phase 1) ✅ Completed
 
 ### 2.1 Fonts
 
@@ -493,7 +493,7 @@ The owner adopted the concentric principle and asked that their manual overrides
 
 ---
 
-## 3. Primitives (Phase 2): `components/admin/controls.module.css`
+## 3. Primitives (Phase 2): `components/admin/controls.module.css` ✅ Completed
 
 The existing class names stay (`field`, `label`, `hint`, `input`, `error`, `notice`, `success`, `button`, `primary`, `danger`, `card`, `legend`, `rows`, `row`, `rowTitle`, `rowActions`), so every current call site keeps working. New classes are additive.
 
@@ -1219,7 +1219,7 @@ Use it in the other places too: `AssignAdminSelect` → `toast('Reassigned to Er
 
 ---
 
-## 4. Admin screens (Phase 3)
+## 4. Admin screens (Phase 3) ✅ Completed
 
 ### 4.1 Shell: sticky translucent bar with the Vydia wordmark
 
@@ -1911,7 +1911,7 @@ Also add `aria-describedby` to the Name and Email fields in the same way, which 
 
 ---
 
-## 5. Light and Dark Themes (Phase 3)
+## 5. Light and Dark Themes (Phase 3) ✅ Completed
 
 The owner asked for dark mode to be **in scope, simple, and accessible, with the toggle next to the admin's profile picture**. It applies to the admin panel and the admin login. The client site is already dark and keeps its own design, and the email handles dark mode itself (§7).
 
@@ -2085,7 +2085,7 @@ test('a saved admin theme is applied before paint', async ({page}) => {
 
 ---
 
-## 6. Client sign-in screens (Phase 4, light touch)
+## 6. Client sign-in screens (Phase 4, light touch) ✅ Completed
 
 These live in the **site** system (dark, Public Sans, pills), which the owner likes. Polish them without restyling. Every string and id in §0.2 stays.
 
@@ -2177,7 +2177,7 @@ Apply the same white outline to `ResourceCard.module.css` `.card:focus-visible`.
 
 ---
 
-## 7. The magic-link email (Phase 5)
+## 7. The magic-link email (Phase 5) ✅ Completed in the repo (Supabase paste is a manual step, see below)
 
 ### 7.1 Direction
 
@@ -2469,15 +2469,15 @@ console.log(r(process.argv[1],process.argv[2]))' "#666666" "#ffffff"
 
 Each PR is shippable on its own and leaves the app working.
 
-| PR | Contents                                                                                                                                  | Risk   | Done when                                                                                       |
-| -- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------- |
-| 1  | **Foundations + fixes:** theme-aware tokens v2 with aliases (**pinned to light**, §2.4), Roboto Mono, base layer, concentric radius tokens, hidden-row fix, URL prefix fix, site focus ring | Low    | Screens look the same or crisper. Hidden rows strike through. `docs.google.com` saves correctly. OS dark mode does *not* change the admin yet. |
-| 2  | **Primitives:** controls v2, segmented, inputGroup, file, notice tones, badge, kbd, skeleton, icons, `dialog.module.css`, Toaster          | Low–med | Every existing call site renders correctly. Dialogs animate. Toasts announce.                    |
-| 3  | **Admin screens + themes:** shell (wordmark, identity group, **theme toggle next to the avatar**), login, clients index, client form (surfaces, save bar, ⌘↵, beforeunload), resource fields, resources page, loading/error. The §2.5 override audit is applied. Title Case headings (§4.7). **Remove the light pin.** Add the §5.6 tests. | Medium | Admin e2e and the new dark/no-flash tests pass. Every manual matrix row is green in **both** themes. |
-| 4  | **Client sign-in polish** (§6), including the Title Case headings and the `.resend` `!important` removal                                 | Low    | sign-in, access, and a11y e2e pass unchanged                                                    |
-| 5  | **Email:** logo asset, "Welcome to Vydia" template, tests, preview script. Then deploy and paste into Supabase (both templates).        | Medium (manual deploy step) | Email matrix is green. Old emails still show a logo.                                            |
-| 6  | *(optional)* Client initials avatars                                                                                                      | Low    | Contrast spot-checked in both themes                                                            |
-| 7  | **Cleanup:** delete the back-compat aliases (`--admin-muted`, `--admin-radius`), replace any remaining template-string classNames with `cx`, update `docs/admin-guide.md` (research §7.7, plus the new headings) and `research.md` | Low | `grep -r "admin-muted\|admin-radius" app components` returns nothing                            |
+| PR | Contents                                                                                                                                  | Risk   | Done when                                                                                       | Status |
+| -- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------- | ------ |
+| 1  | **Foundations + fixes:** theme-aware tokens v2 with aliases (the light pin was skipped, see §11), Roboto Mono, base layer, concentric radius tokens, hidden-row fix, URL prefix fix, site focus ring | Low    | Screens look the same or crisper. Hidden rows strike through. `docs.google.com` saves correctly. Dark mode ships with the toggle in the same pass. | ✅ Done |
+| 2  | **Primitives:** controls v2, segmented, inputGroup, file, notice tones, badge, kbd, skeleton, icons, `dialog.module.css`, Toaster          | Low–med | Every existing call site renders correctly. Dialogs animate. Toasts announce.                    | ✅ Done |
+| 3  | **Admin screens + themes:** shell (wordmark, identity group, **theme toggle next to the avatar**), login, clients index, client form (surfaces, save bar, ⌘↵, beforeunload), resource fields, resources page, loading/error. The §2.5 override audit is applied. Title Case headings (§4.7). **Remove the light pin.** Add the §5.6 tests. | Medium | Admin e2e and the new dark/no-flash tests pass. Every manual matrix row is green in **both** themes. | ✅ Done |
+| 4  | **Client sign-in polish** (§6), including the Title Case headings and the `.resend` `!important` removal                                 | Low    | sign-in, access, and a11y e2e pass unchanged                                                    | ✅ Done |
+| 5  | **Email:** logo asset, "Welcome to Vydia" template, tests, preview script. Then deploy and paste into Supabase (both templates).        | Medium (manual deploy step) | Email matrix is green. Old emails still show a logo.                                            | ✅ Done in repo; ⏳ manual Supabase deploy pending |
+| 6  | *(optional)* Client initials avatars (later removed, §12.4)                                                                                                      | Low    | Contrast spot-checked in both themes                                                            | ✅ Done |
+| 7  | **Cleanup:** delete the back-compat aliases (`--admin-muted`, `--admin-radius`), replace any remaining template-string classNames with `cx`, update `docs/admin-guide.md` (research §7.7, plus the new headings) and `research.md` | Low | `grep -r "admin-muted\|admin-radius" app components` returns nothing                            | ✅ Done |
 
 ---
 
@@ -2495,3 +2495,59 @@ The owner's review notes, each with what changed in this document.
 | 6 | Heading casing                        | "Headings should be Title Case"                                                                                  | Applies to **all** headings (principle 6, full inventory in §4.7). "Client-Specific Resources" stays. Non-headings stay sentence case. The e2e impact was checked and is none (§0.2). |
 | 7 | Admin dark mode                       | "Incorporate, keep simple and accessible, put the toggle next to the admin profile pic"                          | In scope (§5). Theme-aware tokens via `light-dark()`, follows the OS by default, a one-button moon toggle left of the avatar, no-flash script, a full a11y table, and new tests. Shipped in PR 3. |
 | 8 | Monospace                             | Approved, with Roboto Mono                                                                                       | Roboto Mono (§2.1). The export was verified in this Next version, and the `.mono` size was retuned for its width.                                                           |
+
+## 11. Implementation Status (completed 2026-11-11)
+
+All seven PRs' worth of work is implemented in the working tree (not committed). Verification run: `npm run typecheck`, `npm run lint`, `npx vitest run` (171 tests, including the new `tests/email-templates.test.ts`) and `next build` all pass. Screenshots confirmed the admin login in light and dark, the client Enter-your-email screen, and the email in light and dark.
+
+**Deviations from the plan**
+
+- **No temporary light pin (§2.4).** The pin only existed to protect half-migrated screens. Everything was migrated in one pass, so dark mode ships immediately with the toggle.
+- **Phase 6** was the optional client initials avatars; dark mode itself shipped under Phase 3 as the plan specified.
+- **The `.mono` utility** is applied via `className="mono"` on the slug and URL inputs and file names.
+- **The Resources page** description paragraph for regular admins is unchanged.
+
+**Not done, and why**
+
+- **Playwright e2e could not run**: the suite needs a live Supabase backend (`global-setup` calls the Auth admin API), which wasn't available. The two new dark-mode tests in `tests/e2e/a11y.spec.ts` are written but unrun. Run `npm run e2e` where Supabase is reachable.
+- **The admin panel screens were not visually checked after sign-in**, because Google sign-in can't be automated. Use the manual matrix in §8.
+- **Email deploy (§7.6 steps 3–6) is manual:** deploy the app so `/email/vydia-logo-ink.png` is live, then paste `supabase/templates/magic-link.html` into both Supabase templates (Magic Link and Confirm signup), then check real inboxes.
+- **`research.md` was not rewritten.** It describes the system as it was before this refresh.
+
+## 12. Revision 3: Owner Critiques (completed 2026-11-11)
+
+Seven critiques after reviewing the implementation. Each was researched, then implemented. **This revision supersedes earlier sections wherever they disagree** (the wordmark, the theme toggle's place, input borders, helper text, the email logo and body copy).
+
+### 12.1 Research findings
+
+- **`public/vydia-logo.svg` is now the 28×28 mark** (two ink-colored paths). Three things used the old wordmark file: the admin bar and login page (as a CSS mask, which works fine with the mark), `CardCover` (the client site's placeholder tile), and `scripts/export-email-logo.ts`. The tile would have shown a dark mark on a dark tile, at the wrong aspect ratio.
+- The old wordmark was recovered from git as `public/vydia-wordmark.svg`, and `CardCover` now points at it. The client site looks exactly as before.
+- **Favicon files** (`app/icon0.svg`, `icon1.png`, `apple-icon.png`, `favicon.ico`, and the two manifest PNGs) all held the old artwork. An ink mark disappears on a dark browser tab, so the SVG favicon carries its own `prefers-color-scheme` rule.
+- **The mobile header** put the brand text, two nav links, the toggle, the avatar, the name, the badge, and Sign out in one row. That can't fit a 390px phone, and the nav links (32px) didn't match Sign out (28px).
+- **Border tokens:** `--admin-border-input` was `#c9c9c9` against `--admin-border` `#ebebeb`. Buttons share that token, so they changed with the inputs.
+- **Copy audit.** Removed text: login lede and footnote, Clients description, three card descriptions, the owner card, "Pitch forms and external pages", client count, `/` hint, `⌘↵` hint, "Hidden" badge, category count badges, empty-state helper lines, the read-only resources paragraph, and the email's browser tip and support line. Kept: field labels, errors, toasts, the **Super admin** badge, resource type labels, and status text only when it signals something ("Unsaved changes", "Uploading files…").
+
+### 12.2 Decisions and what shipped
+
+| # | Critique | Outcome |
+| - | -------- | ------- |
+| 1 | Use the new logo; no splash, just logo + "Onboarding" | Admin bar: the mark (24px, follows the theme color through a mask) then **Onboarding**, with the slash removed. Login: the mark above the title. |
+| 2 | Header must work on mobile; profile picture opens a small menu | New `AccountMenu`: a 28px avatar button (an initial if there's no photo) opens a popover with the name, the **Super admin** badge, a **Dark theme** switch, and **Sign out**. It closes on outside click and Escape, returns focus to the avatar, and is a disclosure (`aria-expanded`, `aria-controls`). Under 520px the "Onboarding" text hides and the paddings tighten, so the mark, two links, and avatar always fit. |
+| 3 | Clients and Resources buttons the size of Sign out | Nav links are `--control-sm` (28px) tall, 13px text, 8px padding, the same as the old Sign out button. |
+| 4 | Input border same as other borders; `#C5C5C5` on hover | `--admin-border-input` = `--admin-border`. `--admin-border-hover` = `#c5c5c5` (light). Dark hover stays `#525252`, since `#c5c5c5` would glare on `#111`. Under **Increase Contrast** the stronger border still applies. **Tradeoff:** `#ebebeb` on white is about 1.2:1, below WCAG 1.4.11's 3:1 for field edges. Labels sit above every field and focus turns the border blue, so fields stay identifiable. |
+| 5 | Use the logo as the favicon | `scripts/export-brand-assets.ts` (`npm run brand:assets`) writes all of them from `public/vydia-logo.svg`: the SVG favicon (dark-tab aware), `icon1.png`, `apple-icon.png`, a two-size `favicon.ico`, and the two manifest icons. |
+| 6 | Keep it simple | Copy audit above. The email is now: mark, **Welcome to Vydia**, one sentence, the button, the fallback link, and one ignore line. |
+| 7 | "Name" → "Account name" | The label on the new and edit client form. The validation message "Client name is required." is unchanged. |
+
+**Email logo.** The email uses the mark: `public/email/vydia-mark-ink.png` (light) and `vydia-mark-white.png` (dark mode), both 112px shown at 28px. The old `vydia-logo-ink.png` is deleted. `public/vydia-logo.png` stays, because emails already sent reference it.
+
+**Scripts.** `npm run email:logo` is replaced by `npm run brand:assets`.
+
+### 12.3 Verification
+
+`typecheck`, `lint`, and `next build` pass, and `prettier` is clean on the changed files. All 167 unit tests pass. `tests/schema-parity.test.ts` fails because `sanity/schema.json` was deleted from the working tree outside this work. Screenshots confirmed the login page, the email, and the favicon assets. **The signed-in header and account menu were not viewed live**, because Google sign-in can't be automated. Check them on a phone-width window.
+
+### 12.4 Follow-up Fixes
+
+- **Client photos removed.** The initials avatars next to client names in the Clients table (and their `ClientAvatar` component) are gone. Names are plain links again.
+- **Account menu alignment.** Sign out and the Dark theme row are both left-aligned with an icon then label. The cause was CSS order: the shared button rule (`justify-content: center`) could load after each component's override and win. Both overrides now use a doubled class (`.item.item`, `.row.row`) so they win regardless of order.

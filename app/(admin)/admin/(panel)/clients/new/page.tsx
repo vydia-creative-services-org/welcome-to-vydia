@@ -13,7 +13,7 @@ export default async function NewClient() {
   return (
     <>
       <header className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>New client</h1>
+        <h1 className={styles.pageTitle}>New Client</h1>
       </header>
       <ClientForm initial={emptyClientForm} mainResources={mainResources} categories={categories} />
     </>

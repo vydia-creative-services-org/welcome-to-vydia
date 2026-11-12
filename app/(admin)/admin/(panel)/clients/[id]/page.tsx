@@ -1,7 +1,7 @@
 import {notFound} from 'next/navigation'
 import {AssignAdminSelect} from '@/components/admin/AssignAdminSelect'
 import {ClientForm} from '@/components/admin/ClientForm'
-import controls from '@/components/admin/controls.module.css'
+import {SavedToast} from '@/components/admin/SavedToast'
 import {CopyLinkButton} from '@/components/admin/CopyLinkButton'
 import {DeleteClientButton} from '@/components/admin/DeleteClientButton'
 import {OpenLinkButton} from '@/components/admin/OpenLinkButton'
@@ -39,11 +39,7 @@ export default async function ClientDetail({params, searchParams}: PageProps<'/a
       <header className={styles.pageHeader}>
         <div className={detail.heading}>
           <h1 className={styles.pageTitle}>{client.name}</h1>
-          {saved && (
-            <p role="status" className={controls.success}>
-              Saved
-            </p>
-          )}
+          {saved && <SavedToast />}
         </div>
         <div className={detail.actions}>
           <CopyLinkButton slug={client.slug} />

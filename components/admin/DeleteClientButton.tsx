@@ -1,6 +1,8 @@
 'use client'
+import {Trash2} from 'lucide-react'
 import {useState, useTransition} from 'react'
 import {deleteClient} from '@/app/(admin)/admin/(panel)/clients/actions'
+import {cx} from '@/lib/cx'
 import {ConfirmDialog} from './ConfirmDialog'
 import controls from './controls.module.css'
 
@@ -22,7 +24,8 @@ export function DeleteClientButton({id, name}: {id: string; name: string}) {
 
   return (
     <div>
-      <button type="button" className={`${controls.button} ${controls.danger}`} onClick={() => setOpen(true)}>
+      <button type="button" className={cx(controls.button, controls.danger)} onClick={() => setOpen(true)}>
+        <Trash2 aria-hidden size={14} />
         Delete client
       </button>
       {error && (
