@@ -1,4 +1,7 @@
+import {CircleAlert} from 'lucide-react'
 import {redirect} from 'next/navigation'
+import controls from '@/components/admin/controls.module.css'
+import {GoogleMark} from '@/components/admin/GoogleMark'
 import {getAdmin} from '@/lib/admin/auth'
 import {signInWithGoogle} from './actions'
 import styles from './login.module.css'
@@ -18,14 +21,19 @@ export default async function AdminLogin({searchParams}: PageProps<'/admin/login
   return (
     <main className={styles.page}>
       <div className={styles.card}>
-        <h1 className={styles.title}>Vydia Onboarding</h1>
+        <span aria-hidden className={styles.mark} />
+        <h1 className={styles.title}>Sign In to Onboarding</h1>
         {message && (
-          <p role="alert" className={styles.error}>
+          <p role="alert" className={controls.notice}>
+            <CircleAlert aria-hidden size={16} />
             {message}
           </p>
         )}
         <form action={signInWithGoogle}>
-          <button className={styles.google}>Sign in with Google</button>
+          <button className={styles.google}>
+            <GoogleMark />
+            Sign in with Google
+          </button>
         </form>
       </div>
     </main>

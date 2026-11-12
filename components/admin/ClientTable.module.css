@@ -16,26 +16,6 @@
   max-width: 360px;
 }
 
-.scopes {
-  display: flex;
-  gap: var(--admin-space-2);
-}
-
-.scopes button {
-  transition: none;
-}
-
-.scopes button[aria-pressed='true'],
-.scopes button[aria-pressed='true']:hover:not(:disabled) {
-  background: var(--admin-text);
-  border-color: var(--admin-text);
-  color: var(--admin-surface);
-}
-
-.owner {
-  white-space: nowrap;
-}
-
 .card {
   padding: 0;
   overflow-x: auto;
@@ -48,16 +28,27 @@
 
 .table th,
 .table td {
-  padding: var(--admin-space-3) var(--admin-space-4);
+  padding: 0 var(--admin-space-4);
   border-bottom: 1px solid var(--admin-border);
   text-align: left;
   vertical-align: middle;
 }
 
 .table th {
-  color: var(--admin-muted);
-  font-size: 14px;
-  font-weight: 400;
+  height: 40px;
+  color: var(--admin-text-secondary);
+  background: var(--admin-surface-subtle);
+  font-size: var(--text-13);
+  font-weight: 500;
+}
+
+.table td {
+  height: 52px;
+}
+
+.table tbody tr {
+  position: relative;
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
 
 .table tbody tr:hover {
@@ -70,6 +61,22 @@
 
 .name {
   font-weight: 500;
+  text-decoration: none;
+}
+
+.name::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.name:focus-visible {
+  outline: none;
+}
+
+.table tbody tr:has(.name:focus-visible) {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: -2px;
 }
 
 .email {
@@ -77,36 +84,52 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--admin-text-secondary);
 }
 
-.copy {
-  text-align: right !important;
+.owner {
+  white-space: nowrap;
 }
 
 .date {
   white-space: nowrap;
-  color: var(--admin-muted);
+  color: var(--admin-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.table td.actionsCell {
+  text-align: right;
+}
+
+.actions {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  gap: var(--admin-space-2);
+  justify-content: flex-end;
 }
 
 .empty {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--admin-space-2);
   padding: var(--admin-space-7) var(--admin-space-5);
   text-align: center;
 }
 
+.emptyIcon {
+  color: var(--admin-icon);
+}
+
 .emptyTitle {
-  font-weight: 500;
+  font-size: var(--text-16);
+  line-height: var(--leading-16);
+  font-weight: 600;
+  letter-spacing: var(--tracking-snug);
 }
 
 .none {
   padding: var(--admin-space-5);
   text-align: center;
-}
-
-.actions {
-  display: inline-flex;
-  gap: var(--admin-space-2);
-  justify-content: flex-end;
 }

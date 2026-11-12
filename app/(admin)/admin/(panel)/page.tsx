@@ -1,7 +1,9 @@
+import {Plus} from 'lucide-react'
 import Link from 'next/link'
 import {ClientTable} from '@/components/admin/ClientTable'
 import controls from '@/components/admin/controls.module.css'
 import {requireAdmin} from '@/lib/admin/auth'
+import {cx} from '@/lib/cx'
 import styles from './panel.module.css'
 
 export const instant = false
@@ -30,8 +32,9 @@ export default async function ClientIndex() {
   return (
     <>
       <header className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>{isSuper ? 'Clients' : 'Your clients'}</h1>
-        <Link href="/admin/clients/new" className={`${controls.button} ${controls.primary}`}>
+        <h1 className={styles.pageTitle}>{isSuper ? 'Clients' : 'Your Clients'}</h1>
+        <Link href="/admin/clients/new" className={cx(controls.button, controls.primary)}>
+          <Plus aria-hidden size={14} />
           New client
         </Link>
       </header>

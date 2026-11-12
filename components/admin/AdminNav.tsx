@@ -12,8 +12,9 @@ export function AdminNav() {
   const pathname = usePathname()
   return (
     <nav aria-label="Admin" className={styles.nav}>
-      <Link href="/admin" className={styles.brand}>
-        Vydia Onboarding
+      <Link href="/admin" className={styles.brand} aria-label="Vydia Onboarding">
+        <span aria-hidden className={styles.mark} />
+        <span className={styles.product}>Onboarding</span>
       </Link>
       <ul className={styles.links}>
         {LINKS.map((link) => (

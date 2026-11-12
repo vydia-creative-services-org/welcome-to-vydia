@@ -8,6 +8,7 @@
   --color-ink: #121212;
   --color-danger: #dc2626;
   --color-success: #15803d;
+  --color-danger-on-dark: #ff7b7b;
 
   /* Gallery ⇄ grid switch: quick off the mark, decelerating into place, no overshoot. */
   --switch-duration: 800ms;

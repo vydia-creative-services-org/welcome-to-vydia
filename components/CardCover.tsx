@@ -21,7 +21,7 @@ export function CardCover({resource}: {resource: ResourceCardData}) {
   return (
     <div className={styles.placeholder}>
       <span className={styles.placeholderTitle}>{title}</span>
-      <Image src="/vydia-logo.svg" alt="" width={1233} height={139} className={styles.placeholderLogo} />
+      <Image src="/vydia-wordmark.svg" alt="" width={1233} height={139} className={styles.placeholderLogo} />
     </div>
   )
 }

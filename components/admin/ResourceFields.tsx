@@ -1,18 +1,30 @@
 'use client'
+import {
+  CircleAlert,
+  FileText,
+  Info,
+  Link as LinkIcon,
+  LoaderCircle,
+  Presentation,
+  Video,
+  type LucideIcon,
+} from 'lucide-react'
 import Image from 'next/image'
 import {useId} from 'react'
+import {typeLabel} from '@/components/TypeLabel'
 import {dateInputToIso, dateInputValue, type DraftErrors, type ResourceDraft} from '@/lib/admin/drafts'
 import {makeLqip} from '@/lib/admin/lqip'
 import {pdfPreviewMessage, renderPdfPreview} from '@/lib/admin/pdf-preview'
 import {uploadAsset} from '@/lib/admin/upload'
 import {fileTypeAllowed, fileTypeMessage, IMAGE_MESSAGE, imageAllowed, mimeFor} from '@/lib/admin/upload-rules'
+import {cx} from '@/lib/cx'
 import {publicImageUrl} from '@/lib/resources/mapping'
 import {RESOURCE_TYPES, type ResourceType} from '@/lib/resources/types'
 import {CategoryInput} from './CategoryInput'
 import controls from './controls.module.css'
 import styles from './ResourceFields.module.css'
 
-const URL_PREFIX = 'https://www.'
+const URL_PREFIX = 'https://'
 
 export type DraftUpdate = (update: (draft: ResourceDraft) => ResourceDraft) => void
 
@@ -21,6 +33,13 @@ type Props = {
   onChange: DraftUpdate
   categories: string[]
   errors: DraftErrors
+}
+
+const TYPE_ICONS: Record<ResourceType, LucideIcon> = {
+  pdf: FileText,
+  video: Video,
+  link: LinkIcon,
+  slides: Presentation,
 }
 
 const FILE_ACCEPT: Record<ResourceType, string> = {
@@ -36,14 +55,14 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
   const showUrl = draft.type === 'link' || draft.type === 'slides'
   const prefixed = !draft.url || draft.url.startsWith(URL_PREFIX)
   const changeUrl = (typed: string) => {
-    const value = prefixed && !/^https?:\/\//i.test(typed) ? URL_PREFIX + typed : typed
-    // Typed (or pasted) text with its own scheme is kept as-is; clearing it restores the prefix
-    onChange((d) => ({...d, url: prefixed && value === URL_PREFIX ? '' : value}))
+    const trimmed = typed.trimStart()
+    const value = prefixed && !/^https?:\/\//i.test(trimmed) ? URL_PREFIX + trimmed : trimmed
+    onChange((d) => ({...d, url: value === URL_PREFIX ? '' : value}))
   }
   const busy = draft.uploads > 0
   const previewPath = draft.coverImage ?? draft.pdfPreview
 
-  const begin = () => onChange((d) => ({...d, uploads: d.uploads + 1, message: null}))
+  const begin = () => onChange((d) => ({...d, uploads: d.uploads + 1, message: null, messageTone: null}))
   const settle = (patch: (d: ResourceDraft) => ResourceDraft) =>
     onChange((d) => ({...patch(d), uploads: d.uploads - 1}))
 
@@ -57,12 +76,13 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
       pdfPreview: type === 'pdf' ? d.pdfPreview : null,
       pdfPreviewLqip: type === 'pdf' ? d.pdfPreviewLqip : null,
       message: null,
+      messageTone: null,
     }))
 
   const chooseFile = async (file: File) => {
     const mime = mimeFor(file)
     if (!fileTypeAllowed(draft.type, mime)) {
-      onChange((d) => ({...d, message: fileTypeMessage(draft.type, mime)}))
+      onChange((d) => ({...d, message: fileTypeMessage(draft.type, mime), messageTone: null}))
       return
     }
     begin()
@@ -94,16 +114,16 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
           previewMessage = pdfPreviewMessage(error instanceof Error ? error : new Error('preview failed'))
         }
       }
-      settle((d) => ({...d, message: previewMessage}))
+      settle((d) => ({...d, message: previewMessage, messageTone: previewMessage ? 'info' : null}))
     } catch (error) {
-      settle((d) => ({...d, message: error instanceof Error ? error.message : 'The upload failed.'}))
+      settle((d) => ({...d, message: error instanceof Error ? error.message : 'The upload failed.', messageTone: null}))
     }
   }
 
   const chooseCover = async (file: File) => {
     const mime = mimeFor(file)
     if (!imageAllowed(mime, file.size)) {
-      onChange((d) => ({...d, message: IMAGE_MESSAGE}))
+      onChange((d) => ({...d, message: IMAGE_MESSAGE, messageTone: null}))
       return
     }
     begin()
@@ -114,7 +134,7 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
       ])
       settle((d) => ({...d, coverImage: path, coverImageLqip: lqip}))
     } catch (error) {
-      settle((d) => ({...d, message: error instanceof Error ? error.message : 'The upload failed.'}))
+      settle((d) => ({...d, message: error instanceof Error ? error.message : 'The upload failed.', messageTone: null}))
     }
   }
 
@@ -141,18 +161,24 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
 
       <fieldset className={styles.types}>
         <legend className={controls.label}>Type</legend>
-        {RESOURCE_TYPES.map((option) => (
-          <label key={option.value} className={styles.radio}>
-            <input
-              type="radio"
-              name={`${id}-type`}
-              value={option.value}
-              checked={draft.type === option.value}
-              onChange={() => changeType(option.value)}
-            />
-            {option.title}
-          </label>
-        ))}
+        <div className={controls.segmented}>
+          {RESOURCE_TYPES.map((option) => {
+            const Icon = TYPE_ICONS[option.value]
+            return (
+              <label key={option.value}>
+                <input
+                  type="radio"
+                  name={`${id}-type`}
+                  value={option.value}
+                  checked={draft.type === option.value}
+                  onChange={() => changeType(option.value)}
+                />
+                <Icon aria-hidden size={14} />
+                {typeLabel(option.value)}
+              </label>
+            )
+          })}
+        </div>
       </fieldset>
 
       {showFile && (
@@ -162,10 +188,10 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
           </label>
           {draft.file && (
             <p className={styles.current}>
-              <span className={styles.fileName}>{draft.fileName ?? draft.file}</span>
+              <span className={cx(styles.fileName, 'mono')}>{draft.fileName ?? draft.file}</span>
               <button
                 type="button"
-                className={`${controls.button}`}
+                className={cx(controls.button, controls.sm)}
                 onClick={() =>
                   onChange((d) => ({...d, file: null, fileName: null, pdfPreview: null, pdfPreviewLqip: null}))
                 }
@@ -177,6 +203,7 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
           <input
             id={`${id}-file`}
             type="file"
+            className={controls.file}
             accept={FILE_ACCEPT[draft.type]}
             disabled={busy}
             aria-invalid={errors.file ? true : undefined}
@@ -199,15 +226,16 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
           <label htmlFor={`${id}-url`} className={controls.label}>
             URL
           </label>
-          <div className={styles.urlRow}>
-            {prefixed && <span className={styles.urlPrefix}>{URL_PREFIX}</span>}
+          <div className={controls.inputGroup}>
+            {prefixed && <span className={controls.affix}>{URL_PREFIX}</span>}
             <input
               id={`${id}-url`}
               type={prefixed ? 'text' : 'url'}
               value={prefixed ? draft.url.slice(URL_PREFIX.length) : draft.url}
+              spellCheck={false}
               aria-invalid={errors.url ? true : undefined}
               onChange={(event) => changeUrl(event.target.value)}
-              className={controls.input}
+              className="mono"
             />
           </div>
           {errors.url && (
@@ -227,15 +255,15 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
             <Image
               src={publicImageUrl(previewPath)}
               alt=""
-              width={96}
-              height={96}
+              width={64}
+              height={64}
               unoptimized
               className={styles.thumb}
             />
             {draft.coverImage && (
               <button
                 type="button"
-                className={`${controls.button}`}
+                className={cx(controls.button, controls.sm)}
                 onClick={() => onChange((d) => ({...d, coverImage: null, coverImageLqip: null, coverImageAlt: ''}))}
               >
                 Remove cover
@@ -246,6 +274,7 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
         <input
           id={`${id}-cover`}
           type="file"
+          className={controls.file}
           accept="image/jpeg,image/png,image/webp"
           disabled={busy}
           onChange={(event) => {
@@ -302,12 +331,14 @@ export function ResourceFields({draft, onChange, categories, errors}: Props) {
       </div>
 
       {busy && (
-        <p role="status" className={controls.hint}>
+        <p role="status" className={cx(controls.hint, styles.status)}>
+          <LoaderCircle aria-hidden size={14} className={controls.spin} />
           Uploading…
         </p>
       )}
       {draft.message && (
-        <p role="alert" className={controls.notice}>
+        <p role="alert" className={controls.notice} data-tone={draft.messageTone ?? undefined}>
+          {draft.messageTone === 'info' ? <Info aria-hidden size={16} /> : <CircleAlert aria-hidden size={16} />}
           {draft.message}
         </p>
       )}

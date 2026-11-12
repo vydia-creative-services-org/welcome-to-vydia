@@ -1,6 +1,8 @@
 'use client'
+import {Check, Copy} from 'lucide-react'
 import {useEffect, useRef, useState} from 'react'
 import {welcomeLink} from '@/lib/admin/welcome-link'
+import {cx} from '@/lib/cx'
 import controls from './controls.module.css'
 import styles from './CopyLinkButton.module.css'
 
@@ -32,14 +34,15 @@ export function CopyLinkButton({slug}: {slug: string}) {
         readOnly
         value={link}
         aria-label="Welcome link"
-        className={`${controls.input} ${styles.field}`}
+        className={cx(controls.input, styles.field)}
         onBlur={() => setState('idle')}
       />
     )
   }
 
   return (
-    <button type="button" className={controls.button} onClick={copy} aria-live="polite">
+    <button type="button" className={cx(controls.button, controls.sm)} onClick={copy} aria-live="polite">
+      {state === 'copied' ? <Check aria-hidden size={14} /> : <Copy aria-hidden size={14} />}
       {state === 'copied' ? 'Copied' : 'Copy link'}
     </button>
   )

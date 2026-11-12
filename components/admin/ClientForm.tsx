@@ -1,5 +1,6 @@
 'use client'
-import {useMemo, useState, useTransition} from 'react'
+import {Eye, EyeOff, LoaderCircle} from 'lucide-react'
+import {useEffect, useMemo, useState, useTransition} from 'react'
 import {saveClient, type SaveResult} from '@/app/(admin)/admin/(panel)/clients/actions'
 import {typeLabel} from '@/components/TypeLabel'
 import {draftToInput, type DraftErrors} from '@/lib/admin/drafts'
@@ -7,6 +8,7 @@ import type {ClientFormInitial} from '@/lib/admin/form-initial'
 import {SITE_URL} from '@/lib/env'
 import {groupByCategory} from '@/lib/resources/group'
 import type {Resource} from '@/lib/resources/types'
+import {cx} from '@/lib/cx'
 import {slugify} from '@/lib/slug'
 import {clientPayload, type ClientInput} from '@/lib/validation'
 import {ConfirmDialog} from './ConfirmDialog'
@@ -69,8 +71,19 @@ export function ClientForm({initial, mainResources, categories}: Props) {
     exclusiveResources: exclusives.map(draftToInput),
   })
 
+  const payload = buildPayload()
+  const snapshot = JSON.stringify({...payload, hiddenResourceIds: [...(payload.hiddenResourceIds ?? [])].sort()})
+  const [baseline] = useState(snapshot)
+  const dirty = snapshot !== baseline
+
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
   const submit = () => {
-    const payload = buildPayload()
     const parsed = clientPayload.safeParse(payload)
     if (!parsed.success) {
       const found: Record<string, string> = {}
@@ -113,127 +126,153 @@ export function ClientForm({initial, mainResources, categories}: Props) {
         if (slugChanged) setConfirmingSlug(true)
         else submit()
       }}
+      onKeyDown={(event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+          event.preventDefault()
+          event.currentTarget.requestSubmit()
+        }
+      }}
     >
-      <section className={`${controls.card} ${styles.section}`}>
-        <h2 className={controls.legend}>Details</h2>
-        <div className={controls.field}>
-          <label htmlFor="client-name" className={controls.label}>
-            Name
-          </label>
-          <input
-            id="client-name"
-            value={name}
-            maxLength={100}
-            aria-invalid={errors.name ? true : undefined}
-            onChange={(event) => onName(event.target.value)}
-            className={controls.input}
-          />
-          {errors.name && (
-            <p role="alert" className={controls.error}>
-              {errors.name}
-            </p>
-          )}
-        </div>
-
-        <div className={controls.field}>
-          <label htmlFor="client-slug" className={controls.label}>
-            Link
-          </label>
-          <div className={styles.slug}>
-            <span className={styles.host}>{siteHost}/</span>
+      <section className={controls.surface} aria-labelledby="details-title">
+        <header className={controls.surfaceHeader}>
+          <h2 id="details-title" className={controls.surfaceTitle}>
+            Details
+          </h2>
+        </header>
+        <div className={controls.surfaceBody}>
+          <div className={controls.field}>
+            <label htmlFor="client-name" className={controls.label}>
+              Account name
+            </label>
             <input
-              id="client-slug"
-              value={slug}
-              maxLength={60}
-              aria-invalid={errors.slug ? true : undefined}
-              onChange={(event) => {
-                setSlugTouched(true)
-                setSlug(event.target.value.toLowerCase())
-              }}
+              id="client-name"
+              value={name}
+              maxLength={100}
+              aria-invalid={errors.name ? true : undefined}
+              aria-describedby={errors.name ? 'client-name-error' : undefined}
+              onChange={(event) => onName(event.target.value)}
               className={controls.input}
             />
+            {errors.name && (
+              <p id="client-name-error" role="alert" className={controls.error}>
+                {errors.name}
+              </p>
+            )}
           </div>
-          {slugChanged && (
-            <p role="status" className={controls.error}>
-              The old link will stop working.
-            </p>
-          )}
-          {errors.slug && (
+
+          <div className={controls.field}>
+            <label htmlFor="client-slug" className={controls.label}>
+              Link
+            </label>
+            <div className={controls.inputGroup}>
+              <span className={controls.affix}>{siteHost}/</span>
+              <input
+                id="client-slug"
+                value={slug}
+                maxLength={60}
+                spellCheck={false}
+                aria-invalid={errors.slug ? true : undefined}
+                aria-describedby={errors.slug ? 'client-slug-error' : slugChanged ? 'client-slug-warning' : undefined}
+                onChange={(event) => {
+                  setSlugTouched(true)
+                  setSlug(event.target.value.toLowerCase())
+                }}
+                className="mono"
+              />
+            </div>
+            {slugChanged && (
+              <p id="client-slug-warning" role="status" className={controls.warning}>
+                The old link will stop working.
+              </p>
+            )}
+            {errors.slug && (
+              <p id="client-slug-error" role="alert" className={controls.error}>
+                {errors.slug}
+              </p>
+            )}
+          </div>
+
+          <div className={controls.field}>
+            <label htmlFor="client-email" className={controls.label}>
+              Email
+            </label>
+            <input
+              id="client-email"
+              type="email"
+              value={primaryEmail}
+              aria-invalid={errors['emails.0.email'] ? true : undefined}
+              aria-describedby={errors['emails.0.email'] ? 'client-email-error' : undefined}
+              onChange={(event) => setPrimaryEmail(event.target.value)}
+              className={controls.input}
+            />
+            {errors['emails.0.email'] && (
+              <p id="client-email-error" role="alert" className={controls.error}>
+                {errors['emails.0.email']}
+              </p>
+            )}
+          </div>
+
+          <EmailRows rows={auxEmails} onChange={setAuxEmails} errors={errors} />
+          {(errors.emails || errors['emails.0']) && (
             <p role="alert" className={controls.error}>
-              {errors.slug}
+              {errors.emails ?? errors['emails.0']}
             </p>
           )}
         </div>
-
-        <div className={controls.field}>
-          <label htmlFor="client-email" className={controls.label}>
-            Email
-          </label>
-          <input
-            id="client-email"
-            type="email"
-            value={primaryEmail}
-            aria-invalid={errors['emails.0.email'] ? true : undefined}
-            onChange={(event) => setPrimaryEmail(event.target.value)}
-            className={controls.input}
-          />
-          {errors['emails.0.email'] && (
-            <p role="alert" className={controls.error}>
-              {errors['emails.0.email']}
-            </p>
-          )}
-        </div>
-
-        <EmailRows rows={auxEmails} onChange={setAuxEmails} errors={errors} />
-        {(errors.emails || errors['emails.0']) && (
-          <p role="alert" className={controls.error}>
-            {errors.emails ?? errors['emails.0']}
-          </p>
-        )}
       </section>
 
       {groups.length > 0 && (
-        <section className={`${controls.card} ${styles.section}`}>
-          <h2 className={controls.legend}>Resources</h2>
-          {groups.map((group) => (
-            <div key={group.key} className={styles.group}>
-              <h3 className={styles.category}>{group.category}</h3>
-              <ul className={controls.rows}>
-                {group.items.map((resource) => {
-                  const isHidden = hidden.has(resource.id)
-                  return (
-                    <li
-                      key={resource.id}
-                      className={`${controls.row} ${styles.row}`}
-                      data-hidden={isHidden || undefined}
-                    >
-                      <span className={controls.rowTitle}>{resource.title}</span>
-                      <span className={controls.hint}>{typeLabel(resource.type)}</span>
-                      <button
-                        type="button"
-                        className={`${controls.button}`}
-                        aria-label={`${isHidden ? 'Restore' : 'Remove'} ${resource.title}`}
-                        onClick={() => toggleHidden(resource.id)}
-                      >
-                        {isHidden ? 'Restore' : 'Remove'}
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-          ))}
+        <section className={controls.surface} aria-labelledby="resources-title">
+          <header className={controls.surfaceHeader}>
+            <h2 id="resources-title" className={controls.surfaceTitle}>
+              Resources
+            </h2>
+          </header>
+          <div className={controls.surfaceBody}>
+            {groups.map((group) => (
+              <div key={group.key} className={styles.group}>
+                <h3 className={styles.category}>{group.category}</h3>
+                <ul className={controls.rows}>
+                  {group.items.map((resource) => {
+                    const isHidden = hidden.has(resource.id)
+                    const Icon = isHidden ? Eye : EyeOff
+                    return (
+                      <li key={resource.id} className={controls.row} data-hidden={isHidden || undefined}>
+                        <span className={controls.rowTitle}>{resource.title}</span>
+                        <span className={controls.hint}>{typeLabel(resource.type)}</span>
+                        <button
+                          type="button"
+                          className={cx(controls.button, controls.ghost, controls.sm)}
+                          aria-label={`${isHidden ? 'Restore' : 'Remove'} ${resource.title}`}
+                          onClick={() => toggleHidden(resource.id)}
+                        >
+                          <Icon aria-hidden size={14} />
+                          {isHidden ? 'Restore' : 'Remove'}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
         </section>
       )}
 
-      <section className={`${controls.card} ${styles.section}`}>
-        <h2 className={controls.legend}>Client-Specific Resources</h2>
-        <ResourceEditor
-          drafts={exclusives}
-          setDrafts={setExclusives}
-          categories={categories}
-          serverErrors={draftErrors}
-        />
+      <section className={controls.surface} aria-labelledby="specific-title">
+        <header className={controls.surfaceHeader}>
+          <h2 id="specific-title" className={controls.surfaceTitle}>
+            Client-Specific Resources
+          </h2>
+        </header>
+        <div className={controls.surfaceBody}>
+          <ResourceEditor
+            drafts={exclusives}
+            setDrafts={setExclusives}
+            categories={categories}
+            serverErrors={draftErrors}
+          />
+        </div>
       </section>
 
       {formError && (
@@ -242,15 +281,21 @@ export function ClientForm({initial, mainResources, categories}: Props) {
         </p>
       )}
 
-      <div className={styles.save}>
-        <button className={`${controls.button} ${controls.primary}`} disabled={saving || uploading}>
+      <div className={styles.saveBar} data-dirty={dirty || undefined}>
+        <p className={styles.saveStatus}>{uploading ? 'Uploading files…' : dirty ? 'Unsaved changes' : ''}</p>
+        <button
+          className={cx(controls.button, controls.primary)}
+          data-loading={saving || undefined}
+          disabled={saving || uploading}
+        >
+          {saving && <LoaderCircle aria-hidden size={14} className={controls.spin} />}
           {saving ? 'Saving…' : uploading ? 'Uploading…' : 'Save'}
         </button>
       </div>
 
       <ConfirmDialog
         open={confirmingSlug}
-        title="Change this client’s link?"
+        title="Change This Client’s Link?"
         body={`The old link will stop working - send the client the new one: ${siteHost}/${slug}`}
         confirmLabel="Save and change link"
         onCancel={() => setConfirmingSlug(false)}
