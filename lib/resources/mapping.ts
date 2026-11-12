@@ -4,18 +4,6 @@ import type {Hotspot, Resource, ResourceCardData} from './types'
 
 type Row = Database['public']['Tables']['resources']['Row']
 
-export const RESOURCE_FIELD_MAP = {
-  title: 'title',
-  type: 'type',
-  file: 'file',
-  url: 'url',
-  coverImage: 'cover_image',
-  pdfPreview: 'pdf_preview',
-  addedOn: 'added_on',
-  category: 'category',
-  sortOrder: 'sort_order',
-} as const satisfies Record<string, keyof Row>
-
 export const publicImageUrl = (path: string) =>
   `${SUPABASE_URL}/storage/v1/object/public/resource-images/${path.split('/').map(encodeURIComponent).join('/')}`
 
