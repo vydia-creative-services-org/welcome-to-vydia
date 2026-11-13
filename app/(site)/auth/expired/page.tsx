@@ -20,7 +20,7 @@ export default async function ExpiredPage({searchParams}: PageProps<'/auth/expir
           </Link>
         }
       >
-        Sign-in links work once and expire after an hour.
+        Older sign-in links worked once and expired after an hour. Send yourself a new one: new links don’t expire.
       </Notice>
     </PageShell>
   )

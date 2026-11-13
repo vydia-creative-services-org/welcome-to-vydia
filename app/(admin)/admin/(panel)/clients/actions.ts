@@ -2,6 +2,7 @@
 import {refresh} from 'next/cache'
 import {redirect} from 'next/navigation'
 import {z} from 'zod'
+import {sendWelcomeEmails} from '@/lib/access-links'
 import {requireAdmin} from '@/lib/admin/auth'
 import {mapSaveError} from '@/lib/admin/errors'
 import {sweepStorage} from '@/lib/admin/storage'
@@ -29,8 +30,19 @@ export async function saveClient(input: ClientInput): Promise<SaveResult> {
     return {ok: false, fieldErrors: {}, formError: 'Couldn’t save. Nothing was changed. Try again.'}
   }
 
-  await sweepStorage(supabase)
+  // Every email that's new on this client gets its permanent link. A failed send stays pending, and the client page
+  // shows it with a retry, so a save never silently skips anyone.
+  await Promise.all([sweepStorage(supabase), sendWelcomeEmails(id)])
   redirect(`/admin/clients/${id}?saved=1`)
+}
+
+export async function retryWelcomeEmails(clientId: string): Promise<{ok: boolean; failed: string[]}> {
+  const {supabase} = await requireAdmin()
+  const {data: mayManage} = await supabase.rpc('can_manage_client', {target: clientId})
+  if (!mayManage) return {ok: false, failed: []}
+  const {failed} = await sendWelcomeEmails(clientId)
+  refresh()
+  return {ok: failed.length === 0, failed}
 }
 
 export async function deleteClient(id: string): Promise<{ok: false; message: string}> {

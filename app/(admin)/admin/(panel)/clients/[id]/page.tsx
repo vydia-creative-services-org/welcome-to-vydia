@@ -5,6 +5,8 @@ import {SavedToast} from '@/components/admin/SavedToast'
 import {CopyLinkButton} from '@/components/admin/CopyLinkButton'
 import {DeleteClientButton} from '@/components/admin/DeleteClientButton'
 import {OpenLinkButton} from '@/components/admin/OpenLinkButton'
+import {UnsentEmails} from '@/components/admin/UnsentEmails'
+import {unsentEmails} from '@/lib/access-links'
 import {requireAdmin} from '@/lib/admin/auth'
 import {toFormInitial} from '@/lib/admin/form-initial'
 import {loadResourceContext} from '@/lib/admin/resource-context'
@@ -18,7 +20,7 @@ export default async function ClientDetail({params, searchParams}: PageProps<'/a
   const {saved} = await searchParams
   const {supabase, isSuper} = await requireAdmin()
 
-  const [{data: client, error}, context, {data: admins}] = await Promise.all([
+  const [{data: client, error}, context, {data: admins}, unsent] = await Promise.all([
     supabase
       .from('clients')
       .select(
@@ -30,6 +32,8 @@ export default async function ClientDetail({params, searchParams}: PageProps<'/a
     isSuper
       ? supabase.from('admins').select('email, display_name').order('display_name', {nullsFirst: false})
       : Promise.resolve({data: null}),
+    // Read with the secret key, but only shown below once RLS has returned the client to this admin.
+    unsentEmails(id),
   ])
   if (error) throw new Error(`Couldn’t load the client: ${error.message}`)
   if (!client) notFound()
@@ -46,6 +50,8 @@ export default async function ClientDetail({params, searchParams}: PageProps<'/a
           <OpenLinkButton slug={client.slug} />
         </div>
       </header>
+
+      {unsent.length > 0 && <UnsentEmails clientId={client.id} emails={unsent} />}
 
       {isSuper && admins && <AssignAdminSelect clientId={client.id} current={client.assigned_admin} admins={admins} />}
 
