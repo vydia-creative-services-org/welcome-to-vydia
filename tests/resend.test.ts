@@ -36,6 +36,8 @@ describe('sendEmail', () => {
       html: '<p>Hi</p>',
       text: 'Hi',
     })
+    // Logs Resend's id and only the domain, never the full address.
+    expect(console.info).toHaveBeenCalledWith('Email sent:', '1', 'to domain', 'example.com')
   })
 
   it('reports a rejected or failed request as not sent', async () => {

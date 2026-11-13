@@ -47,7 +47,7 @@ Clients never see an account area, a sign-out button, or a list of other pages. 
 6. Optional: add **exclusive resources** (see below).
 7. Click **Save**. Nothing is saved until you do, and either everything saves or nothing does.
 
-You land on the client's page in the admin, with a **Saved** confirmation. **Every email you just added is sent its own link** ("Open your Vydia Onboarding page"). That includes an address that's already on another client. Emails that were already on the client aren't emailed again when you save. If a send fails, a yellow **Welcome email not sent to …** notice appears at the top of the page with a **Retry** button.
+You land on the client's page in the admin, with a **Saved** confirmation. **Every email you just added is sent its own link** ("Open your Vydia Onboarding page"). That includes an address that's already on another client. It also includes a Vydia admin listed as a manager: their link opens only the pages they're listed on, never the admin panel (that still needs Google). Emails that were already on the client aren't emailed again when you save. If a send fails, a yellow **Welcome email not sent to …** notice appears at the top of the page with a **Retry** button.
 
 The emailed link never expires and works in any browser, as many times as they like. Removing the email from the client switches it off. **Copy link** still gives you the page's address if you'd like to send it yourself too.
 

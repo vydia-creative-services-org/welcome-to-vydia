@@ -26,7 +26,12 @@ export async function sendEmail(message: OutgoingEmail): Promise<boolean> {
       body: JSON.stringify({from, to: [message.to], subject: message.subject, html: message.html, text: message.text}),
       signal: AbortSignal.timeout(10_000),
     })
-    if (response.ok) return true
+    if (response.ok) {
+      // Resend's id (not the address) so a delivery question can be matched to Resend → Emails.
+      const {id} = (await response.json().catch(() => ({}))) as {id?: string}
+      console.info('Email sent:', id ?? 'no id', 'to domain', message.to.split('@')[1] ?? '?')
+      return true
+    }
     console.error('Email not sent:', response.status, (await response.text()).slice(0, 300))
   } catch (error) {
     console.error('Email not sent:', error instanceof Error ? error.message : error)

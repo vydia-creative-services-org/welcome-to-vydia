@@ -46,8 +46,12 @@ select ok(
 );
 select is(
   array(select email from public.unsent_access_links((select id from ids where name = 'first'))),
-  array['same@example.com'],
-  'a new client’s emails are waiting to be sent, except an admin’s'
+  array['links-admin@vydia.com', 'same@example.com'],
+  'all of a new client’s emails are waiting to be sent, including an admin listed as a manager'
+);
+select isnt_empty(
+  $$ select * from public.access_link_for('links-one', 'Links-Admin@vydia.com') $$,
+  'an admin listed on a client can be sent that client’s link from the page form too'
 );
 
 select public.mark_access_links_sent(array(select token from public.unsent_access_links((select id from ids where name = 'first'))));
@@ -134,10 +138,6 @@ select is(
   (select token from public.access_link_for(' Links-One-Renamed ', 'SAME@example.com')),
   (select token from first_token),
   'the email form finds the link for that email on that slug'
-);
-select is_empty(
-  $$ select * from public.access_link_for('links-one-renamed', 'links-admin@vydia.com') $$,
-  'an admin listed on a client never gets an email link'
 );
 
 -- Removing the email kills the link, even one already in an inbox.
