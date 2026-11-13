@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(35);
+select plan(36);
 
 insert into public.admins (email, role) values ('ops@vydia.com', 'super')
   on conflict (email) do update set role = 'super';
@@ -23,9 +23,14 @@ select is(
   'hook rejects an unknown email'
 );
 select is(
-  (public.hook_before_user_created('{"user":{"email":"ops@vydia.com","app_metadata":{"provider":"email"}}}'::jsonb) -> 'error' ->> 'http_code')::int,
+  public.hook_before_user_created('{"user":{"email":"ops@vydia.com","app_metadata":{"provider":"email"}}}'::jsonb),
+  '{}'::jsonb,
+  'hook allows an admin through the email provider when they are listed on a client (e.g. as a manager)'
+);
+select is(
+  (public.hook_before_user_created('{"user":{"email":"unlisted-admin@vydia.com","app_metadata":{"provider":"email"}}}'::jsonb) -> 'error' ->> 'http_code')::int,
   403,
-  'hook rejects an admin through the email provider'
+  'hook still rejects an email-provider user that is on no client'
 );
 select is(
   public.hook_before_user_created('{"user":{"email":"ops@vydia.com","app_metadata":{"provider":"google"}}}'::jsonb),
