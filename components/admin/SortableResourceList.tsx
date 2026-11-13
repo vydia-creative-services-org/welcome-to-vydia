@@ -28,6 +28,8 @@ import type {Resource} from '@/lib/resources/types'
 import {ConfirmDialog} from './ConfirmDialog'
 import controls from './controls.module.css'
 import {ResourceDialog} from './ResourceDialog'
+import {PreviewButton, previewHref} from './PreviewButton'
+import {ResourceThumb} from './ResourceThumb'
 import {useToast} from './Toaster'
 import panel from '@/app/(admin)/admin/(panel)/panel.module.css'
 import styles from './SortableResourceList.module.css'
@@ -87,9 +89,13 @@ function ResourceRow({resource, onEdit, onDelete}: RowProps) {
       >
         <GripVertical aria-hidden size={16} />
       </button>
-      <span className={styles.title}>{resource.title}</span>
+      <button type="button" className={styles.open} onClick={onEdit}>
+        <ResourceThumb path={resource.coverImage?.path ?? resource.pdfPreview?.path} />
+        <span className={styles.title}>{resource.title}</span>
+      </button>
       <span className={controls.hint}>{typeLabel(resource.type)}</span>
       <div className={styles.actions}>
+        <PreviewButton href={previewHref(resource)} title={resource.title} />
         <button type="button" className={cx(controls.button, controls.ghost, controls.sm)} onClick={onEdit}>
           Edit
         </button>

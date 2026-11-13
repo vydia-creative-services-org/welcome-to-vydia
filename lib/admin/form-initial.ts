@@ -42,7 +42,7 @@ export function toFormInitial(client: ClientRecord): ClientFormInitial {
     primaryEmail: primary?.email ?? '',
     auxEmails: client.client_emails
       .filter((email) => !email.is_primary)
-      .map((email) => ({key: crypto.randomUUID(), email: email.email, label: email.label ?? ''})),
+      .map((email) => ({key: crypto.randomUUID(), email: email.email})),
     hiddenResourceIds: client.client_hidden_resources.map((hide) => hide.resource_id),
     exclusiveResources: [...client.resources]
       .sort((a, b) => a.sort_order - b.sort_order)

@@ -123,3 +123,20 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.open {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-space-3);
+  min-width: 0;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.open:hover .title {
+  text-decoration: underline;
+}

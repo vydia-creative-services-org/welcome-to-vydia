@@ -15,6 +15,8 @@ import {ConfirmDialog} from './ConfirmDialog'
 import controls from './controls.module.css'
 import styles from './ClientForm.module.css'
 import {EmailRows} from './EmailRows'
+import {PreviewButton, previewHref} from './PreviewButton'
+import {ResourceThumb} from './ResourceThumb'
 import {ResourceEditor} from './ResourceEditor'
 
 type Props = {
@@ -65,7 +67,7 @@ export function ClientForm({initial, mainResources, categories}: Props) {
       {email: primaryEmail, label: 'Client', isPrimary: true},
       ...auxEmails
         .filter((row) => row.email.trim())
-        .map((row) => ({email: row.email, label: row.label, isPrimary: false})),
+        .map((row) => ({email: row.email, label: '', isPrimary: false})),
     ],
     hiddenResourceIds: [...hidden].filter((id) => mainIds.has(id)),
     exclusiveResources: exclusives.map(draftToInput),
@@ -238,8 +240,10 @@ export function ClientForm({initial, mainResources, categories}: Props) {
                     const Icon = isHidden ? Eye : EyeOff
                     return (
                       <li key={resource.id} className={controls.row} data-hidden={isHidden || undefined}>
+                        <ResourceThumb path={resource.coverImage?.path ?? resource.pdfPreview?.path} />
                         <span className={controls.rowTitle}>{resource.title}</span>
                         <span className={controls.hint}>{typeLabel(resource.type)}</span>
+                        <PreviewButton href={previewHref(resource)} title={resource.title} />
                         <button
                           type="button"
                           className={cx(controls.button, controls.ghost, controls.sm)}

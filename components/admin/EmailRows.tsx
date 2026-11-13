@@ -5,11 +5,9 @@ import {cx} from '@/lib/cx'
 import controls from './controls.module.css'
 import styles from './EmailRows.module.css'
 
-export type EmailRow = {key: string; email: string; label: string}
+export type EmailRow = {key: string; email: string}
 
-export const newEmailRow = (): EmailRow => ({key: crypto.randomUUID(), email: '', label: ''})
-
-const SUGGESTED_LABELS = ['Manager', 'Alt', 'Assistant']
+export const newEmailRow = (): EmailRow => ({key: crypto.randomUUID(), email: ''})
 
 type Props = {
   rows: EmailRow[]
@@ -49,20 +47,6 @@ export function EmailRows({rows, onChange, errors}: Props) {
                 </p>
               )}
             </div>
-            <div className={controls.field}>
-              <label htmlFor={`${listId}-label-${row.key}`} className="visually-hidden">
-                Label for additional email {index + 1}
-              </label>
-              <input
-                id={`${listId}-label-${row.key}`}
-                list={`${listId}-labels`}
-                value={row.label}
-                maxLength={40}
-                placeholder="Label"
-                onChange={(event) => update(row.key, {label: event.target.value})}
-                className={controls.input}
-              />
-            </div>
             <button
               type="button"
               className={cx(controls.button, controls.danger)}
@@ -74,11 +58,6 @@ export function EmailRows({rows, onChange, errors}: Props) {
           </div>
         )
       })}
-      <datalist id={`${listId}-labels`}>
-        {SUGGESTED_LABELS.map((label) => (
-          <option key={label} value={label} />
-        ))}
-      </datalist>
       <div>
         <button type="button" className={controls.button} onClick={() => onChange([...rows, newEmailRow()])}>
           <Plus aria-hidden size={14} />

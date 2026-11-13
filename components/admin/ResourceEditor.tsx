@@ -6,6 +6,8 @@ import {typeLabel} from '@/components/TypeLabel'
 import {cx} from '@/lib/cx'
 import controls from './controls.module.css'
 import styles from './ResourceEditor.module.css'
+import {PreviewButton, previewHref} from './PreviewButton'
+import {ResourceThumb} from './ResourceThumb'
 import {ResourceFields} from './ResourceFields'
 
 type Props = {
@@ -16,6 +18,7 @@ type Props = {
 }
 
 export function ResourceEditor({drafts, setDrafts, categories, serverErrors}: Props) {
+  const [savedIds] = useState(() => new Set(drafts.map((draft) => draft.id)))
   const [editingId, setEditingId] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<ResourceDraft | null>(null)
   const [shownErrors, setShownErrors] = useState<Partial<Record<string, DraftErrors>>>({})
@@ -78,6 +81,7 @@ export function ResourceEditor({drafts, setDrafts, categories, serverErrors}: Pr
                 </div>
               ) : (
                 <>
+                  <ResourceThumb path={draft.coverImage ?? draft.pdfPreview} />
                   <span className={controls.rowTitle}>{draft.title || 'Untitled'}</span>
                   {Object.keys(errors).length > 0 ? (
                     <span role="alert" className={controls.error}>
@@ -87,6 +91,14 @@ export function ResourceEditor({drafts, setDrafts, categories, serverErrors}: Pr
                     <span className={controls.hint}>{typeLabel(draft.type)}</span>
                   )}
                   <div className={controls.rowActions}>
+                    <PreviewButton
+                      href={previewHref({
+                        id: draft.id,
+                        url: draft.url.trim() || null,
+                        file: savedIds.has(draft.id) ? draft.file : null,
+                      })}
+                      title={draft.title || 'resource'}
+                    />
                     <button
                       type="button"
                       className={cx(controls.button, controls.ghost, controls.sm)}
