@@ -2,7 +2,7 @@
 
 ## Project Context
 
-Vydia Onboarding is an internal onboarding tool for Vydia's label services team. When a new client signs, label services builds them a personalized "Vydia Onboarding" page in a lightweight admin panel: they enter the client's name, email, and any auxiliary emails (managers, secondary addresses), and choose which resources the client sees. The app generates a unique link, which label services copies and emails to the client from their own inbox. The client opens the link, enters an approved email, receives a magic link, and lands on their resources page.
+Vydia Onboarding is an internal onboarding tool for Vydia's label services team. When a new client signs, label services builds them a personalized "Vydia Onboarding" page in a lightweight admin panel: they enter the client's name, email, and any auxiliary emails (managers, secondary addresses), and choose which resources the client sees. When the client is saved, the app emails each of their addresses a permanent link to the page. The link never expires and signs them straight in. A client who has lost the email can open the page's address, enter an approved email, and receive the same link again.
 
 Today label services uses Seismic, a high-end sales-enablement tool that is overkill for a gated, personalized resource list. We want a simple replacement on Vydia's approved stack.
 
@@ -30,7 +30,7 @@ Sessions never expire, so returning clients don't need a new magic link each vis
 4. Admin enters the primary client email and optionally adds auxiliary emails, each with an optional label (Manager, Alt, etc.).
 5. Admin reviews the list of all main resources. **Remove** grays a resource out and hides it for this client only; **Restore** brings it back.
 6. Admin optionally adds client-exclusive resources (title, type, URL or file, optional cover image, category).
-7. Admin clicks **Save**, which saves the client, emails, hides, and exclusive resources together, all or nothing. Admin lands on the client's detail page, with the Welcome link front and center beside a **Copy link** button.
+7. Admin clicks **Save**, which saves the client, emails, hides, and exclusive resources together, all or nothing. Every newly added email (on a new or an existing client, even one already on another client) is then emailed its permanent link. Admin lands on the client's detail page, with the Welcome link front and center beside a **Copy link** button. A send that failed shows as a notice with **Retry**.
 8. Admin pastes the link into their own email to the client.
 
 ### Client signs in for the first time
@@ -39,9 +39,9 @@ Sessions never expire, so returning clients don't need a new magic link each vis
 2. Client has no access to this slug yet → sees the **Enter your email** screen.
 3. Client enters their email and clicks **Send link**.
 4. The server checks whether that email is attached to the client at this slug.
-5. **Approved:** Supabase sends a magic link via Resend. "Email sent, check your inbox" replaces the input. A **Resend email** button stays grayed out through a 60-second countdown, then becomes clickable.
+5. **Approved:** the app emails that address its permanent link via Resend. "Email sent, check your inbox" replaces the input. A **Resend email** button stays grayed out through a 60-second countdown, then becomes clickable.
 6. **Not approved:** the app sends nothing and shows: "This email isn't approved to view this page. Please contact Vydia label services if you're having trouble." The input stays so they can try another email.
-7. Client clicks the magic link → session is created → client is redirected to `/[slug]` and sees their resources.
+7. Client clicks the link → session is created → client is redirected to `/[slug]` and sees their resources. The link never expires and can be opened again in any browser.
 
 Each auxiliary email repeats this flow independently.
 
@@ -87,7 +87,8 @@ The client side has exactly two states per URL: the resources page or the Enter 
 - **`/[slug]` — Enter your email**: Shown on every slug the visitor can't access, whether or not a client exists there. Same visual style as the resources page: a single centered input with the placeholder "Enter your email" and a **Send link** button. Never shows the client's name, which would confirm the client exists.
   - *After an approved email:* "Email sent, check your inbox" replaces the input, plus the 60-second **Resend email** button.
   - *After an unapproved email:* the not-approved message appears under the input, which stays.
-- **Magic link expired/used**: "This link has expired" plus a button back to the Enter your email screen for that slug.
+- **Link no longer active** (`/auth/inactive`): the email was removed from the client. "This link is no longer active".
+- **Old one-hour link expired** (`/auth/expired`): only for links sent before permanent links. "This link has expired" plus a button back to the Enter your email screen for that slug.
 
 ### Admin side
 
@@ -133,7 +134,8 @@ The client side has exactly two states per URL: the resources page or the Enter 
 ## Business Rules
 
 - Admins sign in only with Google SSO; client users sign in only with a magic link.
-- The app sends a magic link only when the email is attached to the client at the visited slug. The server runs that check before asking Supabase to send anything.
+- The app sends a link only to an email attached to that client: when an admin adds the email, or when that email is entered at the client's slug. The server runs that check before sending anything.
+- Each client–email pair has its own permanent link. It never expires and isn't used up by opening it. Removing the email from the client deletes it. Anyone holding the link can open the page, so the email asks people not to forward it.
 - Every slug renders the same Enter your email screen for a visitor without access, whether or not a client exists. The app never returns a 404 or a "no access" page on the client side.
 - An email entered on a slug with no client always gets the not-approved message, exactly as a wrong email on a real client's slug would.
 - No self-signup. Client users exist only because an admin added their email.
@@ -148,9 +150,9 @@ The client side has exactly two states per URL: the resources page or the Enter 
 ## Constraints
 
 - The client pages must work well on mobile; the admin panel is desktop-first.
-- The app sends one email: the magic link. Label services send the Welcome link from their own inbox.
+- The app sends one email: the permanent link ("Open your Vydia Onboarding page"), sent through Resend's API.
 - Single organization (Vydia); no multi-tenancy.
-- Stack: Next.js on Vercel, Supabase (database, auth, storage), Resend as Supabase's custom SMTP sender from [sending address, e.g. welcome@vydia.com]. Magic-link email uses Vydia branding.
+- Stack: Next.js on Vercel, Supabase (database, auth, storage), Resend (HTTP API, `RESEND_API_KEY`, sender `EMAIL_FROM`). The link email uses Vydia branding.
 - The app reads Sanity once, for the migration, and never at runtime.
 
 ## Sample Data
@@ -167,5 +169,4 @@ The Sanity schema at `/sanity/schema.json` is the source of truth for resource f
 - Migrating existing Seismic clients. Label services recreate active clients by hand as needed.
 - Analytics on who viewed which resource
 - Clients editing their own info or resources
-- In-app sending of the Welcome email
 - An admin-management screen (admins are managed in Supabase directly)

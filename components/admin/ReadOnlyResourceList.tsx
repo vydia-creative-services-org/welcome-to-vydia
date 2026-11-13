@@ -1,8 +1,10 @@
 import {Layers} from 'lucide-react'
-import {typeLabel} from '@/components/TypeLabel'
 import {cx} from '@/lib/cx'
 import type {CategoryGroup} from '@/lib/resources/group'
 import type {Resource} from '@/lib/resources/types'
+import {previewAction, RowActions} from './RowActions'
+import {previewHref} from './preview'
+import {ResourceThumb} from './ResourceThumb'
 import controls from './controls.module.css'
 import panel from '@/app/(admin)/admin/(panel)/panel.module.css'
 import styles from './SortableResourceList.module.css'
@@ -28,8 +30,9 @@ export function ReadOnlyResourceList({groups}: {groups: CategoryGroup<Resource>[
               <ul className={styles.rows}>
                 {group.items.map((resource) => (
                   <li key={resource.id} className={cx(controls.row, styles.plainRow)}>
+                    <ResourceThumb path={resource.coverImage?.path ?? resource.pdfPreview?.path} />
                     <span className={controls.rowTitle}>{resource.title}</span>
-                    <span className={controls.hint}>{typeLabel(resource.type)}</span>
+                    <RowActions name={resource.title} actions={[previewAction(previewHref(resource))]} />
                   </li>
                 ))}
               </ul>

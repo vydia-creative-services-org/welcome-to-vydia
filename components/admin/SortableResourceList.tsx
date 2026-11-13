@@ -17,10 +17,9 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import {CSS} from '@dnd-kit/utilities'
-import {GripVertical, Layers, Plus, Trash2} from 'lucide-react'
+import {GripVertical, Layers, Pencil, Plus, Trash2} from 'lucide-react'
 import {useOptimistic, useState, useTransition} from 'react'
 import {deleteMainResource, reorderMainResources} from '@/app/(admin)/admin/(panel)/resources/actions'
-import {typeLabel} from '@/components/TypeLabel'
 import {cx} from '@/lib/cx'
 import {draftFromResource, newDraft, type ResourceDraft} from '@/lib/admin/drafts'
 import type {CategoryGroup} from '@/lib/resources/group'
@@ -28,6 +27,9 @@ import type {Resource} from '@/lib/resources/types'
 import {ConfirmDialog} from './ConfirmDialog'
 import controls from './controls.module.css'
 import {ResourceDialog} from './ResourceDialog'
+import {previewAction, RowActions} from './RowActions'
+import {previewHref} from './preview'
+import {ResourceThumb} from './ResourceThumb'
 import {useToast} from './Toaster'
 import panel from '@/app/(admin)/admin/(panel)/panel.module.css'
 import styles from './SortableResourceList.module.css'
@@ -87,22 +89,18 @@ function ResourceRow({resource, onEdit, onDelete}: RowProps) {
       >
         <GripVertical aria-hidden size={16} />
       </button>
-      <span className={styles.title}>{resource.title}</span>
-      <span className={controls.hint}>{typeLabel(resource.type)}</span>
-      <div className={styles.actions}>
-        <button type="button" className={cx(controls.button, controls.ghost, controls.sm)} onClick={onEdit}>
-          Edit
-        </button>
-        <button
-          type="button"
-          className={cx(controls.button, controls.ghost, controls.danger, controls.sm)}
-          aria-label={`Delete ${resource.title}`}
-          onClick={onDelete}
-        >
-          <Trash2 aria-hidden size={14} />
-          Delete
-        </button>
-      </div>
+      <button type="button" className={styles.open} onClick={onEdit}>
+        <ResourceThumb path={resource.coverImage?.path ?? resource.pdfPreview?.path} />
+        <span className={styles.title}>{resource.title}</span>
+      </button>
+      <RowActions
+        name={resource.title}
+        actions={[
+          previewAction(previewHref(resource)),
+          {key: 'edit', label: 'Edit', icon: Pencil, onClick: onEdit},
+          {key: 'delete', label: 'Delete', icon: Trash2, onClick: onDelete},
+        ]}
+      />
     </li>
   )
 }

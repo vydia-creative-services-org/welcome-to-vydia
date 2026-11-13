@@ -231,11 +231,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      access_link_for: {
+        Args: {p_email: string; p_slug: string}
+        Returns: {
+          client_name: string
+          email: string
+          slug: string
+          token: string
+        }[]
+      }
       can_manage_client: {Args: {target: string}; Returns: boolean}
       can_view_client: {Args: {target: string}; Returns: boolean}
       can_view_main_resource: {Args: {target: string}; Returns: boolean}
       claim_admin_profile: {Args: Record<PropertyKey, never>; Returns: boolean}
-      claim_link_send: {Args: {p_email: string}; Returns: boolean}
+      claim_link_send:
+        {Args: {p_email: string}; Returns: boolean} | {Args: {p_email: string; p_slug: string}; Returns: boolean}
       email_can_access_slug: {Args: {p_email: string; p_slug: string}; Returns: boolean}
       get_client_page: {Args: {p_slug: string}; Returns: Json}
       hit_rate_limit: {Args: {p_key: string; p_limit: number; p_window: string}; Returns: boolean}
@@ -244,6 +254,14 @@ export type Database = {
       is_client_contact: {Args: {target: string}; Returns: boolean}
       is_super_admin: {Args: Record<PropertyKey, never>; Returns: boolean}
       jwt_email: {Args: Record<PropertyKey, never>; Returns: string}
+      mark_access_links_sent: {Args: {p_tokens: string[]}; Returns: undefined}
+      open_access_link: {
+        Args: {p_token: string}
+        Returns: {
+          email: string
+          slug: string
+        }[]
+      }
       reorder_main_resources: {Args: {ids: string[]}; Returns: undefined}
       save_client: {Args: {payload: Json}; Returns: string}
       take_storage_garbage: {
@@ -251,6 +269,15 @@ export type Database = {
         Returns: {
           bucket: string
           path: string
+        }[]
+      }
+      unsent_access_links: {
+        Args: {p_client_id: string}
+        Returns: {
+          client_name: string
+          email: string
+          slug: string
+          token: string
         }[]
       }
     }

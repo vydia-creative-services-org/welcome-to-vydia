@@ -121,13 +121,10 @@ describe('toFormInitial', () => {
     resources: [row({title: 'Second', sort_order: 2}), row({title: 'First', sort_order: 1})],
   }
 
-  it('puts the primary email first and the rest in rows with labels', () => {
+  it('puts the primary email first and the rest in rows', () => {
     const initial = formInitial.toFormInitial(client)
     expect(initial.primaryEmail).toBe('lil@example.com')
-    expect(initial.auxEmails.map((r) => [r.email, r.label])).toEqual([
-      ['manager@mgmt.com', 'Manager'],
-      ['alt@example.com', ''],
-    ])
+    expect(initial.auxEmails.map((r) => r.email)).toEqual(['manager@mgmt.com', 'alt@example.com'])
     expect(new Set(initial.auxEmails.map((r) => r.key)).size).toBe(2)
   })
 

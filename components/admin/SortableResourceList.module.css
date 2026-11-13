@@ -51,7 +51,7 @@
 
 .row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--admin-space-3);
   min-height: 48px;
@@ -92,11 +92,6 @@
   border-radius: var(--radius-inner);
 }
 
-.actions {
-  display: flex;
-  gap: var(--admin-space-1);
-}
-
 .empty {
   display: flex;
   flex-direction: column;
@@ -122,4 +117,21 @@
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.open {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-space-3);
+  min-width: 0;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.open:hover .title {
+  text-decoration: underline;
 }

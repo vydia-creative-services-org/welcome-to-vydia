@@ -47,7 +47,9 @@ Clients never see an account area, a sign-out button, or a list of other pages. 
 6. Optional: add **exclusive resources** (see below).
 7. Click **Save**. Nothing is saved until you do, and either everything saves or nothing does.
 
-You land on the client's page in the admin, with a **Saved** confirmation. Click **Copy link** and paste it into your own email to the client. The app never sends the Welcome link itself.
+You land on the client's page in the admin, with a **Saved** confirmation. **Every email you just added is sent its own link** ("Open your Vydia Onboarding page"). That includes an address that's already on another client. Emails that were already on the client aren't emailed again when you save. If a send fails, a yellow **Welcome email not sent to …** notice appears at the top of the page with a **Retry** button.
+
+The emailed link never expires and works in any browser, as many times as they like. Removing the email from the client switches it off. **Copy link** still gives you the page's address if you'd like to send it yourself too.
 
 ## Exclusive resources
 
@@ -90,7 +92,7 @@ Open **Resources** in the top bar. Changes here apply to **every client immediat
 1. They open the Welcome link and see **Enter your email**.
 2. They type their address and click **Continue**. If it's attached to that client, they get a link by email ("Open your Vydia Onboarding page") and the screen says **Email sent, check your inbox**. **Resend email** unlocks after 60 seconds.
 3. If it isn't, nothing is sent and they see: "This email isn’t approved to view this page. Make sure you’re using the URL provided by Vydia label services, or contact them if you’re having trouble."
-4. They click the link in the email and land on their page. They stay signed in on that browser.
+4. They click the link in the email and land on their page. They stay signed in on that browser. The same link keeps working: on another browser, on their phone, next month.
 
 The page has a carousel and a grid view (grouped by category). The client's name never appears until they have access, and a link for a client that doesn't exist looks exactly the same as one that does.
 
@@ -100,7 +102,8 @@ The page has a carousel and a grid view (grouped by category). The client's name
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | "It says my email isn't approved."                    | Open the client and check the spelling of that address, and that it's on **that** client (not a different one). Add it and save.          |
 | "I never got the email."                              | Ask them to check spam and wait a minute. Then ask them to use **Resend email**. Make sure the address is on the client.                   |
-| "The link says it has expired."                       | Links work once and last an hour. Some company email systems open links before the person does. Ask them to enter their email again.      |
+| "The link says it has expired."                       | They have an older one-hour link from before links became permanent. Ask them to enter their email again; the new link never expires.   |
+| "The link says it's no longer active."                | That email was removed from the client (or the client was deleted). Add the email back and save: they're sent a new link.               |
 | "I changed browsers and I'm asked for my email again." | Normal. Each browser signs in separately. They can request a new link.                                                                     |
 | "The old link stopped working."                       | The client's link was changed. Send them the current one from the client's page.                                                           |
 

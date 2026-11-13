@@ -1,8 +1,8 @@
 'use client'
 import {Eye, EyeOff, LoaderCircle} from 'lucide-react'
+import {unstable_rethrow} from 'next/navigation'
 import {useEffect, useMemo, useState, useTransition} from 'react'
 import {saveClient, type SaveResult} from '@/app/(admin)/admin/(panel)/clients/actions'
-import {typeLabel} from '@/components/TypeLabel'
 import {draftToInput, type DraftErrors} from '@/lib/admin/drafts'
 import type {ClientFormInitial} from '@/lib/admin/form-initial'
 import {SITE_URL} from '@/lib/env'
@@ -15,6 +15,9 @@ import {ConfirmDialog} from './ConfirmDialog'
 import controls from './controls.module.css'
 import styles from './ClientForm.module.css'
 import {EmailRows} from './EmailRows'
+import {previewAction, RowActions} from './RowActions'
+import {previewHref} from './preview'
+import {ResourceThumb} from './ResourceThumb'
 import {ResourceEditor} from './ResourceEditor'
 
 type Props = {
@@ -63,9 +66,7 @@ export function ClientForm({initial, mainResources, categories}: Props) {
     slug,
     emails: [
       {email: primaryEmail, label: 'Client', isPrimary: true},
-      ...auxEmails
-        .filter((row) => row.email.trim())
-        .map((row) => ({email: row.email, label: row.label, isPrimary: false})),
+      ...auxEmails.filter((row) => row.email.trim()).map((row) => ({email: row.email, label: '', isPrimary: false})),
     ],
     hiddenResourceIds: [...hidden].filter((id) => mainIds.has(id)),
     exclusiveResources: exclusives.map(draftToInput),
@@ -99,7 +100,9 @@ export function ClientForm({initial, mainResources, categories}: Props) {
         const result: SaveResult = await saveClient(payload)
         setErrors(result.fieldErrors)
         setFormError(result.formError ?? null)
-      } catch {
+      } catch (error) {
+        // A successful save redirects, which rejects this call with a redirect Next has already handled.
+        unstable_rethrow(error)
         setFormError('Couldn’t reach the server. Nothing was changed.')
       }
     })
@@ -238,17 +241,20 @@ export function ClientForm({initial, mainResources, categories}: Props) {
                     const Icon = isHidden ? Eye : EyeOff
                     return (
                       <li key={resource.id} className={controls.row} data-hidden={isHidden || undefined}>
+                        <ResourceThumb path={resource.coverImage?.path ?? resource.pdfPreview?.path} />
                         <span className={controls.rowTitle}>{resource.title}</span>
-                        <span className={controls.hint}>{typeLabel(resource.type)}</span>
-                        <button
-                          type="button"
-                          className={cx(controls.button, controls.ghost, controls.sm)}
-                          aria-label={`${isHidden ? 'Restore' : 'Remove'} ${resource.title}`}
-                          onClick={() => toggleHidden(resource.id)}
-                        >
-                          <Icon aria-hidden size={14} />
-                          {isHidden ? 'Restore' : 'Remove'}
-                        </button>
+                        <RowActions
+                          name={resource.title}
+                          actions={[
+                            previewAction(previewHref(resource)),
+                            {
+                              key: 'toggle',
+                              label: isHidden ? 'Show' : 'Hide',
+                              icon: Icon,
+                              onClick: () => toggleHidden(resource.id),
+                            },
+                          ]}
+                        />
                       </li>
                     )
                   })}

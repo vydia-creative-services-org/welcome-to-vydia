@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(32);
+select plan(35);
 
 insert into public.admins (email, role) values ('ops@vydia.com', 'super')
   on conflict (email) do update set role = 'super';
@@ -47,6 +47,10 @@ select ok(public.claim_link_send('Cooldown@Example.com'), 'the first send is all
 select ok(not public.claim_link_send('cooldown@example.com'), 'a second send inside 60 seconds is refused');
 update private.link_sends set sent_at = now() - interval '61 seconds' where email = 'cooldown@example.com';
 select ok(public.claim_link_send('cooldown@example.com'), 'a send after 60 seconds is allowed');
+
+select ok(public.claim_link_send('Both@Example.com', 'client-a'), 'a send for client A is allowed');
+select ok(public.claim_link_send('both@example.com', 'Client-B'), 'the same email on client B isn’t held up by client A’s cooldown');
+select ok(not public.claim_link_send('both@example.com', 'client-a'), 'a second send for client A inside 60 seconds is refused');
 
 select ok(public.hit_rate_limit('test:key', 2, interval '10 minutes'), 'hit 1 is under the limit');
 select ok(public.hit_rate_limit('test:key', 2, interval '10 minutes'), 'hit 2 is under the limit');

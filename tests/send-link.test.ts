@@ -1,11 +1,13 @@
 import {beforeAll, beforeEach, describe, expect, it, vi} from 'vitest'
 
-type RpcName = 'hit_rate_limit' | 'email_can_access_slug' | 'claim_link_send'
-type RpcResult = {data: boolean | null; error: {code: string} | null}
+type RpcName = 'hit_rate_limit' | 'access_link_for' | 'claim_link_send'
+type RpcResult = {data: unknown; error: {code: string} | null}
+
+const LINK = {email: 'lil@example.com', token: 'a'.repeat(64), client_name: 'Lil Example', slug: 'lil-example'}
 
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
-  signInWithOtp: vi.fn(),
+  sendAccessLink: vi.fn(),
   forwardedFor: {value: '203.0.113.7, 10.0.0.1'},
 }))
 
@@ -14,9 +16,7 @@ vi.mock('next/headers', () => ({
   headers: async () => new Headers({'x-forwarded-for': mocks.forwardedFor.value}),
 }))
 vi.mock('@/lib/supabase/service', () => ({createServiceClient: () => ({rpc: mocks.rpc})}))
-vi.mock('@/lib/supabase/stateless', () => ({
-  createStatelessClient: () => ({auth: {signInWithOtp: mocks.signInWithOtp}}),
-}))
+vi.mock('@/lib/access-links', () => ({sendAccessLink: mocks.sendAccessLink}))
 
 type Actions = typeof import('@/app/(site)/[slug]/actions')
 let actions: Actions
@@ -28,12 +28,12 @@ beforeAll(async () => {
   actions = await import('@/app/(site)/[slug]/actions')
 })
 
-const ok = (data: boolean): RpcResult => ({data, error: null})
+const ok = (data: unknown): RpcResult => ({data, error: null})
 
 function answers(overrides: Partial<Record<RpcName, RpcResult>> = {}) {
   const table: Record<RpcName, RpcResult> = {
     hit_rate_limit: ok(true),
-    email_can_access_slug: ok(true),
+    access_link_for: ok([LINK]),
     claim_link_send: ok(true),
     ...overrides,
   }
@@ -52,8 +52,8 @@ const calls = () => mocks.rpc.mock.calls.map(([name]) => name)
 
 beforeEach(() => {
   mocks.rpc.mockReset()
-  mocks.signInWithOtp.mockReset()
-  mocks.signInWithOtp.mockResolvedValue({error: null})
+  mocks.sendAccessLink.mockReset()
+  mocks.sendAccessLink.mockResolvedValue(true)
   mocks.forwardedFor.value = '203.0.113.7, 10.0.0.1'
   vi.spyOn(console, 'error').mockImplementation(() => {})
   answers()
@@ -65,22 +65,20 @@ describe('sendLink', () => {
     expect(mocks.rpc).not.toHaveBeenCalled()
   })
 
-  it('sends a link to an approved email and redirects back to the slug', async () => {
+  it('emails an approved address its permanent link', async () => {
     expect(await send('  Lil@Example.com ', 'Lil-Example')).toEqual({status: 'sent', email: 'lil@example.com'})
-    expect(mocks.signInWithOtp).toHaveBeenCalledWith({
-      email: 'lil@example.com',
-      options: {shouldCreateUser: true, emailRedirectTo: 'https://welcometovydia.com/lil-example'},
-    })
-    expect(mocks.rpc).toHaveBeenCalledWith('email_can_access_slug', {p_slug: 'lil-example', p_email: 'lil@example.com'})
+    expect(mocks.rpc).toHaveBeenCalledWith('access_link_for', {p_slug: 'lil-example', p_email: 'lil@example.com'})
+    expect(mocks.sendAccessLink).toHaveBeenCalledWith(LINK, expect.anything())
+    expect(mocks.rpc).toHaveBeenCalledWith('claim_link_send', {p_email: 'lil@example.com', p_slug: 'lil-example'})
   })
 
   it('answers a wrong email on a real slug and any email on an unknown slug identically, and sends nothing', async () => {
-    answers({email_can_access_slug: ok(false)})
+    answers({access_link_for: ok([])})
     const wrongEmail = await send('wrong@example.com', 'lil-example')
     const unknownSlug = await send('lil@example.com', 'does-not-exist')
     expect(wrongEmail).toEqual({status: 'not-approved'})
     expect(unknownSlug).toEqual(wrongEmail)
-    expect(mocks.signInWithOtp).not.toHaveBeenCalled()
+    expect(mocks.sendAccessLink).not.toHaveBeenCalled()
     expect(calls()).not.toContain('claim_link_send')
   })
 
@@ -88,19 +86,17 @@ describe('sendLink', () => {
     for (const slug of ['admin', 'a', 'Has Spaces']) {
       expect(await send('lil@example.com', slug)).toEqual({status: 'not-approved'})
     }
-    expect(mocks.signInWithOtp).not.toHaveBeenCalled()
+    expect(mocks.sendAccessLink).not.toHaveBeenCalled()
   })
 
   it('reports sent without sending again inside the 60 second cooldown', async () => {
     answers({claim_link_send: ok(false)})
     expect(await send('lil@example.com', 'lil-example')).toEqual({status: 'sent', email: 'lil@example.com'})
-    expect(mocks.signInWithOtp).not.toHaveBeenCalled()
+    expect(mocks.sendAccessLink).not.toHaveBeenCalled()
   })
 
-  it('treats a provider rate limit as sent and any other provider error as an error', async () => {
-    mocks.signInWithOtp.mockResolvedValueOnce({error: {code: 'over_email_send_rate_limit', message: 'slow down'}})
-    expect(await send('lil@example.com', 'lil-example')).toEqual({status: 'sent', email: 'lil@example.com'})
-    mocks.signInWithOtp.mockResolvedValueOnce({error: {code: 'unexpected_failure', message: 'boom'}})
+  it('reports an error when the email couldn’t be sent, instead of claiming it was', async () => {
+    mocks.sendAccessLink.mockResolvedValueOnce(false)
     expect(await send('lil@example.com', 'lil-example')).toEqual({status: 'error'})
   })
 
@@ -119,9 +115,9 @@ describe('sendLink', () => {
     })
   })
 
-  it('fails closed when the approval check errors', async () => {
-    answers({email_can_access_slug: {data: null, error: {code: '57014'}}})
+  it('fails closed when the lookup errors', async () => {
+    answers({access_link_for: {data: null, error: {code: '57014'}}})
     expect(await send('lil@example.com', 'lil-example')).toEqual({status: 'error'})
-    expect(mocks.signInWithOtp).not.toHaveBeenCalled()
+    expect(mocks.sendAccessLink).not.toHaveBeenCalled()
   })
 })

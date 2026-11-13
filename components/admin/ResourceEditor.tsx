@@ -1,11 +1,13 @@
 'use client'
-import {Plus, Trash2} from 'lucide-react'
+import {Pencil, Plus, Trash2} from 'lucide-react'
 import {useState, type Dispatch, type SetStateAction} from 'react'
 import {newDraft, validateDraft, type DraftErrors, type ResourceDraft} from '@/lib/admin/drafts'
-import {typeLabel} from '@/components/TypeLabel'
 import {cx} from '@/lib/cx'
 import controls from './controls.module.css'
 import styles from './ResourceEditor.module.css'
+import {previewAction, RowActions} from './RowActions'
+import {previewHref} from './preview'
+import {ResourceThumb} from './ResourceThumb'
 import {ResourceFields} from './ResourceFields'
 
 type Props = {
@@ -16,6 +18,7 @@ type Props = {
 }
 
 export function ResourceEditor({drafts, setDrafts, categories, serverErrors}: Props) {
+  const [savedIds] = useState(() => new Set(drafts.map((draft) => draft.id)))
   const [editingId, setEditingId] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<ResourceDraft | null>(null)
   const [shownErrors, setShownErrors] = useState<Partial<Record<string, DraftErrors>>>({})
@@ -78,31 +81,32 @@ export function ResourceEditor({drafts, setDrafts, categories, serverErrors}: Pr
                 </div>
               ) : (
                 <>
+                  <ResourceThumb path={draft.coverImage ?? draft.pdfPreview} />
                   <span className={controls.rowTitle}>{draft.title || 'Untitled'}</span>
-                  {Object.keys(errors).length > 0 ? (
+                  {Object.keys(errors).length > 0 && (
                     <span role="alert" className={controls.error}>
                       Needs attention
                     </span>
-                  ) : (
-                    <span className={controls.hint}>{typeLabel(draft.type)}</span>
                   )}
-                  <div className={controls.rowActions}>
-                    <button
-                      type="button"
-                      className={cx(controls.button, controls.ghost, controls.sm)}
-                      onClick={() => edit(draft)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className={cx(controls.button, controls.ghost, controls.danger, controls.sm, controls.iconOnly)}
-                      aria-label={`Delete ${draft.title || 'resource'}`}
-                      onClick={() => setDrafts((list) => list.filter((item) => item.id !== draft.id))}
-                    >
-                      <Trash2 aria-hidden size={14} />
-                    </button>
-                  </div>
+                  <RowActions
+                    name={draft.title || 'resource'}
+                    actions={[
+                      previewAction(
+                        previewHref({
+                          id: draft.id,
+                          url: draft.url.trim() || null,
+                          file: savedIds.has(draft.id) ? draft.file : null,
+                        }),
+                      ),
+                      {key: 'edit', label: 'Edit', icon: Pencil, onClick: () => edit(draft)},
+                      {
+                        key: 'delete',
+                        label: 'Delete',
+                        icon: Trash2,
+                        onClick: () => setDrafts((list) => list.filter((item) => item.id !== draft.id)),
+                      },
+                    ]}
+                  />
                 </>
               )}
             </li>

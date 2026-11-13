@@ -1,5 +1,6 @@
 'use client'
 import {Trash2} from 'lucide-react'
+import {unstable_rethrow} from 'next/navigation'
 import {useState, useTransition} from 'react'
 import {deleteClient} from '@/app/(admin)/admin/(panel)/clients/actions'
 import {cx} from '@/lib/cx'
@@ -16,7 +17,9 @@ export function DeleteClientButton({id, name}: {id: string; name: string}) {
       try {
         const result = await deleteClient(id)
         setError(result.message)
-      } catch {
+      } catch (error) {
+        // A successful delete redirects, which rejects this call with a redirect Next has already handled.
+        unstable_rethrow(error)
         setError('Couldn’t reach the server. Nothing was changed.')
       }
       setOpen(false)
