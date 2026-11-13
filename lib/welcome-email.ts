@@ -61,7 +61,8 @@ export function welcomeEmail({
     <style>
       :root { color-scheme: light dark; supported-color-schemes: light dark; }
       body { margin: 0; padding: 0; width: 100% !important; -webkit-text-size-adjust: 100%; }
-      /* Stop iOS and Gmail turning the address into a blue link mid-sentence. */
+      /* Stop iOS and Gmail turning the address into a blue link mid-sentence. In Gmail this also strips the color,
+         underline, and font from our own links, so their text styles live on a span inside each link instead. */
       a[x-apple-data-detectors], u + #body a { color: inherit !important; text-decoration: none !important; font: inherit !important; }
       .logo-on-dark { display: none; }
       @media (prefers-color-scheme: dark) {
@@ -71,6 +72,7 @@ export function welcomeEmail({
         .soft { color: #a1a1a1 !important; }
         .rule { border-color: #262626 !important; }
         .btn { background: #ededed !important; color: #0a0a0a !important; }
+        .btn-label { color: #0a0a0a !important; }
         .logo-on-light { display: none !important; }
         .logo-on-dark { display: block !important; max-height: none !important; overflow: visible !important; }
       }
@@ -127,7 +129,7 @@ export function welcomeEmail({
                       <!--[if !mso]><!-->
                       <a class="btn" href="${href}"
                         style="display:inline-block;padding:12px 24px;background:#171717;color:#ffffff;font-size:15px;line-height:20px;font-weight:600;text-decoration:none;border-radius:8px;">
-                        Open my page
+                        <span class="btn-label" style="color:#ffffff;font-size:15px;line-height:20px;font-weight:600;text-decoration:none;">Open my page</span>
                       </a>
                       <!--<![endif]-->
                     </td>
@@ -138,7 +140,7 @@ export function welcomeEmail({
                   Button not working? Paste this link into your browser:
                 </p>
                 <p style="margin:4px 0 0;font-size:13px;line-height:20px;word-break:break-all;">
-                  <a class="soft" href="${href}" style="color:#666666;text-decoration:underline;">${href}</a>
+                  <a class="soft" href="${href}" style="color:#666666;text-decoration:underline;"><span class="soft" style="color:#666666;text-decoration:underline;">${href}</span></a>
                 </p>
 
                 <hr class="rule" style="margin:32px 0 24px;border:0;border-top:1px solid #ebebeb;" />

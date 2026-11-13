@@ -15,6 +15,14 @@ describe('welcomeEmail', () => {
     expect(email.text).toContain(link)
   })
 
+  it('colors the button and fallback text on a span, since Gmail strips color from links', () => {
+    expect(email.html).toMatch(
+      /<a class="btn"[^>]*>\s*<span class="btn-label" style="color:#ffffff;[^"]*">Open my page<\/span>/,
+    )
+    expect(email.html).toContain(`<span class="soft" style="color:#666666;text-decoration:underline;">${link}</span>`)
+    expect(email.html).toContain('.btn-label { color: #0a0a0a !important; }')
+  })
+
   it('never says the link expires', () => {
     expect(email.html).not.toMatch(/expire/i)
     expect(email.text).not.toMatch(/expire/i)
