@@ -109,8 +109,8 @@ Google sign-in can't be automated. One test (`storage-queue.spec.ts`) calls a da
 
 - **Owner:** vydia-creative-services
 - **Health route:** `GET /api/health` (Bearer `HEALTH_CHECK_SECRET`), watched by cs-monitor. Alerts: #cs-projects-alerts.
-- **Critical (DOWN, every 2 min):** `supabase_auth` (Supabase Auth health), `supabase_db` (one-row read of `resources` with the publishable key).
-- **Non-critical (DEGRADED, every 30 min via `?tier=all`):** `supabase_google` (Google provider enabled in Supabase Auth, admin sign-in), `resend_key` (Resend accepts the API key; nothing is sent).
+- **Critical (DOWN, every 2 min):** `supabase_auth` (Supabase Auth health), `supabase_google` (Google provider enabled in Supabase Auth), `resend_key` (Resend accepts the API key; empty body, nothing is sent), `supabase_db` (one-row read of `resources` with the service client).
+- **Non-critical (DEGRADED, every 30 min via `?tier=all`):** none.
 - **Workflow failure alerts:** none. This repo has no scheduled workflows.
 - **Blind spots:** Vercel-wide outages. Supabase Storage (files and cover images), Google's own OAuth availability, and email delivery after Resend accepts a message.
 - **Rotate the secret:** new `HEALTH_CHECK_SECRET` here + `HEALTH_SECRET_WELCOME_TO_VYDIA` in cs-monitor, redeploy both.
