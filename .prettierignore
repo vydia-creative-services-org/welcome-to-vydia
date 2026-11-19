@@ -4,3 +4,5 @@ package-lock.json
 next-env.d.ts
 docs
 supabase/templates
+# cs-monitor kit copy, kept byte-for-byte
+lib/health.ts
