@@ -102,8 +102,19 @@ Google sign-in can't be automated. One test (`storage-queue.spec.ts`) calls a da
 
 ## CI
 
-- `.github/workflows/ci.yml`: lint, typecheck, unit tests, and format check; and a `db` job that starts a local Supabase and runs the pgTAP tests. Both run on every PR and push to `main`.
+- `.github/workflows/ci.yml`: job `ci` (lint, typecheck, unit tests, format check, and build; a Vercel Deployment Check, so don't rename it); and a `db` job that starts a local Supabase and runs the pgTAP tests. Both run on every PR and push to `main`.
 - `.github/workflows/e2e-preview.yml`: Playwright against each successful Vercel preview deployment, using the repository variable `NEXT_PUBLIC_SUPABASE_URL` and the secrets `SUPABASE_SECRET_KEY` and `VERCEL_AUTOMATION_BYPASS_SECRET`.
+
+## Operations
+
+- **Owner:** vydia-creative-services
+- **Health route:** `GET /api/health` (Bearer `HEALTH_CHECK_SECRET`), watched by cs-monitor. Alerts: #cs-projects-alerts.
+- **Critical (DOWN, every 2 min):** `supabase_auth` (Supabase Auth health), `supabase_db` (one-row read of `resources` with the publishable key).
+- **Non-critical (DEGRADED, every 30 min via `?tier=all`):** `supabase_google` (Google provider enabled in Supabase Auth, admin sign-in), `resend_key` (Resend accepts the API key; nothing is sent).
+- **Workflow failure alerts:** none. This repo has no scheduled workflows.
+- **Blind spots:** Vercel-wide outages. Supabase Storage (files and cover images), Google's own OAuth availability, and email delivery after Resend accepts a message.
+- **Rotate the secret:** new `HEALTH_CHECK_SECRET` here + `HEALTH_SECRET_WELCOME_TO_VYDIA` in cs-monitor, redeploy both.
+- **CI:** `.github/workflows/ci.yml`, job `ci` (a Vercel Deployment Check — don't rename).
 
 ## Deploy flow
 

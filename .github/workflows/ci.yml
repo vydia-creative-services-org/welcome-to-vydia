@@ -6,11 +6,12 @@ on:
     branches: [main]
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }} # never cancel main
 
 jobs:
-  check:
+  ci:
+    name: ci # Vercel Deployment Check matches this. Never rename. Unique across workflows.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -24,6 +25,11 @@ jobs:
       - run: npm run typecheck
       - run: npm run test
       - run: npm run format:check
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
 
   db:
     runs-on: ubuntu-latest
