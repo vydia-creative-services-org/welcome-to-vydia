@@ -27,9 +27,10 @@ jobs:
       - run: npm run format:check
       - run: npm run build
         env:
-          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          # Obviously fake, non-secret placeholders: the build only needs these to exist, it calls no service.
+          NEXT_PUBLIC_SITE_URL: https://placeholder.example.com
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder
 
   db:
     runs-on: ubuntu-latest
